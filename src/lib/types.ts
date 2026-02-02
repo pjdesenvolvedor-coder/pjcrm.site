@@ -17,9 +17,9 @@ export type Client = {
   email: string;
   phone: string;
   dueDate: Timestamp;
-  subscription: string;
   status: 'Ativo' | 'Inativo' | 'Vencido';
-  password?: string;
+  telegramUser?: string;
+  clientType?: ('PACOTE' | 'REVENDA')[];
 };
 
 export type WhatsAppConnection = {
@@ -75,3 +75,5 @@ export type Message = {
 export type Settings = {
   webhookToken?: string;
 };
+
+    

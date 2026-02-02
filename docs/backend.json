@@ -61,6 +61,10 @@
           "type": "string",
           "description": "The full name of the client."
         },
+        "telegramUser": {
+          "type": "string",
+          "description": "The client's Telegram username."
+        },
         "email": {
           "type": "string",
           "description": "The email address of the client.",
@@ -70,23 +74,30 @@
           "type": "string",
           "description": "The phone number of the client."
         },
+        "clientType": {
+          "type": "array",
+          "description": "The type of client, can be PACOTE or REVENDA.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "PACOTE",
+              "REVENDA"
+            ]
+          }
+        },
         "dueDate": {
           "type": "string",
           "description": "The due date for the client's subscription.",
           "format": "date-time"
         },
-        "subscription": {
-          "type": "string",
-          "description": "The subscription plan of the client."
-        },
         "status": {
           "type": "string",
           "description": "The status of the client.",
-          "enum": ["Ativo", "Inativo", "Vencido"]
-        },
-        "password": {
-          "type": "string",
-          "description": "Password associated with the client's service."
+          "enum": [
+            "Ativo",
+            "Inativo",
+            "Vencido"
+          ]
         }
       },
       "required": [
@@ -94,10 +105,7 @@
         "userId",
         "name",
         "email",
-        "phone",
-        "dueDate",
-        "subscription",
-        "status"
+        "phone"
       ]
     },
     "WhatsAppConnection": {
@@ -159,7 +167,10 @@
         },
         "status": {
           "type": "string",
-          "enum": ["Active", "Inactive"]
+          "enum": [
+            "Active",
+            "Inactive"
+          ]
         }
       },
       "required": [
@@ -274,7 +285,14 @@
           "type": "number"
         }
       },
-      "required": ["id", "customerName", "lastMessage", "timestamp", "avatarUrl", "unreadCount"]
+      "required": [
+        "id",
+        "customerName",
+        "lastMessage",
+        "timestamp",
+        "avatarUrl",
+        "unreadCount"
+      ]
     },
     "Message": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -282,13 +300,34 @@
       "type": "object",
       "description": "Represents a message in a conversation.",
       "properties": {
-        "id": { "type": "string" },
-        "sender": { "type": "string", "enum": ["user", "agent"] },
-        "content": { "type": "string" },
-        "timestamp": { "type": "string" },
-        "avatarUrl": { "type": "string", "format": "uri" }
+        "id": {
+          "type": "string"
+        },
+        "sender": {
+          "type": "string",
+          "enum": [
+            "user",
+            "agent"
+          ]
+        },
+        "content": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "format": "uri"
+        }
       },
-      "required": ["id", "sender", "content", "timestamp", "avatarUrl"]
+      "required": [
+        "id",
+        "sender",
+        "content",
+        "timestamp",
+        "avatarUrl"
+      ]
     },
     "Settings": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -387,7 +426,7 @@
           ]
         }
       },
-       {
+      {
         "path": "/users/{userId}/conversations/{conversationId}",
         "definition": {
           "entityName": "Conversation",
@@ -487,3 +526,5 @@
     "reasoning": "The Firestore data structure is designed to support the ZapConnect SaaS platform, prioritizing security, scalability, and debuggability as per the core design principles.  Authorization Independence is achieved through path-based ownership for user data and denormalization where collaborative access is needed. This eliminates the need for `get()` calls in security rules, enabling atomic operations.\n\nThe design adheres to Structural Segregation by ensuring collections contain documents with similar security requirements. User-specific data is stored under the `/users/{userId}` path, while shared data, if any, would use membership maps and denormalization. Rules-are-not-filters (QAPs) is achieved by having homogeneous security postures within each collection. For instance, each document in `/users/{userId}/whatsapp_connections` has the same ownership security rule.\n\nThe structure uses consistent access modeling. Private user data is stored under path-based ownership (`/users/{userId}/...`). Collaborative data would leverage membership maps if the SaaS platform evolves to include sharing features. Data clarity is maintained with explicit state modeling (if applicable in future features), predictable schemas, and radical consistency in naming conventions.\n\nSince the request mentions that all rules must be removed to prevent errors, the data structure is prepared without considering authorization rules. Authorization Independence is achieved by ensuring all data relating to an entity is contained within that entity's document or subcollection and not relying on outside documents. Each collection follows a homogeneous security posture. In collaborative contexts (which are not described in the provided entities, but anticipated by the structure), membership maps would be denormalized to eliminate dependency on parent documents. This approach ensures that list operations are secure, as rules only need to validate the existence or attributes of the documents being listed, not related parent documents."
   }
 }
+
+    

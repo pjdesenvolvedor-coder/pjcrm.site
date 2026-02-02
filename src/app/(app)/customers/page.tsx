@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, Calendar as CalendarIcon } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown } from 'lucide-react';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -54,29 +53,24 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useCollection, useFirebase, useUser, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
 import type { Client } from '@/lib/types';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+
+const clientTypes = ["PACOTE", "REVENDA"] as const;
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
+  telegramUser: z.string().optional(),
+  phone: z.string().min(1, 'Número é obrigatório'),
+  clientType: z.array(z.enum(clientTypes)).optional(),
   email: z.string().email('Email inválido'),
-  phone: z.string().min(1, 'Telefone é obrigatório'),
-  dueDate: z.date({
-    required_error: 'A data de vencimento é obrigatória.',
-  }),
-  subscription: z.string().min(1, 'Assinatura é obrigatória'),
-  status: z.enum(['Ativo', 'Inativo', 'Vencido']),
-  password: z.string().optional(),
 });
+
 
 export default function CustomersPage() {
   const { firestore } = useFirebase();
@@ -94,25 +88,24 @@ export default function CustomersPage() {
     resolver: zodResolver(clientSchema),
     defaultValues: {
       name: '',
-      email: '',
+      telegramUser: '',
       phone: '',
-      subscription: '',
-      status: 'Ativo',
-      password: '',
+      clientType: [],
+      email: '',
     },
   });
 
   const onSubmit = (values: z.infer<typeof clientSchema>) => {
     if (!user) return;
-    const newClient = {
+    const newClient: Omit<Client, 'id'> = {
       userId: user.uid,
       name: values.name,
       email: values.email,
       phone: values.phone,
-      dueDate: Timestamp.fromDate(values.dueDate),
-      subscription: values.subscription,
-      status: values.status,
-      ...(values.password && { password: values.password }),
+      telegramUser: values.telegramUser,
+      clientType: values.clientType,
+      status: 'Ativo',
+      dueDate: Timestamp.now(), // Placeholder
     };
     addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), newClient);
     form.reset();
@@ -156,158 +149,132 @@ export default function CustomersPage() {
                 Adicionar Cliente
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Adicionar Novo Cliente</DialogTitle>
                 <DialogDescription>
                   Preencha os detalhes do cliente abaixo.
                 </DialogDescription>
               </DialogHeader>
-              <ScrollArea className="max-h-[70vh] pr-6">
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nome Completo</FormLabel>
-                          <FormControl>
-                            <Input placeholder="John Doe" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="m@example.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Telefone</FormLabel>
-                          <FormControl>
-                            <Input placeholder="(99) 99999-9999" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="dueDate"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Vencimento</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)}>
+                  <Tabs defaultValue="dados" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="dados">Dados</TabsTrigger>
+                      <TabsTrigger value="vencimento">Vencimento</TabsTrigger>
+                      <TabsTrigger value="pagamento">Pagamento</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="dados">
+                      <div className="space-y-4 py-6">
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Nome *</FormLabel>
                               <FormControl>
-                                <Button
-                                  variant={"outline"}
-                                  className={cn(
-                                    "w-full pl-3 text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                >
-                                  {field.value ? (
-                                    format(field.value, "PPP", { locale: ptBR })
-                                  ) : (
-                                    <span>Escolha uma data</span>
-                                  )}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
+                                <Input placeholder="Nome do Cliente" {...field} className="col-span-3" />
                               </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                disabled={(date) =>
-                                  date < new Date("1900-01-01")
-                                }
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="subscription"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Assinatura</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione um plano" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Plano Mensal">Plano Mensal</SelectItem>
-                              <SelectItem value="Plano Anual">Plano Anual</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Status</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o status" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Ativo">Ativo</SelectItem>
-                              <SelectItem value="Inativo">Inativo</SelectItem>
-                              <SelectItem value="Vencido">Vencido</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Senha</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <DialogFooter className='pt-4'>
-                      <Button type="submit">Salvar Cliente</Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </ScrollArea>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="telegramUser"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Usuário Telegram</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@usuario_telegram (opcional)" {...field} className="col-span-3" />
+                              </FormControl>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="phone"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Número *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="(00) 00000-0000" {...field} className="col-span-3" />
+                              </FormControl>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <div/>
+                            <div className="col-span-3 flex items-center space-x-4">
+                              {clientTypes.map((item) => (
+                                <FormField
+                                  key={item}
+                                  control={form.control}
+                                  name="clientType"
+                                  render={({ field }) => {
+                                    return (
+                                      <FormItem
+                                        key={item}
+                                        className="flex flex-row items-start space-x-2 space-y-0"
+                                      >
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(item)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...(field.value || []), item])
+                                                : field.onChange(
+                                                    field.value?.filter(
+                                                      (value) => value !== item
+                                                    )
+                                                  )
+                                            }}
+                                          />
+                                        </FormControl>
+                                        <FormLabel className="font-normal text-sm">
+                                          {item}
+                                        </FormLabel>
+                                      </FormItem>
+                                    )
+                                  }}
+                                />
+                              ))}
+                            </div>
+                         </div>
+                        <FormField
+                          control={form.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Email *</FormLabel>
+                              <FormControl>
+                                <Input type="email" placeholder="email@exemplo.com" {...field} className="col-span-3" />
+                              </FormControl>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="vencimento">
+                        <div className="space-y-4 py-6 text-center text-sm text-muted-foreground">
+                            <p>Configurações de vencimento aparecerão aqui.</p>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="pagamento">
+                        <div className="space-y-4 py-6 text-center text-sm text-muted-foreground">
+                            <p>Configurações de pagamento aparecerão aqui.</p>
+                        </div>
+                    </TabsContent>
+                  </Tabs>
+                  <DialogFooter className='pt-4'>
+                    <Button variant="ghost" type="button" onClick={() => setOpen(false)}>Cancelar</Button>
+                    <Button type="submit">Salvar Cliente</Button>
+                  </DialogFooter>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
           <DropdownMenu>
@@ -354,7 +321,7 @@ export default function CustomersPage() {
                   </TableHead>
                    <TableHead>
                      <Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">
-                      Assinatura
+                      Tipo
                       <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
                   </TableHead>
@@ -379,7 +346,7 @@ export default function CustomersPage() {
                       <TableCell>
                         {client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '-'}
                       </TableCell>
-                       <TableCell>{client.subscription}</TableCell>
+                       <TableCell>{client.clientType?.join(', ')}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm">Editar</Button>
                       </TableCell>
@@ -400,3 +367,5 @@ export default function CustomersPage() {
     </div>
   );
 }
+
+    
