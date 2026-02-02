@@ -108,11 +108,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/58da289a-e20c-460a-8e35-d01c9b567dad', {
+      const response = await fetch('/api/status', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'token': settings.webhookToken 
         },
         body: JSON.stringify({ token: settings.webhookToken }),
       });
