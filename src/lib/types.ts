@@ -69,6 +69,5 @@ export type Message = {
 };
 
 export type Settings = {
-  id: string;
   webhookToken?: string;
 };

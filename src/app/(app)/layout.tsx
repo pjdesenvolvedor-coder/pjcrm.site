@@ -10,9 +10,8 @@ import {
   Bot,
   Users,
   UserCircle,
-  Settings,
+  Settings as SettingsIcon, // Renamed to avoid conflict
   LogOut,
-  ChevronDown,
   Zap,
   WifiOff,
 } from 'lucide-react';
@@ -49,8 +48,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
-import type { UserProfile } from '@/lib/types';
+import type { UserProfile, Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Painel' },
@@ -59,7 +59,7 @@ const navItems = [
   { href: '/automations', icon: Bot, label: 'Automações' },
   { href: '/customers', icon: Users, label: 'Clientes' },
   { href: '/users', icon: UserCircle, label: 'Usuários' },
-  { href: '/settings', icon: Settings, label: 'Configurações' },
+  { href: '/settings', icon: SettingsIcon, label: 'Configurações' },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -69,6 +69,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const { toast } = useToast();
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -76,6 +78,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   },[firestore, user]);
   
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
+  
+  const settingsDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid, 'settings', 'config');
+  }, [firestore, user]);
+
+  const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
+
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -100,6 +110,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
   
   const userAvatar = userProfile?.avatarUrl || "https://picsum.photos/seed/1/40/40";
+
+  const handleConnect = async () => {
+    if (!settings?.webhookToken) {
+        toast({
+            variant: 'destructive',
+            title: 'Token não encontrado',
+            description: 'Por favor, configure seu token de autenticação na página de Configurações.',
+        });
+        return;
+    }
+
+    setIsConnecting(true);
+
+    try {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: settings.webhookToken }),
+        });
+
+        if (!response.ok) {
+            throw new Error('A resposta da rede não foi boa.');
+        }
+
+        toast({
+            title: 'Conexão Iniciada',
+            description: 'A solicitação de conexão foi enviada com sucesso.',
+        });
+
+    } catch (error) {
+        console.error('Falha ao conectar:', error);
+        toast({
+            variant: 'destructive',
+            title: 'Falha na Conexão',
+            description: 'Não foi possível enviar a solicitação para o webhook.',
+        });
+    } finally {
+        setIsConnecting(false);
+    }
+};
 
 
   return (
@@ -159,17 +211,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
                     <Badge variant="secondary" className="py-1 px-3">
                         <WifiOff className="h-4 w-4 mr-2" />
-                        Disconnected
+                        Desconectado
                     </Badge>
-                    <p className="text-sm text-muted-foreground">Click 'Connect' to pair with WhatsApp.</p>
+                    <p className="text-sm text-muted-foreground">Clique em 'Conectar' para parear com o WhatsApp.</p>
                     <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
                         <WifiOff className="h-20 w-20 text-muted-foreground/30" />
                     </div>
                 </div>
                 <DialogFooter className="p-6 border-t">
-                    <Button type="button" className="w-full" size="lg">
-                        <Zap className="h-4 w-4 mr-2" />
-                        Connect
+                    <Button 
+                        type="button" 
+                        className="w-full" 
+                        size="lg"
+                        onClick={handleConnect}
+                        disabled={isConnecting || isLoadingSettings}
+                    >
+                        {isConnecting ? (
+                            <>
+                                <Zap className="h-4 w-4 mr-2 animate-pulse" />
+                                Conectando...
+                            </>
+                        ) : (
+                            <>
+                                <Zap className="h-4 w-4 mr-2" />
+                                Conectar
+                            </>
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>
