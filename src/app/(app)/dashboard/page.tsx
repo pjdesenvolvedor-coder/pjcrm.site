@@ -13,57 +13,57 @@ export default function DashboardPage() {
       />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-l-4 border-green-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-2 text-green-500">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-green-50 dark:bg-green-950/50 rounded-t-lg text-green-700 dark:text-green-400">
+              <div className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Ativos</CardTitle>
               </div>
-              <span className="text-sm font-medium text-green-500">0.0%</span>
+              <span className="text-sm font-medium">0.0%</span>
             </CardHeader>
-            <CardContent className="flex items-end justify-between">
+            <CardContent className="flex items-end justify-between p-4">
               <div className="text-3xl font-bold">0</div>
               <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-red-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-2 text-red-500">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-red-50 dark:bg-red-950/50 rounded-t-lg text-red-700 dark:text-red-400">
+              <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Vencidos</CardTitle>
               </div>
-              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
+              <div className="flex items-center gap-2 text-sm font-medium">
                 <Eye className="h-4 w-4" />
                 <span>0.0%</span>
               </div>
             </CardHeader>
-            <CardContent className="flex items-end justify-between">
+            <CardContent className="flex items-end justify-between p-4">
               <div className="text-3xl font-bold">0</div>
               <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-yellow-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-2 text-yellow-600">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-yellow-50 dark:bg-yellow-950/50 rounded-t-lg text-yellow-700 dark:text-yellow-400">
+              <div className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Vencem Hoje</CardTitle>
               </div>
-              <Eye className="h-4 w-4 text-muted-foreground" />
+              <Eye className="h-4 w-4" />
             </CardHeader>
-            <CardContent className="flex items-end justify-between">
+            <CardContent className="flex items-end justify-between p-4">
               <div className="text-3xl font-bold">0</div>
               <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-blue-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-2 text-blue-500">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-blue-50 dark:bg-blue-950/50 rounded-t-lg text-blue-700 dark:text-blue-400">
+              <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Vencem em 3 Dias</CardTitle>
               </div>
-               <Eye className="h-4 w-4 text-muted-foreground" />
+               <Eye className="h-4 w-4" />
             </CardHeader>
-            <CardContent className="flex items-end justify-between">
+            <CardContent className="flex items-end justify-between p-4">
               <div className="text-3xl font-bold">0</div>
               <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
