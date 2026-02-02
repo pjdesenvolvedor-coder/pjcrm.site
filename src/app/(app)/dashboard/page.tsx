@@ -1,72 +1,100 @@
-import { ArrowUpRight, MessageCircle, Users, Bot } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+'use client';
+
+import { Users, AlertTriangle, Calendar, Clock, Eye, DollarSign } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
-import { DashboardCharts } from '@/components/dashboard-charts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function DashboardPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Painel de Análise"
-        description="Métricas e insights chave sobre seu atendimento."
+        title="Início"
       />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
+          <Card className="border-l-4 border-green-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Mensagens</CardTitle>
-              <MessageCircle className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 text-green-500">
+                <Users className="h-5 w-5" />
+                <CardTitle className="text-sm font-medium">Ativos</CardTitle>
+              </div>
+              <span className="text-sm font-medium text-green-500">0.0%</span>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">12,543</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <ArrowUpRight className="h-4 w-4 text-green-500" />
-                +15.2% do mês passado
-              </p>
+            <CardContent className="flex items-end justify-between">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-l-4 border-red-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Novos Clientes</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 text-red-500">
+                <AlertTriangle className="h-5 w-5" />
+                <CardTitle className="text-sm font-medium">Vencidos</CardTitle>
+              </div>
+              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
+                <Eye className="h-4 w-4" />
+                <span>0.0%</span>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">+234</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <ArrowUpRight className="h-4 w-4 text-green-500" />
-                +8.1% do mês passado
-              </p>
+            <CardContent className="flex items-end justify-between">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-l-4 border-yellow-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Taxa de Resposta (Média)</CardTitle>
-              <Bot className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 text-yellow-600">
+                <Calendar className="h-5 w-5" />
+                <CardTitle className="text-sm font-medium">Vencem Hoje</CardTitle>
+              </div>
+              <Eye className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">3m 45s</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <ArrowUpRight className="h-4 w-4 text-red-500 transform rotate-90" />
-                -2.5% do mês passado
-              </p>
+            <CardContent className="flex items-end justify-between">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-l-4 border-blue-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Satisfação do Cliente</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 text-blue-500">
+                <Clock className="h-5 w-5" />
+                <CardTitle className="text-sm font-medium">Vencem em 3 Dias</CardTitle>
+              </div>
+               <Eye className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">92.8%</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <ArrowUpRight className="h-4 w-4 text-green-500" />
-                +1.2% do mês passado
-              </p>
+            <CardContent className="flex items-end justify-between">
+              <div className="text-3xl font-bold">0</div>
+              <div className="text-lg font-semibold">R$ 0,00</div>
             </CardContent>
           </Card>
         </div>
-        <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-            <DashboardCharts />
+        <div className="mt-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Total de Vendas</CardTitle>
+                    <p className="text-sm text-muted-foreground">Receita total no período selecionado.</p>
+                </div>
+                <Select defaultValue="this-month">
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Selecione o período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="today">Hoje</SelectItem>
+                        <SelectItem value="this-week">Esta Semana</SelectItem>
+                        <SelectItem value="this-month">Este Mês</SelectItem>
+                        <SelectItem value="this-year">Este Ano</SelectItem>
+                    </SelectContent>
+                </Select>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center gap-2">
+                    <DollarSign className="h-10 w-10 text-green-500" />
+                    <p className="text-5xl font-bold">R$ 0,00</p>
+                </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>
