@@ -262,9 +262,8 @@ export default function CustomersPage() {
   const { user } = useUser();
   
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<'view' | 'form' | null>(null);
   const [dialogContent, setDialogContent] = useState<ReactNode | null>(null);
-
+  const [dialogClass, setDialogClass] = useState('');
 
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -273,41 +272,29 @@ export default function CustomersPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const handleOpenChange = (isOpen: boolean) => {
-    setDialogOpen(isOpen);
-    if (!isOpen) {
-      // Clear content after animation
-      setTimeout(() => {
-        setDialogContent(null);
-        setDialogType(null);
-      }, 300);
-    }
-  };
-
-  const openDialog = (type: 'view' | 'form', content: ReactNode) => {
-    setDialogType(type);
-    setDialogContent(content);
-    setDialogOpen(true);
-  };
-  
   const closeDialogAndClear = () => {
-    handleOpenChange(false);
+    setDialogOpen(false);
+    // Use a timeout to allow the close animation to finish before clearing content
+    setTimeout(() => {
+        setDialogContent(null);
+        setDialogClass('');
+    }, 300);
   }
 
   const handleViewDetails = (client: Client) => {
-    openDialog(
-      'view',
+    setDialogContent(
       <ClientDetailView
         client={client}
         onClose={closeDialogAndClear}
         onEdit={(clientToEdit) => handleEdit(clientToEdit)}
       />
     );
+    setDialogClass('sm:max-w-2xl p-0');
+    setDialogOpen(true);
   };
 
   const handleAdd = () => {
-    openDialog(
-      'form',
+    setDialogContent(
       <>
         <DialogHeader>
             <DialogTitle>Adicionar Novo Cliente</DialogTitle>
@@ -318,21 +305,24 @@ export default function CustomersPage() {
         <ClientForm onFinished={closeDialogAndClear} />
       </>
     );
+    setDialogClass('sm:max-w-lg');
+    setDialogOpen(true);
   };
   
   const handleEdit = (client: Client) => {
-    openDialog(
-        'form',
+    setDialogContent(
         <>
             <DialogHeader>
                 <DialogTitle>Editar Cliente</DialogTitle>
                 <DialogDescription>
                     Atualize os detalhes do cliente abaixo.
-                </Description>
+                </DialogDescription>
             </DialogHeader>
             <ClientForm initialData={client} onFinished={closeDialogAndClear} />
         </>
     );
+    setDialogClass('sm:max-w-lg');
+    setDialogOpen(true);
   };
 
   const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
@@ -421,13 +411,8 @@ export default function CustomersPage() {
         </Card>
       </main>
 
-      <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
-        <DialogContent
-          className={cn({
-            'sm:max-w-2xl p-0': dialogType === 'view',
-            'sm:max-w-lg': dialogType === 'form',
-          })}
-        >
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className={cn(dialogClass)}>
           {dialogContent}
         </DialogContent>
       </Dialog>
