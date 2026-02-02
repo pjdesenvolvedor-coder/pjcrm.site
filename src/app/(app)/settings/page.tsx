@@ -39,26 +39,14 @@ export default function SettingsPage() {
           <TabsContent value="integration">
             <Card>
               <CardHeader>
-                <CardTitle>Integração com WhatsApp &amp; Webhook</CardTitle>
+                <CardTitle>Integração via Webhook</CardTitle>
                 <CardDescription>
-                  Conecte sua conta do WhatsApp e configure seu webhook para enviar e receber mensagens.
+                  Configure o token de autenticação para as requisições via webhook.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="apiKey">API Key do WhatsApp</Label>
-                  <Input id="apiKey" type="password" defaultValue="**************" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phoneId">WhatsApp Phone Number ID</Label>
-                  <Input id="phoneId" defaultValue="1450XXXXXXX" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhookUrl">URL do Webhook</Label>
-                  <Input id="webhookUrl" placeholder="https://seu-servidor.com/webhook" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhookToken">Token do Webhook</Label>
+                  <Label htmlFor="webhookToken">Token de Autenticação</Label>
                   <Input id="webhookToken" type="password" placeholder="Seu token secreto" />
                 </div>
               </CardContent>
