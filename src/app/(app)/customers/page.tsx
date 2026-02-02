@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown } from 'lucide-react';
-import { format } from 'date-fns';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon } from 'lucide-react';
+import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,10 +10,7 @@ import { collection, Timestamp } from 'firebase/firestore';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -60,6 +57,9 @@ import type { Client } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Textarea } from '@/components/ui/textarea';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 
@@ -69,6 +69,10 @@ const clientSchema = z.object({
   phone: z.string().min(1, 'Número é obrigatório'),
   clientType: z.array(z.enum(clientTypes)).optional(),
   email: z.string().email('Email inválido'),
+  dueDate: z.date().optional(),
+  dueTimeHour: z.string().optional(),
+  dueTimeMinute: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 
@@ -92,11 +96,25 @@ export default function CustomersPage() {
       phone: '',
       clientType: [],
       email: '',
+      dueDate: undefined,
+      dueTimeHour: '18',
+      dueTimeMinute: '19',
+      notes: '',
     },
   });
 
   const onSubmit = (values: z.infer<typeof clientSchema>) => {
     if (!user) return;
+    
+    let dueDateTimestamp = Timestamp.now();
+    if (values.dueDate) {
+        const date = values.dueDate;
+        const hour = parseInt(values.dueTimeHour || '0', 10);
+        const minute = parseInt(values.dueTimeMinute || '0', 10);
+        date.setHours(hour, minute);
+        dueDateTimestamp = Timestamp.fromDate(date);
+    }
+
     const newClient: Omit<Client, 'id'> = {
       userId: user.uid,
       name: values.name,
@@ -105,7 +123,8 @@ export default function CustomersPage() {
       telegramUser: values.telegramUser,
       clientType: values.clientType,
       status: 'Ativo',
-      dueDate: Timestamp.now(), // Placeholder
+      dueDate: dueDateTimestamp,
+      notes: values.notes,
     };
     addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), newClient);
     form.reset();
@@ -259,9 +278,95 @@ export default function CustomersPage() {
                       </div>
                     </TabsContent>
                     <TabsContent value="vencimento">
-                        <div className="space-y-4 py-6 text-center text-sm text-muted-foreground">
-                            <p>Configurações de vencimento aparecerão aqui.</p>
-                        </div>
+                      <div className="space-y-4 py-6">
+                          <div className="grid grid-cols-4 items-center gap-4">
+                              <Label className="text-right">Definir</Label>
+                              <div className="col-span-3 flex gap-2">
+                                  <Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { days: 15 }))}>15 dias</Button>
+                                  <Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { months: 1 }))}>1 mês</Button>
+                                  <Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { months: 3 }))}>3 meses</Button>
+                              </div>
+                          </div>
+                          <FormField
+                              control={form.control}
+                              name="dueDate"
+                              render={({ field }) => (
+                                  <FormItem className="grid grid-cols-4 items-center gap-4">
+                                      <div />
+                                      <Popover>
+                                          <PopoverTrigger asChild>
+                                              <FormControl>
+                                                  <Button
+                                                      variant={"outline"}
+                                                      className={cn(
+                                                          "col-span-3 justify-start text-left font-normal",
+                                                          !field.value && "text-muted-foreground"
+                                                      )}
+                                                  >
+                                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                                      {field.value ? format(field.value, "dd/MM/yyyy") : <span>Selecione uma data</span>}
+                                                  </Button>
+                                              </FormControl>
+                                          </PopoverTrigger>
+                                          <PopoverContent className="w-auto p-0">
+                                              <Calendar
+                                                  mode="single"
+                                                  selected={field.value}
+                                                  onSelect={field.onChange}
+                                                  initialFocus
+                                              />
+                                          </PopoverContent>
+                                      </Popover>
+                                      <FormMessage className="col-start-2 col-span-3" />
+                                  </FormItem>
+                              )}
+                          />
+                          <div className="grid grid-cols-4 items-center gap-4">
+                              <div />
+                              <div className="col-span-3 flex items-center gap-2">
+                                  <FormField
+                                      control={form.control}
+                                      name="dueTimeHour"
+                                      render={({ field }) => (
+                                          <FormItem>
+                                              <FormControl>
+                                                  <Input {...field} className="w-20 text-center" />
+                                              </FormControl>
+                                          </FormItem>
+                                      )}
+                                  />
+                                  <span>:</span>
+                                  <FormField
+                                      control={form.control}
+                                      name="dueTimeMinute"
+                                      render={({ field }) => (
+                                          <FormItem>
+                                              <FormControl>
+                                                  <Input {...field} className="w-20 text-center" />
+                                              </FormControl>
+                                          </FormItem>
+                                      )}
+                                  />
+                              </div>
+                          </div>
+                          <FormField
+                              control={form.control}
+                              name="notes"
+                              render={({ field }) => (
+                                  <FormItem className="grid grid-cols-4 items-start gap-4">
+                                      <FormLabel className="text-right pt-2">Notas</FormLabel>
+                                      <FormControl>
+                                          <Textarea
+                                              placeholder="Adicione uma observação..."
+                                              className="col-span-3 resize-none"
+                                              {...field}
+                                          />
+                                      </FormControl>
+                                      <FormMessage className="col-start-2 col-span-3" />
+                                  </FormItem>
+                              )}
+                          />
+                      </div>
                     </TabsContent>
                     <TabsContent value="pagamento">
                         <div className="space-y-4 py-6 text-center text-sm text-muted-foreground">
@@ -367,5 +472,3 @@ export default function CustomersPage() {
     </div>
   );
 }
-
-    

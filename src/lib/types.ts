@@ -20,6 +20,7 @@ export type Client = {
   status: 'Ativo' | 'Inativo' | 'Vencido';
   telegramUser?: string;
   clientType?: ('PACOTE' | 'REVENDA')[];
+  notes?: string;
 };
 
 export type WhatsAppConnection = {
@@ -75,5 +76,3 @@ export type Message = {
 export type Settings = {
   webhookToken?: string;
 };
-
-    
