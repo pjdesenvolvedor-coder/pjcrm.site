@@ -127,7 +127,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     const fetchStatus = async () => {
       try {
-        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/ea50772a-1e0f-4d1f-bdcb-d205b1200ea8', {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/58da289a-e20c-460a-8e35-d01c9b567dad', {
           method: 'GET',
           headers: {
             'token': settings.webhookToken!,
