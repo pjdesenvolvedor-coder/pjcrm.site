@@ -156,13 +156,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
     
     // Only poll when the dialog is open and we have a token.
-    if (settings?.webhookToken && isZapConnectOpen) {
+    if (settings?.webhookToken && isZapConnectOpen && connectionStatus !== 'qr_code') {
         fetchStatus(); // Initial fetch
         pollingIntervalRef.current = setInterval(fetchStatus, 3000);
     }
 
     return () => stopPolling();
-  }, [settings?.webhookToken, isZapConnectOpen]);
+  }, [settings?.webhookToken, isZapConnectOpen, connectionStatus]);
 
   useEffect(() => {
     if (!isZapConnectOpen) {
@@ -463,7 +463,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <Button
                       type="button"
                       variant="destructive"
-                      className={cn("w-full", !isDisconnecting && "animate-pulse")}
+                      className={cn("w-full", !isDisconnecting && "animate-pulse-destructive")}
                       size="lg"
                       onClick={handleDisconnect}
                       disabled={isDisconnecting}
@@ -483,7 +483,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   ) : (liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') ? (
                     <Button
                       type="button"
-                      className={cn("w-full", !(isLoadingSettings || connectionStatus === 'connecting') && "animate-pulse")}
+                      className={cn("w-full", !(isLoadingSettings || connectionStatus === 'connecting') && "animate-pulse-primary")}
                       size="lg"
                       onClick={handleConnect}
                       disabled={isLoadingSettings || connectionStatus === 'connecting'}
