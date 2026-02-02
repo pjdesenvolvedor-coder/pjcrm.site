@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -27,13 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -60,14 +53,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import Image from 'next/image';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
-
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -85,45 +76,29 @@ const clientSchema = z.object({
   amountPaid: z.string().optional(),
 });
 
-type DialogView = 'closed' | 'add' | 'edit' | 'sendMessage' | 'delete' | 'view';
 
-// Helper component for the Client Form
-function ClientForm({ client, onFinished }: { client?: Client | null, onFinished: () => void }) {
+function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>, onFinished: () => void }) {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const { toast } = useToast();
-  const isEditing = !!client;
+  const isEditing = !!initialData?.id;
 
   const form = useForm<z.infer<typeof clientSchema>>({
     resolver: zodResolver(clientSchema),
-    defaultValues: client ? {
-      name: client.name,
-      telegramUser: client.telegramUser || '',
-      phone: client.phone,
-      clientType: client.clientType || [],
-      email: client.email,
-      dueDate: client.dueDate ? client.dueDate.toDate() : undefined,
-      dueTimeHour: client.dueDate ? format(client.dueDate.toDate(), 'HH') : '18',
-      dueTimeMinute: client.dueDate ? format(client.dueDate.toDate(), 'mm') : '19',
-      notes: client.notes || '',
-      quantity: client.quantity?.toString() || '1',
-      subscription: client.subscription || '',
-      paymentMethod: client.paymentMethod,
-      amountPaid: client.amountPaid || ''
-    } : {
-      name: '',
-      telegramUser: '',
-      phone: '',
-      clientType: [],
-      email: '',
-      dueDate: undefined,
-      dueTimeHour: '18',
-      dueTimeMinute: '19',
-      notes: '',
-      quantity: '1',
-      subscription: '',
-      paymentMethod: undefined,
-      amountPaid: '',
+    defaultValues: {
+      name: initialData?.name || '',
+      telegramUser: initialData?.telegramUser || '',
+      phone: initialData?.phone || '',
+      clientType: initialData?.clientType || [],
+      email: initialData?.email || '',
+      dueDate: initialData?.dueDate ? initialData.dueDate.toDate() : undefined,
+      dueTimeHour: initialData?.dueDate ? format(initialData.dueDate.toDate(), 'HH') : '18',
+      dueTimeMinute: initialData?.dueDate ? format(initialData.dueDate.toDate(), 'mm') : '19',
+      notes: initialData?.notes || '',
+      quantity: initialData?.quantity?.toString() || '1',
+      subscription: initialData?.subscription || '',
+      paymentMethod: initialData?.paymentMethod,
+      amountPaid: initialData?.amountPaid || ''
     },
   });
 
@@ -154,9 +129,10 @@ function ClientForm({ client, onFinished }: { client?: Client | null, onFinished
       amountPaid: values.amountPaid,
     };
 
-    if (isEditing && client) {
-        const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
-        setDocumentNonBlocking(docRef, { ...clientData, status: client.status }, { merge: true });
+    if (isEditing && initialData?.id) {
+        const docRef = doc(firestore, 'users', user.uid, 'clients', initialData.id);
+        const currentStatus = (initialData as Client)?.status || 'Ativo';
+        setDocumentNonBlocking(docRef, { ...clientData, status: currentStatus }, { merge: true });
         toast({ title: "Cliente atualizado!", description: `${values.name} foi atualizado com sucesso.` });
     } else {
         addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: 'Ativo' });
@@ -210,12 +186,34 @@ function ClientForm({ client, onFinished }: { client?: Client | null, onFinished
   )
 }
 
+function SendMessageDialog({ client, onSend, onCancel }: { client: Client; onSend: (message: string) => void; onCancel: () => void; }) {
+  const [message, setMessage] = useState('');
+  return (
+    <>
+      <div className="py-4 space-y-2">
+        <Label htmlFor="message">Mensagem</Label>
+        <Textarea id="message" placeholder="Digite sua mensagem aqui..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[100px]" />
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button onClick={() => onSend(message)} disabled={!message.trim()}>Enviar Mensagem Agora</Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+type DialogState =
+  | { view: 'closed' }
+  | { view: 'add' }
+  | { view: 'edit'; client: Client }
+  | { view: 'sendMessage'; client: Client };
+
+
 export default function CustomersPage() {
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
-  const [dialogView, setDialogView] = useState<DialogView>('closed');
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [dialogState, setDialogState] = useState<DialogState>({ view: 'closed' });
   
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -224,34 +222,27 @@ export default function CustomersPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const openDialog = (view: DialogView, client: Client | null = null) => {
-    setSelectedClient(client);
-    setDialogView(view);
+  const openDialog = (view: 'add' | 'edit' | 'sendMessage', client?: Client) => {
+    if (view === 'edit' && client) {
+      setDialogState({ view: 'edit', client });
+    } else if (view === 'sendMessage' && client) {
+      setDialogState({ view: 'sendMessage', client });
+    } else {
+      setDialogState({ view: 'add' });
+    }
   };
 
   const closeDialogAndClear = () => {
-    setDialogView('closed');
-    setSelectedClient(null);
+    setDialogState({ view: 'closed' });
   };
   
   const handleSendMessage = (message: string) => {
-    if (!selectedClient) return;
-    // TODO: Implement actual message sending logic via webhook
-    console.log(`Sending message to ${selectedClient.phone}: ${message}`);
+    if (dialogState.view !== 'sendMessage') return;
+
+    console.log(`Sending message to ${dialogState.client.phone}: ${message}`);
     toast({
       title: "Mensagem Enviada!",
-      description: `Sua mensagem foi enviada para ${selectedClient.name}.`,
-    });
-    closeDialogAndClear();
-  };
-  
-  const handleDeleteClient = () => {
-    if (!selectedClient || !user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'clients', selectedClient.id);
-    deleteDocumentNonBlocking(docRef);
-    toast({
-      title: "Cliente Apagado!",
-      description: `${selectedClient.name} foi removido da sua lista.`,
+      description: `Sua mensagem foi enviada para ${dialogState.client.name}.`,
     });
     closeDialogAndClear();
   };
@@ -265,24 +256,48 @@ export default function CustomersPage() {
     }
   };
 
-  const getDialogInfo = () => {
-    switch (dialogView) {
-      case 'add':
-        return { title: 'Adicionar Novo Cliente', description: 'Preencha os detalhes do cliente abaixo.', content: <ClientForm onFinished={closeDialogAndClear} /> };
-      case 'edit':
-        return { title: 'Editar Cliente', description: 'Atualize os detalhes do cliente abaixo.', content: <ClientForm client={selectedClient} onFinished={closeDialogAndClear} /> };
-      case 'sendMessage':
-        return { title: `Enviar Mensagem para ${selectedClient?.name}`, description: `Digite a mensagem que você deseja enviar para o número ${selectedClient?.phone}.`, content: <SendMessageDialog client={selectedClient!} onSend={handleSendMessage} onCancel={closeDialogAndClear} /> };
-      case 'view':
-        return { title: 'Detalhes do Cliente', description: 'Informações completas do cliente.', content: <ClientDetailsView client={selectedClient!} onEdit={() => openDialog('edit', selectedClient)} onRenew={() => {}} onClose={closeDialogAndClear} /> };
-      case 'delete':
-        return { title: 'Apagar Cliente', description: `Tem certeza que deseja apagar ${selectedClient?.name}? Esta ação não pode ser desfeita.`, content: <DeleteConfirmation onConfirm={handleDeleteClient} onCancel={closeDialogAndClear} /> };
-      default:
-        return null;
+  const getDialogContent = () => {
+    switch (dialogState.view) {
+        case 'add':
+            return (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+                        <DialogDescription>
+                            Preencha os detalhes do cliente abaixo.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <ClientForm onFinished={closeDialogAndClear} />
+                </>
+            );
+        case 'edit':
+            return (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>Editar Cliente</DialogTitle>
+                        <DialogDescription>
+                            Atualize os detalhes do cliente abaixo.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <ClientForm initialData={dialogState.client} onFinished={closeDialogAndClear} />
+                </>
+            );
+        case 'sendMessage':
+            return (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>Enviar Mensagem para {dialogState.client.name}</DialogTitle>
+                        <DialogDescription>
+                            Digite a mensagem que você deseja enviar para o número {dialogState.client.phone}.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <SendMessageDialog client={dialogState.client} onSend={handleSendMessage} onCancel={closeDialogAndClear} />
+                </>
+            );
+        case 'closed':
+            return null;
     }
-  }
-
-  const dialogInfo = getDialogInfo();
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -331,9 +346,14 @@ export default function CustomersPage() {
                       <TableCell>{client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                       <TableCell>{client.clientType?.join(', ')}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openDialog('edit', client)}>
-                           Editar
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openDialog('edit', client)}>
+                               Editar
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => openDialog('sendMessage', client)}>
+                                <MessageSquare className="h-4 w-4" />
+                            </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -346,93 +366,11 @@ export default function CustomersPage() {
         </Card>
       </main>
 
-      <Dialog open={dialogView !== 'closed'} onOpenChange={(isOpen) => !isOpen && closeDialogAndClear()}>
-        <DialogContent className="sm:max-w-lg" onInteractOutside={(e) => e.preventDefault()}>
-            {dialogInfo && (
-                <>
-                    <DialogHeader>
-                        <DialogTitle>{dialogInfo.title}</DialogTitle>
-                        {dialogInfo.description && <DialogDescription>{dialogInfo.description}</DialogDescription>}
-                    </DialogHeader>
-                    {dialogInfo.content}
-                </>
-            )}
+      <Dialog open={dialogState.view !== 'closed'} onOpenChange={(isOpen) => !isOpen && closeDialogAndClear()}>
+        <DialogContent className="sm:max-w-lg">
+            {getDialogContent()}
         </DialogContent>
       </Dialog>
     </div>
   );
-}
-
-function SendMessageDialog({ client, onSend, onCancel }: { client: Client; onSend: (message: string) => void; onCancel: () => void; }) {
-  const [message, setMessage] = useState('');
-  return (
-    <>
-      <div className="py-4 space-y-2">
-        <Label htmlFor="message">Mensagem</Label>
-        <Textarea id="message" placeholder="Digite sua mensagem aqui..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[100px]" />
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button onClick={() => onSend(message)} disabled={!message.trim()}>Enviar Mensagem Agora</Button>
-      </DialogFooter>
-    </>
-  );
-}
-
-function DeleteConfirmation({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void; }) {
-    return(
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Esta ação não pode ser desfeita. Isso irá apagar permanentemente o cliente.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel onClick={onCancel}>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={onConfirm}>Apagar</AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    );
-}
-
-function ClientDetailsView({ client, onClose, onEdit, onRenew }: { client: Client; onClose: () => void; onEdit: () => void; onRenew: () => void; }) {
-  return (
-    <div>
-      <Card className="shadow-none border-none">
-        <CardContent className="p-0 space-y-6">
-          <div className="flex items-center space-x-4">
-              <Image src={`https://picsum.photos/seed/${client.id}/80/80`} alt={client.name} width={80} height={80} className="rounded-full" data-ai-hint="person avatar" />
-              <div className="space-y-1">
-                  <h3 className="text-2xl font-bold">{client.name}</h3>
-                  <p className="text-muted-foreground">{client.email}</p>
-              </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <div className="flex items-center gap-2"> <Phone className="h-4 w-4 text-muted-foreground" /> <span>{client.phone}</span> </div>
-            <div className="flex items-center gap-2"> <Mail className="h-4 w-4 text-muted-foreground" /> <span>{client.email}</span> </div>
-            <div className="flex items-center gap-2"> <CalendarDays className="h-4 w-4 text-muted-foreground" /> <span>Vence em: {client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '-'}</span> </div>
-            <div className="flex items-center gap-2"> <CheckCircle2 className="h-4 w-4 text-muted-foreground" /> <span>Status: {client.status}</span> </div>
-            <div className="flex items-center gap-2"> <ShoppingCart className="h-4 w-4 text-muted-foreground" /> <span>Assinatura: {client.subscription}</span> </div>
-            <div className="flex items-center gap-2"> <Wallet className="h-4 w-4 text-muted-foreground" /> <span>Pagamento: {client.paymentMethod}</span> </div>
-            <div className="flex items-center gap-2"> <Banknote className="h-4 w-4 text-muted-foreground" /> <span>Valor: {client.amountPaid}</span> </div>
-          </div>
-          
-          {client.notes && (
-            <div className="space-y-2">
-                <h4 className="font-medium">Notas</h4>
-                <p className="text-muted-foreground text-sm bg-muted/50 p-3 rounded-md">{client.notes}</p>
-            </div>
-          )}
-
-        </CardContent>
-      </Card>
-      <DialogFooter className="pt-6">
-        <Button variant="outline" onClick={onEdit}><FilePenLine className="mr-2 h-4 w-4"/>Editar Cliente</Button>
-        <Button><RefreshCw className="mr-2 h-4 w-4" />Renovar</Button>
-        <Button variant="ghost" onClick={onClose}><X className="mr-2 h-4 w-4"/>Fechar</Button>
-      </DialogFooter>
-    </div>
-  )
 }
