@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   MessageSquare,
   LayoutDashboard,
@@ -11,8 +11,8 @@ import {
   Users,
   UserCircle,
   Settings,
+  LogOut,
   ChevronDown,
-  Search,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -26,7 +26,6 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   SidebarInset,
-  SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,9 +36,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import type { UserProfile } from '@/lib/types';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Painel' },
@@ -52,8 +52,43 @@ const navItems = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const auth = useAuth();
+  const { firestore } = useFirebase();
+  const { user, isUserLoading } = useUser();
   const [isSidebarOpen, setSidebarOpen] = useState(true);
-  const userAvatar = PlaceHolderImages.find(img => img.id === 'user-avatar-1')?.imageUrl || '';
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid);
+  },[firestore, user]);
+  
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  if (isUserLoading || !user) {
+    return (
+        <div className="flex h-screen w-screen items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+                <MessageSquare className="h-12 w-12 animate-pulse text-primary" />
+                <p className="text-muted-foreground">Carregando...</p>
+            </div>
+        </div>
+    );
+  }
+
+  const handleSignOut = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
+  
+  const userAvatar = userProfile?.avatarUrl || "https://picsum.photos/seed/1/40/40";
+
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
@@ -76,7 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === item.href}
+                  isActive={pathname.startsWith(item.href)}
                   tooltip={{ children: item.label }}
                 >
                   <Link href={item.href}>
@@ -89,23 +124,57 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-4">
-          <div className="flex items-center gap-3 w-full">
-            <Image
-              src={userAvatar}
-              alt="Avatar do usuário"
-              width={40}
-              height={40}
-              className="rounded-full"
-              data-ai-hint="user avatar"
-            />
-            <div className="flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
-              <p className="font-semibold text-sm truncate text-sidebar-foreground">Ana Silva</p>
-              <p className="text-xs truncate text-sidebar-foreground/70">ana.silva@example.com</p>
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-3 w-full cursor-pointer">
+                    {isProfileLoading ? (
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                    ) : (
+                        <Image
+                        src={userAvatar}
+                        alt="Avatar do usuário"
+                        width={40}
+                        height={40}
+                        className="rounded-full"
+                        data-ai-hint="user avatar"
+                        />
+                    )}
+                    <div className="flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
+                        {isProfileLoading ? (
+                            <div className='space-y-1'>
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-3 w-32" />
+                            </div>
+                        ) : (
+                            <>
+                                <p className="font-semibold text-sm truncate text-sidebar-foreground">{userProfile?.firstName} {userProfile?.lastName}</p>
+                                <p className="text-xs truncate text-sidebar-foreground/70">{userProfile?.email}</p>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 mb-2" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{userProfile?.firstName} {userProfile?.lastName}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                    {userProfile?.email}
+                    </p>
+                </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sair</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
   );
 }
+
+    

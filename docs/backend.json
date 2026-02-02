@@ -1,8 +1,8 @@
 {
   "entities": {
-    "User": {
+    "UserProfile": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "User",
+      "title": "UserProfile",
       "type": "object",
       "description": "Represents a user of the ZapConnect SaaS platform.",
       "properties": {
@@ -27,6 +27,11 @@
           "type": "string",
           "description": "Timestamp indicating when the user account was created.",
           "format": "date-time"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user.",
+          "enum": ["Admin", "Agent"]
         }
       },
       "required": [
@@ -34,7 +39,8 @@
         "firstName",
         "lastName",
         "email",
-        "createdAt"
+        "createdAt",
+        "role"
       ]
     },
     "WhatsAppConnection": {
@@ -90,26 +96,21 @@
           "type": "string",
           "description": "The name of the automated message workflow."
         },
-        "description": {
-          "type": "string",
-          "description": "A description of the automated message workflow."
-        },
-        "triggerEvent": {
+        "trigger": {
           "type": "string",
           "description": "The event that triggers the workflow (e.g., new customer, order placed)."
         },
-        "messageTemplate": {
+        "status": {
           "type": "string",
-          "description": "The message template to be sent when the workflow is triggered."
+          "enum": ["Active", "Inactive"]
         }
       },
       "required": [
         "id",
         "userId",
         "name",
-        "description",
-        "triggerEvent",
-        "messageTemplate"
+        "trigger",
+        "status"
       ]
     },
     "CustomerSegment": {
@@ -130,29 +131,21 @@
           "type": "string",
           "description": "The name of the customer segment."
         },
-        "description": {
-          "type": "string",
-          "description": "A description of the customer segment."
-        },
         "criteria": {
           "type": "string",
           "description": "The criteria used to define the customer segment (e.g., location, purchase history)."
         },
-        "customerIds": {
-          "type": "array",
-          "description": "References to Users that belong to this segment. (Relationship: CustomerSegment N:N User)",
-          "items": {
-            "type": "string"
-          }
+        "customerCount": {
+          "type": "number",
+          "description": "Number of customers in the segment"
         }
       },
       "required": [
         "id",
         "userId",
         "name",
-        "description",
         "criteria",
-        "customerIds"
+        "customerCount"
       ]
     },
     "MessageAnalytics": {
@@ -231,6 +224,49 @@
         "confidenceScore",
         "timestamp"
       ]
+    },
+     "Conversation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Conversation",
+      "type": "object",
+      "description": "Represents a conversation with a customer.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "customerName": {
+          "type": "string"
+        },
+        "lastMessage": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "unreadCount": {
+          "type": "number"
+        }
+      },
+      "required": ["id", "customerName", "lastMessage", "timestamp", "avatarUrl", "unreadCount"]
+    },
+    "Message": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Message",
+      "type": "object",
+      "description": "Represents a message in a conversation.",
+      "properties": {
+        "id": { "type": "string" },
+        "sender": { "type": "string", "enum": ["user", "agent"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "avatarUrl": { "type": "string", "format": "uri" }
+      },
+      "required": ["id", "sender", "content", "timestamp", "avatarUrl"]
     }
   },
   "auth": {
@@ -244,9 +280,9 @@
       {
         "path": "/users/{userId}",
         "definition": {
-          "entityName": "User",
+          "entityName": "UserProfile",
           "schema": {
-            "$ref": "#/backend/entities/User"
+            "$ref": "#/backend/entities/UserProfile"
           },
           "description": "Stores user profile information. The collection is path-based, so ownership is implicitly tied to the {userId} in the path.",
           "params": [
@@ -293,6 +329,50 @@
             {
               "name": "workflowId",
               "description": "The unique identifier for the automated message workflow."
+            }
+          ]
+        }
+      },
+       {
+        "path": "/users/{userId}/conversations/{conversationId}",
+        "definition": {
+          "entityName": "Conversation",
+          "schema": {
+            "$ref": "#/backend/entities/Conversation"
+          },
+          "description": "Stores conversations for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "conversationId",
+              "description": "The unique identifier for the conversation."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/conversations/{conversationId}/messages/{messageId}",
+        "definition": {
+          "entityName": "Message",
+          "schema": {
+            "$ref": "#/backend/entities/Message"
+          },
+          "description": "Stores messages within a conversation.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "conversationId",
+              "description": "The unique identifier for the conversation."
+            },
+            {
+              "name": "messageId",
+              "description": "The unique identifier for the message."
             }
           ]
         }
@@ -353,3 +433,5 @@
     "reasoning": "The Firestore data structure is designed to support the ZapConnect SaaS platform, prioritizing security, scalability, and debuggability as per the core design principles.  Authorization Independence is achieved through path-based ownership for user data and denormalization where collaborative access is needed. This eliminates the need for `get()` calls in security rules, enabling atomic operations.\n\nThe design adheres to Structural Segregation by ensuring collections contain documents with similar security requirements. User-specific data is stored under the `/users/{userId}` path, while shared data, if any, would use membership maps and denormalization. Rules-are-not-filters (QAPs) is achieved by having homogeneous security postures within each collection. For instance, each document in `/users/{userId}/whatsapp_connections` has the same ownership security rule.\n\nThe structure uses consistent access modeling. Private user data is stored under path-based ownership (`/users/{userId}/...`). Collaborative data would leverage membership maps if the SaaS platform evolves to include sharing features. Data clarity is maintained with explicit state modeling (if applicable in future features), predictable schemas, and radical consistency in naming conventions.\n\nSince the request mentions that all rules must be removed to prevent errors, the data structure is prepared without considering authorization rules. Authorization Independence is achieved by ensuring all data relating to an entity is contained within that entity's document or subcollection and not relying on outside documents. Each collection follows a homogeneous security posture. In collaborative contexts (which are not described in the provided entities, but anticipated by the structure), membership maps would be denormalized to eliminate dependency on parent documents. This approach ensures that list operations are secure, as rules only need to validate the existence or attributes of the documents being listed, not related parent documents."
   }
 }
+
+    

@@ -1,40 +1,71 @@
-export type User = {
+import { Timestamp } from 'firebase/firestore';
+
+export type UserProfile = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  avatarUrl: string;
+  createdAt: Timestamp;
   role: 'Admin' | 'Agent';
+  avatarUrl?: string;
 };
 
-export type Message = {
+export type WhatsAppConnection = {
   id: string;
-  sender: 'user' | 'agent';
-  content: string;
-  timestamp: string;
-  avatarUrl: string;
+  userId: string;
+  phoneNumber: string;
+  apiKey: string;
+  connectionStatus: string;
+};
+
+export type AutomatedMessageWorkflow = {
+  id: string;
+  userId: string;
+  name: string;
+  trigger: string;
+  status: 'Active' | 'Inactive';
+};
+
+export type CustomerSegment = {
+  id: string;
+  userId: string;
+  name: string;
+  criteria: string;
+  customerCount: number;
+};
+
+export type MessageAnalytics = {
+  id: string;
+  timestamp: Timestamp;
+  messagesSent: number;
+  messagesReceived: number;
+  engagementRate: number;
+  satisfactionScore: number;
+};
+
+export type AIResponseSuggestion = {
+  id: string;
+  messageContext: string;
+  suggestion: string;
+  confidenceScore: number;
+  timestamp: Timestamp;
 };
 
 export type Conversation = {
   id: string;
   customerName: string;
   lastMessage: string;
-  timestamp: string;
+  timestamp: Timestamp;
   avatarUrl: string;
   unreadCount: number;
-  messages: Message[];
 };
 
-export type Automation = {
+export type Message = {
   id: string;
-  name: string;
-  trigger: string;
-  action: string;
-  status: 'Active' | 'Inactive';
+  sender: 'user' | 'agent';
+  content: string;
+  timestamp: Timestamp;
+  avatarUrl: string;
 };
 
-export type CustomerSegment = {
-  id: string;
-  name: string;
-  criteria: string;
-  customerCount: number;
-};
+    

@@ -7,30 +7,36 @@ import { MessageSquare } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, serverTimestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser, initiateEmailSignIn } from '@/firebase';
-import { FirebaseError } from 'firebase/app';
+import { useAuth, useUser, useFirebase, setDocumentNonBlocking } from '@/firebase';
+import { FirebaseError } from "firebase/app";
 
-
-const loginSchema = z.object({
+const signupSchema = z.object({
+  firstName: z.string().min(1, { message: "O nome é obrigatório." }),
+  lastName: z.string().min(1, { message: "O sobrenome é obrigatório." }),
   email: z.string().email({ message: "Por favor, insira um email válido." }),
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
 });
 
-export default function LoginPage() {
+export default function SignupPage() {
   const auth = useAuth();
+  const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
 
-  const form = useForm<z.infer<typeof loginSchema>>({
-    resolver: zodResolver(loginSchema),
+  const form = useForm<z.infer<typeof signupSchema>>({
+    resolver: zodResolver(signupSchema),
     defaultValues: {
+      firstName: "",
+      lastName: "",
       email: "",
       password: "",
     },
@@ -42,12 +48,28 @@ export default function LoginPage() {
     }
   }, [user, isUserLoading, router]);
 
-
-  const onSubmit = async (values: z.infer<typeof loginSchema>) => {
+  const onSubmit = async (values: z.infer<typeof signupSchema>) => {
     try {
-      await initiateEmailSignIn(auth, values.email, values.password);
+      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+      const firebaseUser = userCredential.user;
+      
+      await updateProfile(firebaseUser, {
+        displayName: `${values.firstName} ${values.lastName}`
+      });
+
+      const userDocRef = doc(firestore, "users", firebaseUser.uid);
+      setDocumentNonBlocking(userDocRef, {
+        id: firebaseUser.uid,
+        firstName: values.firstName,
+        lastName: values.lastName,
+        email: firebaseUser.email,
+        createdAt: serverTimestamp(),
+        role: "Admin", // First user is always an Admin
+        avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`
+      }, { merge: true });
+
       toast({
-        title: "Login bem-sucedido!",
+        title: "Conta criada com sucesso!",
         description: "Redirecionando para o painel...",
       });
       // The useEffect will handle redirection
@@ -55,32 +77,20 @@ export default function LoginPage() {
       console.error(error);
       let description = "Ocorreu um erro desconhecido.";
       if (error instanceof FirebaseError) {
-        switch (error.code) {
-          case 'auth/user-not-found':
-          case 'auth/wrong-password':
-          case 'auth/invalid-credential':
-            description = "Email ou senha inválidos.";
-            break;
-          default:
-            description = "Ocorreu um erro ao tentar fazer login.";
+        if (error.code === 'auth/email-already-in-use') {
+          description = "Este email já está em uso.";
+        } else {
+          description = "Ocorreu um erro ao tentar criar a conta.";
         }
       }
       toast({
         variant: "destructive",
-        title: "Falha no login",
+        title: "Falha no cadastro",
         description,
       });
     }
   };
-
-  const handleGoogleLogin = () => {
-    // TODO: Implement Google Sign-In
-    toast({
-        title: "Em breve!",
-        description: "O login com Google ainda não foi implementado.",
-    });
-  }
-
+  
   if (isUserLoading || user) {
     return (
         <div className="flex h-screen w-screen items-center justify-center">
@@ -100,9 +110,9 @@ export default function LoginPage() {
             <MessageSquare className="h-8 w-8 text-primary" />
             <h1 className="text-2xl font-bold">ZapConnect</h1>
           </div>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">Criar uma conta</CardTitle>
           <CardDescription>
-            Entre com seu email para acessar o painel
+            Insira seus dados para começar a usar
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -110,9 +120,35 @@ export default function LoginPage() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
               <FormField
                 control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Seu nome" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sobrenome</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Seu sobrenome" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="email"
                 render={({ field }) => (
-                  <FormItem className="grid gap-2">
+                  <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input
@@ -129,16 +165,8 @@ export default function LoginPage() {
                 control={form.control}
                 name="password"
                 render={({ field }) => (
-                  <FormItem className="grid gap-2">
-                    <div className="flex items-center">
-                      <FormLabel>Senha</FormLabel>
-                      <Link
-                        href="#"
-                        className="ml-auto inline-block text-sm underline"
-                      >
-                        Esqueceu sua senha?
-                      </Link>
-                    </div>
+                  <FormItem>
+                    <FormLabel>Senha</FormLabel>
                     <FormControl>
                       <Input type="password" {...field} />
                     </FormControl>
@@ -147,17 +175,14 @@ export default function LoginPage() {
                 )}
               />
               <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Conectando...' : 'Conectar'}
+                {form.formState.isSubmitting ? 'Criando conta...' : 'Criar conta'}
               </Button>
             </form>
           </Form>
-           <Button variant="outline" className="w-full mt-4" onClick={handleGoogleLogin}>
-              Login com Google
-            </Button>
           <div className="mt-4 text-center text-sm">
-            Não tem uma conta?{" "}
-            <Link href="/signup" className="underline">
-              Cadastre-se
+            Já tem uma conta?{" "}
+            <Link href="/login" className="underline">
+              Fazer login
             </Link>
           </div>
         </CardContent>
