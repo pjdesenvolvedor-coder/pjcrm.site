@@ -125,13 +125,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    let intervalId: NodeJS.Timeout;
-
     const fetchStatus = async () => {
-      // Only show loading indicator when dialog is open and we don't have a status yet
-      if(isZapConnectOpen && !liveStatus) {
-        setIsStatusLoading(true);
-      }
       try {
         const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/ea50772a-1e0f-4d1f-bdcb-d205b1200ea8', {
           method: 'GET',
@@ -149,11 +143,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               profileName: instance.profileName,
               profilePicUrl: instance.profilePicUrl,
             });
-            // If we just got connected, hide the QR code flow
-            if (instance.status === 'connected' && connectionStatus === 'qr_code') {
-              setConnectionStatus('disconnected');
-              setQrCode(null);
-            }
           } else {
              setLiveStatus({ status: 'disconnected' });
           }
@@ -163,18 +152,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Status polling error:', error);
         setLiveStatus({ status: 'disconnected' });
-      } finally {
-        if(isZapConnectOpen) {
-          setIsStatusLoading(false);
-        }
       }
     };
 
     fetchStatus(); // Initial fetch
-    intervalId = setInterval(fetchStatus, 3000);
+    const intervalId = setInterval(fetchStatus, 3000);
 
     return () => clearInterval(intervalId);
-  }, [settings?.webhookToken, isLoadingSettings, connectionStatus, isZapConnectOpen, liveStatus]);
+  }, [settings?.webhookToken, isLoadingSettings]);
+
+  // Handle UI logic based on status changes
+  useEffect(() => {
+    // Show loading indicator when dialog is open and we don't have a status yet
+    if (isZapConnectOpen && !liveStatus) {
+      setIsStatusLoading(true);
+    } else {
+      setIsStatusLoading(false);
+    }
+    
+    // If we just got connected, hide the QR code flow
+    if (liveStatus?.status === 'connected' && connectionStatus === 'qr_code') {
+      setConnectionStatus('disconnected');
+      setQrCode(null);
+    }
+  }, [liveStatus, connectionStatus, isZapConnectOpen]);
 
 
   if (isUserLoading || !user) {
@@ -570,6 +571,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">{userProfile?.firstName} {userProfile?.lastName}</p>
+
                     <p className="text-xs leading-none text-muted-foreground">
                     {userProfile?.email}
                     </p>
