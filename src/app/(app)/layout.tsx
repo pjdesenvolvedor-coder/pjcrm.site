@@ -165,13 +165,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
     
     // Only poll when the dialog is open and we have a token.
-    if (settings?.webhookToken && isZapConnectOpen && connectionStatus !== 'qr_code') {
+    if (settings?.webhookToken && isZapConnectOpen && connectionStatus !== 'qr_code' && liveStatus?.status !== 'connected') {
         fetchStatus(); // Initial fetch
         pollingIntervalRef.current = setInterval(fetchStatus, 3000);
     }
 
     return () => stopPolling();
-  }, [settings?.webhookToken, isZapConnectOpen, connectionStatus]);
+  }, [settings?.webhookToken, isZapConnectOpen, connectionStatus, liveStatus?.status]);
 
   useEffect(() => {
     if (!isZapConnectOpen) {
@@ -188,9 +188,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [isZapConnectOpen]);
   
   useEffect(() => {
-    if (liveStatus?.status === 'connected' && connectionStatus === 'qr_code') {
+    if (liveStatus?.status === 'connected' && (connectionStatus === 'qr_code' || connectionStatus === 'connecting')) {
       setConnectionStatus('disconnected');
       setQrCode(null);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     }
   }, [liveStatus, connectionStatus]);
 
@@ -327,7 +331,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (connectionStatus === 'qr_code' && qrCode) {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
-          <Badge variant="default" className="py-1 px-3 bg-blue-500/20 text-blue-700 hover:bg-blue-500/30">
+          <Badge variant="default" className="py-1 px-3 bg-blue-100 text-blue-800">
             <QrCode className="h-4 w-4 mr-2" />
             Pronto para escanear
           </Badge>
@@ -353,8 +357,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (liveStatus?.status === 'connected') {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="default" className="py-1 px-3 bg-green-500/20 text-green-700 hover:bg-green-500/30">
-            <div className="h-2 w-2 mr-2 rounded-full bg-green-700 animate-pulse"></div>
+          <Badge variant="default" className="py-1 px-3 bg-green-100 text-green-800">
+            <div className="h-2 w-2 mr-2 rounded-full bg-green-500 animate-pulse"></div>
             Conectado
           </Badge>
           {liveStatus.profilePicUrl ? (
@@ -375,7 +379,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
            <Button
               type="button"
               variant="destructive"
-              className="mt-4"
+              className="mt-4 animate-pulse-destructive"
               onClick={handleDisconnect}
               disabled={isDisconnecting}
             >
@@ -395,40 +399,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       );
     }
 
-    if (!liveStatus) {
-      return (
+    if (!liveStatus || liveStatus.status === 'disconnected') {
+       return (
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+          <Badge variant={'secondary'} className="py-1 px-3">
+            <WifiOff className="h-4 w-4 mr-2" />
+            Desconectado
+          </Badge>
+          <p className="text-sm text-muted-foreground">
+            Clique em 'Conectar' para parear com o WhatsApp.
+          </p>
+          <div className="w-40 h-40 bg-gradient-to-br from-muted/30 to-muted/10 rounded-lg flex items-center justify-center my-4">
+            <Zap className="h-20 w-20 text-muted-foreground/20" />
+          </div>
+        </div>
+      );
+    }
+    
+    // Fallback for connecting status or other intermediate states
+    return (
        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
          <Loader2 className="h-16 w-16 text-primary animate-spin" />
          <p className="text-sm text-muted-foreground mt-4">Verificando status...</p>
        </div>
      );
-   }
 
-    return (
-      <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-        <Badge variant={liveStatus?.status === 'connecting' ? 'default' : 'secondary'} className="py-1 px-3">
-          {liveStatus?.status === 'connecting' ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Conectando...
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-4 w-4 mr-2" />
-              Desconectado
-            </>
-          )}
-        </Badge>
-        <p className="text-sm text-muted-foreground">
-          {liveStatus?.status === 'connecting' 
-            ? 'Aguarde um momento, estamos estabelecendo a conexão.' 
-            : "Clique em 'Conectar' para parear com o WhatsApp."}
-        </p>
-        <div className="w-40 h-40 bg-gradient-to-br from-muted/30 to-muted/10 rounded-lg flex items-center justify-center my-4">
-          <WifiOff className="h-20 w-20 text-muted-foreground/20" />
-        </div>
-      </div>
-    );
   };
 
 
@@ -483,93 +478,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </CollapsibleContent>
                 </Collapsible>
               </SidebarMenuItem>
-
+              
               <SidebarMenuItem>
-                <Collapsible>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Envio de Mensagens'}}>
-                            <div className="flex items-center gap-2">
-                                <MessageSquare />
-                                <span>Envio de Mensagens</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#"><Bot className="h-4 w-4"/>Cobrança</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#"><Flame className="h-4 w-4"/>Remarketing</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#"><Users className="h-4 w-4"/>Grupos</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                             <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#"><Send className="h-4 w-4"/>Disparo</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
+                  <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'Inbox' }}>
+                      <Link href="/inbox"><MessageSquare /><span>Inbox</span></Link>
+                  </SidebarMenuButton>
               </SidebarMenuItem>
               
               <SidebarMenuItem>
-                <Collapsible>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'IPTV'}}>
-                            <div className="flex items-center gap-2">
-                                <Tv />
-                                <span>IPTV</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#">Testes (IPTV)</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild>
-                                  <Link href="#" className="flex w-full items-center justify-between">
-                                    <span>Testes Vencidos (IPTV)</span>
-                                    <Badge>10</Badge>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <Collapsible>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Notas'}}>
-                            <div className="flex items-center gap-2">
-                                <FileText />
-                                <span>Notas</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#"><CheckSquare className="h-4 w-4" />Tarefas</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild><Link href="#"><Megaphone className="h-4 w-4" />Anúncios</Link></SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={{ children: 'Email Temp' }}>
-                      <Link href="#"><Mail /><span>Email Temp</span></Link>
+                  <SidebarMenuButton asChild isActive={pathname === '/automations'} tooltip={{ children: 'Automações' }}>
+                      <Link href="/automations"><Bot /><span>Automações</span></Link>
                   </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -597,7 +515,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <SidebarMenuSub>
                             <SidebarMenuSubItem>
                                 <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings')}>
-                                    <Link href="/settings">Planos e Assinaturas</Link>
+                                    <Link href="/settings">Token</Link>
                                 </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
@@ -625,7 +543,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   {(liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') && (
                     <Button
                       type="button"
-                      className={cn("w-full", !(isLoadingSettings || connectionStatus === 'connecting') && "animate-pulse-primary")}
+                      className="w-full animate-pulse-primary"
                       size="lg"
                       onClick={handleConnect}
                       disabled={isLoadingSettings || connectionStatus === 'connecting'}

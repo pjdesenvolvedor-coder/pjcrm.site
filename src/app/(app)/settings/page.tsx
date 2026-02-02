@@ -11,8 +11,6 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, WifiOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
   const { firestore } = useFirebase();
@@ -20,7 +18,6 @@ export default function SettingsPage() {
   const { toast } = useToast();
 
   const [token, setToken] = useState('');
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const settingsDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -46,53 +43,11 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!token) {
-        toast({
-            variant: 'destructive',
-            title: 'Token não encontrado',
-            description: 'Não é possível desconectar sem um token de autenticação.',
-        });
-        return;
-    }
-
-    setIsDisconnecting(true);
-    try {
-        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ token: token }),
-        });
-
-        if (!response.ok) {
-            throw new Error('A resposta da rede não foi boa ao desconectar.');
-        }
-
-        toast({
-            title: 'Desconectado!',
-            description: 'Sua sessão do WhatsApp foi encerrada.',
-        });
-
-    } catch (error: any) {
-        console.error('Falha ao desconectar:', error);
-        toast({
-            variant: 'destructive',
-            title: 'Falha ao Desconectar',
-            description: error.message || 'Não foi possível encerrar a conexão.',
-        });
-    } finally {
-        setIsDisconnecting(false);
-    }
-  };
-
-
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Configurações"
-        description="Gerencie as configurações da sua conta e integrações."
+        title="Token"
+        description="Gerencie seu token de autenticação para integrações."
       />
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
         <Card>
@@ -126,34 +81,6 @@ export default function SettingsPage() {
               {isLoading ? 'Carregando...' : 'Salvar Alterações'}
             </Button>
           </CardContent>
-        </Card>
-        <Card>
-            <CardHeader>
-                <CardTitle>Gerenciamento da Conexão</CardTitle>
-                <CardDescription>
-                Encerre sua sessão ativa do WhatsApp.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Button 
-                    variant="destructive" 
-                    onClick={handleDisconnect} 
-                    disabled={isLoading || isDisconnecting || !token}
-                    className={cn(!isDisconnecting && !!token && 'animate-pulse-destructive')}
-                >
-                    {isDisconnecting ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Desconectando...
-                        </>
-                    ) : (
-                        <>
-                            <WifiOff className="mr-2 h-4 w-4" />
-                            Desconectar Sessão do WhatsApp
-                        </>
-                    )}
-                </Button>
-            </CardContent>
         </Card>
       </main>
     </div>
