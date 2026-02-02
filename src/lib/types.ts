@@ -68,4 +68,7 @@ export type Message = {
   avatarUrl: string;
 };
 
-    
+export type Settings = {
+  id: string;
+  webhookToken?: string;
+};
