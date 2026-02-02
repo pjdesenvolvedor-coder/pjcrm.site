@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 });
     }
 
-    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/58da289a-e20c-460a-8e35-d01c9b567dad';
+    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/58da289a-e20c-460a-8e35-d01c9b567dad';
 
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
