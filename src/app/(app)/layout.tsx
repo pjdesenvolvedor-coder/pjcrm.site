@@ -53,6 +53,7 @@ import { doc } from 'firebase/firestore';
 import type { UserProfile, Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Painel' },
@@ -319,7 +320,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Pronto para escanear
           </Badge>
           <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
-          <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2">
+          <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
             <img src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
           </div>
         </div>
@@ -350,7 +351,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 alt="Foto de Perfil" 
                 width={96} 
                 height={96} 
-                className="rounded-full my-4 border"
+                className="rounded-full my-4 border-4 border-background shadow-lg"
                 data-ai-hint="person avatar"
             />
           ) : (
@@ -392,8 +393,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             ? 'Aguarde um momento, estamos estabelecendo a conexão.' 
             : "Clique em 'Conectar' para parear com o WhatsApp."}
         </p>
-        <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
-          <WifiOff className="h-20 w-20 text-muted-foreground/30" />
+        <div className="w-40 h-40 bg-gradient-to-br from-muted/30 to-muted/10 rounded-lg flex items-center justify-center my-4">
+          <WifiOff className="h-20 w-20 text-muted-foreground/20" />
         </div>
       </div>
     );
@@ -462,7 +463,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <Button
                       type="button"
                       variant="destructive"
-                      className="w-full"
+                      className={cn("w-full", !isDisconnecting && "animate-pulse")}
                       size="lg"
                       onClick={handleDisconnect}
                       disabled={isDisconnecting}
@@ -482,7 +483,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   ) : (liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') ? (
                     <Button
                       type="button"
-                      className="w-full"
+                      className={cn("w-full", !(isLoadingSettings || connectionStatus === 'connecting') && "animate-pulse")}
                       size="lg"
                       onClick={handleConnect}
                       disabled={isLoadingSettings || connectionStatus === 'connecting'}
