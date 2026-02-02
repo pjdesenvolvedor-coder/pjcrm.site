@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -52,7 +52,7 @@ import {
 } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useCollection, useFirebase, useUser, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirebase, useUser, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Client } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -62,6 +62,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import Image from 'next/image';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
@@ -83,30 +85,31 @@ const clientSchema = z.object({
   amountPaid: z.string().optional(),
 });
 
+type DialogView = 'closed' | 'add' | 'edit' | 'sendMessage' | 'delete' | 'view';
 
 // Helper component for the Client Form
-function ClientForm({ initialData, onFinished }: { initialData?: Client | null, onFinished: () => void }) {
+function ClientForm({ client, onFinished }: { client?: Client | null, onFinished: () => void }) {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const { toast } = useToast();
-  const isEditing = !!initialData;
+  const isEditing = !!client;
 
   const form = useForm<z.infer<typeof clientSchema>>({
     resolver: zodResolver(clientSchema),
-    defaultValues: initialData ? {
-      name: initialData.name,
-      telegramUser: initialData.telegramUser || '',
-      phone: initialData.phone,
-      clientType: initialData.clientType || [],
-      email: initialData.email,
-      dueDate: initialData.dueDate ? initialData.dueDate.toDate() : undefined,
-      dueTimeHour: initialData.dueDate ? format(initialData.dueDate.toDate(), 'HH') : '18',
-      dueTimeMinute: initialData.dueDate ? format(initialData.dueDate.toDate(), 'mm') : '19',
-      notes: initialData.notes || '',
-      quantity: initialData.quantity?.toString() || '1',
-      subscription: initialData.subscription || '',
-      paymentMethod: initialData.paymentMethod,
-      amountPaid: initialData.amountPaid || ''
+    defaultValues: client ? {
+      name: client.name,
+      telegramUser: client.telegramUser || '',
+      phone: client.phone,
+      clientType: client.clientType || [],
+      email: client.email,
+      dueDate: client.dueDate ? client.dueDate.toDate() : undefined,
+      dueTimeHour: client.dueDate ? format(client.dueDate.toDate(), 'HH') : '18',
+      dueTimeMinute: client.dueDate ? format(client.dueDate.toDate(), 'mm') : '19',
+      notes: client.notes || '',
+      quantity: client.quantity?.toString() || '1',
+      subscription: client.subscription || '',
+      paymentMethod: client.paymentMethod,
+      amountPaid: client.amountPaid || ''
     } : {
       name: '',
       telegramUser: '',
@@ -151,9 +154,9 @@ function ClientForm({ initialData, onFinished }: { initialData?: Client | null, 
       amountPaid: values.amountPaid,
     };
 
-    if (isEditing && initialData) {
-        const docRef = doc(firestore, 'users', user.uid, 'clients', initialData.id);
-        setDocumentNonBlocking(docRef, { ...clientData, status: initialData.status }, { merge: true });
+    if (isEditing && client) {
+        const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+        setDocumentNonBlocking(docRef, { ...clientData, status: client.status }, { merge: true });
         toast({ title: "Cliente atualizado!", description: `${values.name} foi atualizado com sucesso.` });
     } else {
         addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: 'Ativo' });
@@ -174,7 +177,6 @@ function ClientForm({ initialData, onFinished }: { initialData?: Client | null, 
           </TabsList>
           <TabsContent value="dados">
             <div className="space-y-4 py-6">
-                {/* Form fields for data */}
                 <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome do Cliente" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="telegramUser" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Usuário Telegram</FormLabel><FormControl><Input placeholder="@usuario_telegram (opcional)" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Número *</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
@@ -184,7 +186,6 @@ function ClientForm({ initialData, onFinished }: { initialData?: Client | null, 
           </TabsContent>
           <TabsContent value="vencimento">
             <div className="space-y-4 py-6">
-                {/* Form fields for due date */}
                 <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Definir</Label><div className="col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { days: 15 }))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { months: 1 }))}>1 mês</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { months: 3 }))}>3 meses</Button></div></div>
                 <FormField control={form.control} name="dueDate" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><div /><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("col-span-3 justify-start text-left font-normal", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value ? format(field.value, "dd/MM/yyyy") : <span>Selecione uma data</span>}</Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage className="col-start-2 col-span-3" /></FormItem> )} />
                 <div className="grid grid-cols-4 items-center gap-4"><div /><div className="col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
@@ -193,7 +194,6 @@ function ClientForm({ initialData, onFinished }: { initialData?: Client | null, 
           </TabsContent>
           <TabsContent value="pagamento">
             <div className="space-y-4 py-6">
-                {/* Form fields for payment */}
                 <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Quantidade</FormLabel><FormControl><Input {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="subscription" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Assinatura *</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="col-span-3"><SelectValue placeholder="Selecione uma assinatura" /></SelectTrigger></FormControl><SelectContent><SelectItem value="plano_mensal">Plano Mensal</SelectItem><SelectItem value="plano_trimestral">Plano Trimestral</SelectItem><SelectItem value="plano_anual">Plano Anual</SelectItem></SelectContent></Select><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Meio</FormLabel><FormControl><div className="col-span-3 flex items-center gap-2"><Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button><Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button><Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button></div></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
@@ -210,45 +210,11 @@ function ClientForm({ initialData, onFinished }: { initialData?: Client | null, 
   )
 }
 
-function SendMessageDialog({ client, onClose, onSend }: { client: Client; onClose: () => void; onSend: (message: string) => void; }) {
-  const [message, setMessage] = useState('');
-
-  const handleSend = () => {
-    onSend(message);
-  };
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Enviar Mensagem para {client.name}</DialogTitle>
-        <DialogDescription>
-          Digite a mensagem que você deseja enviar para o número {client.phone}.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="py-4 space-y-2">
-        <Label htmlFor="message">Mensagem</Label>
-        <Textarea
-          id="message"
-          placeholder="Digite sua mensagem aqui..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          className="min-h-[100px]"
-        />
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button onClick={handleSend} disabled={!message.trim()}>Enviar Mensagem Agora</Button>
-      </DialogFooter>
-    </>
-  );
-}
-
 export default function CustomersPage() {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
-  const [dialogView, setDialogView] = useState<'closed' | 'add' | 'edit' | 'send-message'>('closed');
+  const [dialogView, setDialogView] = useState<DialogView>('closed');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   
   const clientsQuery = useMemoFirebase(() => {
@@ -258,12 +224,12 @@ export default function CustomersPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const openDialog = (view: 'add' | 'edit' | 'send-message', client?: Client) => {
-    setSelectedClient(client || null);
+  const openDialog = (view: DialogView, client: Client | null = null) => {
+    setSelectedClient(client);
     setDialogView(view);
   };
 
-  const closeDialog = () => {
+  const closeDialogAndClear = () => {
     setDialogView('closed');
     setSelectedClient(null);
   };
@@ -276,7 +242,18 @@ export default function CustomersPage() {
       title: "Mensagem Enviada!",
       description: `Sua mensagem foi enviada para ${selectedClient.name}.`,
     });
-    closeDialog();
+    closeDialogAndClear();
+  };
+  
+  const handleDeleteClient = () => {
+    if (!selectedClient || !user) return;
+    const docRef = doc(firestore, 'users', user.uid, 'clients', selectedClient.id);
+    deleteDocumentNonBlocking(docRef);
+    toast({
+      title: "Cliente Apagado!",
+      description: `${selectedClient.name} foi removido da sua lista.`,
+    });
+    closeDialogAndClear();
   };
 
   const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
@@ -287,59 +264,25 @@ export default function CustomersPage() {
       default: return 'outline';
     }
   };
-  
-  const renderDialogContent = () => {
+
+  const getDialogInfo = () => {
     switch (dialogView) {
       case 'add':
-        return (
-          <>
-            <DialogHeader>
-              <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-              <DialogDescription>
-                Preencha os detalhes do cliente abaixo.
-              </DialogDescription>
-            </DialogHeader>
-            <ClientForm onFinished={closeDialog} />
-          </>
-        );
+        return { title: 'Adicionar Novo Cliente', description: 'Preencha os detalhes do cliente abaixo.', content: <ClientForm onFinished={closeDialogAndClear} /> };
       case 'edit':
-        if (!selectedClient) return null;
-        return (
-          <>
-            <DialogHeader>
-              <DialogTitle>Editar Cliente</DialogTitle>
-              <DialogDescription>
-                Atualize os detalhes do cliente abaixo.
-              </DialogDescription>
-            </DialogHeader>
-            <ClientForm initialData={selectedClient} onFinished={closeDialog} />
-          </>
-        );
-      case 'send-message':
-        if (!selectedClient) return null;
-        return (
-            <SendMessageDialog
-                client={selectedClient}
-                onClose={closeDialog}
-                onSend={handleSendMessage}
-            />
-        );
+        return { title: 'Editar Cliente', description: 'Atualize os detalhes do cliente abaixo.', content: <ClientForm client={selectedClient} onFinished={closeDialogAndClear} /> };
+      case 'sendMessage':
+        return { title: `Enviar Mensagem para ${selectedClient?.name}`, description: `Digite a mensagem que você deseja enviar para o número ${selectedClient?.phone}.`, content: <SendMessageDialog client={selectedClient!} onSend={handleSendMessage} onCancel={closeDialogAndClear} /> };
+      case 'view':
+        return { title: 'Detalhes do Cliente', description: 'Informações completas do cliente.', content: <ClientDetailsView client={selectedClient!} onEdit={() => openDialog('edit', selectedClient)} onRenew={() => {}} onClose={closeDialogAndClear} /> };
+      case 'delete':
+        return { title: 'Apagar Cliente', description: `Tem certeza que deseja apagar ${selectedClient?.name}? Esta ação não pode ser desfeita.`, content: <DeleteConfirmation onConfirm={handleDeleteClient} onCancel={closeDialogAndClear} /> };
       default:
         return null;
     }
-  };
-  
-  const getDialogClass = () => {
-      switch (dialogView) {
-          case 'add':
-          case 'edit':
-              return 'sm:max-w-lg';
-          case 'send-message':
-              return 'sm:max-w-md';
-          default:
-              return '';
-      }
   }
+
+  const dialogInfo = getDialogInfo();
 
   return (
     <div className="flex flex-col h-full">
@@ -360,14 +303,6 @@ export default function CustomersPage() {
             <PlusCircle className="h-4 w-4" />
             Adicionar Cliente
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9"><MoreHorizontal className="h-4 w-4" /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>Exportar Clientes</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
@@ -396,28 +331,9 @@ export default function CustomersPage() {
                       <TableCell>{client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                       <TableCell>{client.clientType?.join(', ')}</TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openDialog('edit', client)}>
-                                <FilePenLine className="mr-2 h-4 w-4" />
-                                <span>Editar</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openDialog('send-message', client)}>
-                                <MessageSquare className="mr-2 h-4 w-4" />
-                                <span>Enviar Mensagem</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <LifeBuoy className="mr-2 h-4 w-4" />
-                                <span>Marcar Suporte</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                <span>Apagar Cliente</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button variant="outline" size="sm" onClick={() => openDialog('edit', client)}>
+                           Editar
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -430,11 +346,93 @@ export default function CustomersPage() {
         </Card>
       </main>
 
-      <Dialog open={dialogView !== 'closed'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
-        <DialogContent className={cn(getDialogClass())} onInteractOutside={(e) => e.preventDefault()}>
-          {renderDialogContent()}
+      <Dialog open={dialogView !== 'closed'} onOpenChange={(isOpen) => !isOpen && closeDialogAndClear()}>
+        <DialogContent className="sm:max-w-lg" onInteractOutside={(e) => e.preventDefault()}>
+            {dialogInfo && (
+                <>
+                    <DialogHeader>
+                        <DialogTitle>{dialogInfo.title}</DialogTitle>
+                        {dialogInfo.description && <DialogDescription>{dialogInfo.description}</DialogDescription>}
+                    </DialogHeader>
+                    {dialogInfo.content}
+                </>
+            )}
         </DialogContent>
       </Dialog>
     </div>
   );
+}
+
+function SendMessageDialog({ client, onSend, onCancel }: { client: Client; onSend: (message: string) => void; onCancel: () => void; }) {
+  const [message, setMessage] = useState('');
+  return (
+    <>
+      <div className="py-4 space-y-2">
+        <Label htmlFor="message">Mensagem</Label>
+        <Textarea id="message" placeholder="Digite sua mensagem aqui..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[100px]" />
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
+        <Button onClick={() => onSend(message)} disabled={!message.trim()}>Enviar Mensagem Agora</Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function DeleteConfirmation({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void; }) {
+    return(
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Esta ação não pode ser desfeita. Isso irá apagar permanentemente o cliente.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={onCancel}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={onConfirm}>Apagar</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    );
+}
+
+function ClientDetailsView({ client, onClose, onEdit, onRenew }: { client: Client; onClose: () => void; onEdit: () => void; onRenew: () => void; }) {
+  return (
+    <div>
+      <Card className="shadow-none border-none">
+        <CardContent className="p-0 space-y-6">
+          <div className="flex items-center space-x-4">
+              <Image src={`https://picsum.photos/seed/${client.id}/80/80`} alt={client.name} width={80} height={80} className="rounded-full" data-ai-hint="person avatar" />
+              <div className="space-y-1">
+                  <h3 className="text-2xl font-bold">{client.name}</h3>
+                  <p className="text-muted-foreground">{client.email}</p>
+              </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <div className="flex items-center gap-2"> <Phone className="h-4 w-4 text-muted-foreground" /> <span>{client.phone}</span> </div>
+            <div className="flex items-center gap-2"> <Mail className="h-4 w-4 text-muted-foreground" /> <span>{client.email}</span> </div>
+            <div className="flex items-center gap-2"> <CalendarDays className="h-4 w-4 text-muted-foreground" /> <span>Vence em: {client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '-'}</span> </div>
+            <div className="flex items-center gap-2"> <CheckCircle2 className="h-4 w-4 text-muted-foreground" /> <span>Status: {client.status}</span> </div>
+            <div className="flex items-center gap-2"> <ShoppingCart className="h-4 w-4 text-muted-foreground" /> <span>Assinatura: {client.subscription}</span> </div>
+            <div className="flex items-center gap-2"> <Wallet className="h-4 w-4 text-muted-foreground" /> <span>Pagamento: {client.paymentMethod}</span> </div>
+            <div className="flex items-center gap-2"> <Banknote className="h-4 w-4 text-muted-foreground" /> <span>Valor: {client.amountPaid}</span> </div>
+          </div>
+          
+          {client.notes && (
+            <div className="space-y-2">
+                <h4 className="font-medium">Notas</h4>
+                <p className="text-muted-foreground text-sm bg-muted/50 p-3 rounded-md">{client.notes}</p>
+            </div>
+          )}
+
+        </CardContent>
+      </Card>
+      <DialogFooter className="pt-6">
+        <Button variant="outline" onClick={onEdit}><FilePenLine className="mr-2 h-4 w-4"/>Editar Cliente</Button>
+        <Button><RefreshCw className="mr-2 h-4 w-4" />Renovar</Button>
+        <Button variant="ghost" onClick={onClose}><X className="mr-2 h-4 w-4"/>Fechar</Button>
+      </DialogFooter>
+    </div>
+  )
 }
