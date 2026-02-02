@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -85,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
-  const [isStatusLoading, setIsStatusLoading] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -107,75 +107,79 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.push('/login');
     }
   }, [user, isUserLoading, router]);
-  
-  // Reset connection flow state when dialog is closed
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+    }
+  };
+
+  const fetchStatus = async () => {
+    if (isLoadingSettings || !settings?.webhookToken) {
+      setLiveStatus({ status: 'disconnected' });
+      return;
+    }
+    try {
+      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/58da289a-e20c-460a-8e35-d01c9b567dad', {
+        method: 'GET',
+        headers: { 'token': settings.webhookToken },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const instance = data[0]?.instance;
+        if (instance) {
+          const newStatus: LiveStatus = {
+            status: instance.status,
+            profileName: instance.profileName,
+            profilePicUrl: instance.profilePicUrl,
+          };
+          setLiveStatus(newStatus);
+          
+          if (instance.status === 'connected') {
+            stopPolling();
+            setConnectionStatus('disconnected'); // Reset view to show connected status
+            setQrCode(null);
+          }
+        } else {
+          setLiveStatus({ status: 'disconnected' });
+        }
+      } else {
+        setLiveStatus({ status: 'disconnected' });
+      }
+    } catch (error) {
+      console.error('Status polling error:', error);
+      setLiveStatus({ status: 'disconnected' });
+    }
+  };
+
+  // Reset connection flow state and stop polling when dialog is closed
   useEffect(() => {
     if (!isZapConnectOpen) {
+      stopPolling();
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
+        // fetch initial status next time it opens
+        setLiveStatus(null); 
       }, 300);
-    }
-  }, [isZapConnectOpen]);
-  
-  // Poll for live connection status continuously
-  useEffect(() => {
-    if (isLoadingSettings || !settings?.webhookToken) {
-      setLiveStatus(null);
-      return;
-    }
-
-    const fetchStatus = async () => {
-      try {
-        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/58da289a-e20c-460a-8e35-d01c9b567dad', {
-          method: 'GET',
-          headers: {
-            'token': settings.webhookToken!,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const instance = data[0]?.instance;
-          if (instance) {
-            setLiveStatus({
-              status: instance.status,
-              profileName: instance.profileName,
-              profilePicUrl: instance.profilePicUrl,
-            });
-          } else {
-             setLiveStatus({ status: 'disconnected' });
-          }
-        } else {
-           setLiveStatus({ status: 'disconnected' });
-        }
-      } catch (error) {
-        console.error('Status polling error:', error);
-        setLiveStatus({ status: 'disconnected' });
-      }
-    };
-
-    fetchStatus(); // Initial fetch
-    const intervalId = setInterval(fetchStatus, 3000);
-
-    return () => clearInterval(intervalId);
-  }, [settings?.webhookToken, isLoadingSettings]);
-
-  // Handle UI logic based on status changes
-  useEffect(() => {
-    // Show loading indicator when dialog is open and we don't have a status yet
-    if (isZapConnectOpen && !liveStatus) {
-      setIsStatusLoading(true);
     } else {
-      setIsStatusLoading(false);
+        fetchStatus(); // Fetch initial status when dialog opens
     }
     
+    // Cleanup on unmount
+    return () => stopPolling();
+  }, [isZapConnectOpen]);
+  
+  // Handle UI logic based on status changes
+  useEffect(() => {
     // If we just got connected, hide the QR code flow
     if (liveStatus?.status === 'connected' && connectionStatus === 'qr_code') {
       setConnectionStatus('disconnected');
       setQrCode(null);
     }
-  }, [liveStatus, connectionStatus, isZapConnectOpen]);
+  }, [liveStatus, connectionStatus]);
 
 
   if (isUserLoading || !user) {
@@ -233,6 +237,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 title: 'QR Code Pronto!',
                 description: 'Escaneie o código com seu WhatsApp para conectar.',
             });
+            // Start polling AFTER QR code is shown
+            stopPolling(); // ensure no other polling is running
+            pollingIntervalRef.current = setInterval(fetchStatus, 3000);
         } else {
             throw new Error('A resposta do webhook não continha um QR code válido.');
         }
@@ -249,6 +256,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const handleDisconnect = async () => {
+    stopPolling();
     if (!settings?.webhookToken) {
         toast({
             variant: 'destructive',
@@ -330,7 +338,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     // 2. Show live status from polling
-    if (isStatusLoading && !liveStatus) {
+    if (!liveStatus) {
        return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
           <Loader2 className="h-16 w-16 text-primary animate-spin" />
@@ -483,7 +491,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               onClick={handleConnect}
                               disabled={connectionStatus === 'connecting' || isLoadingSettings || liveStatus?.status === 'connecting'}
                           >
-                              {connectionStatus === 'connecting' ? (
+                              {connectionStatus === 'connecting' || (liveStatus?.status === 'connecting' && connectionStatus !== 'qr_code') ? (
                                   <>
                                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                       Conectando...
