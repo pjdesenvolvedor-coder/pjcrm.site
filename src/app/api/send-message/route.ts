@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     // Ensure the phone number starts with +55 and contains only digits after that.
     const formattedPhoneNumber = `+55${phoneNumber.replace(/\D/g, '')}`;
 
-    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
+    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
 
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
