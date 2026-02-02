@@ -7,13 +7,14 @@ import { MessageSquare } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser, initiateEmailSignIn } from '@/firebase';
+import { useAuth, useUser } from '@/firebase';
 import { FirebaseError } from 'firebase/app';
 
 
@@ -45,7 +46,7 @@ export default function LoginPage() {
 
   const onSubmit = async (values: z.infer<typeof loginSchema>) => {
     try {
-      await initiateEmailSignIn(auth, values.email, values.password);
+      await signInWithEmailAndPassword(auth, values.email, values.password);
       toast({
         title: "Login bem-sucedido!",
         description: "Redirecionando para o painel...",
@@ -165,5 +166,3 @@ export default function LoginPage() {
     </div>
   )
 }
-
-    
