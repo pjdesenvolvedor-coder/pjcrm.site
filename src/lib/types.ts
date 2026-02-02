@@ -10,6 +10,18 @@ export type UserProfile = {
   avatarUrl?: string;
 };
 
+export type Client = {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone: string;
+  dueDate: Timestamp;
+  subscription: string;
+  status: 'Ativo' | 'Inativo' | 'Vencido';
+  password?: string;
+};
+
 export type WhatsAppConnection = {
   id: string;
   userId: string;
@@ -24,14 +36,6 @@ export type AutomatedMessageWorkflow = {
   name: string;
   trigger: string;
   status: 'Active' | 'Inactive';
-};
-
-export type CustomerSegment = {
-  id: string;
-  userId: string;
-  name: string;
-  criteria: string;
-  customerCount: number;
 };
 
 export type MessageAnalytics = {

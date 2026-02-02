@@ -43,6 +43,63 @@
         "role"
       ]
     },
+    "Client": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Client",
+      "type": "object",
+      "description": "Represents a client of the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the client."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Client)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the client."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the client.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "The phone number of the client."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The due date for the client's subscription.",
+          "format": "date-time"
+        },
+        "subscription": {
+          "type": "string",
+          "description": "The subscription plan of the client."
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the client.",
+          "enum": ["Ativo", "Inativo", "Vencido"]
+        },
+        "password": {
+          "type": "string",
+          "description": "Password associated with the client's service."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "email",
+        "phone",
+        "dueDate",
+        "subscription",
+        "status"
+      ]
+    },
     "WhatsAppConnection": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "WhatsAppConnection",
@@ -111,41 +168,6 @@
         "name",
         "trigger",
         "status"
-      ]
-    },
-    "CustomerSegment": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "CustomerSegment",
-      "type": "object",
-      "description": "Represents a segment of customers based on specific criteria.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the customer segment."
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N CustomerSegment)"
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the customer segment."
-        },
-        "criteria": {
-          "type": "string",
-          "description": "The criteria used to define the customer segment (e.g., location, purchase history)."
-        },
-        "customerCount": {
-          "type": "number",
-          "description": "Number of customers in the segment"
-        }
-      },
-      "required": [
-        "id",
-        "userId",
-        "name",
-        "criteria",
-        "customerCount"
       ]
     },
     "MessageAnalytics": {
@@ -306,6 +328,26 @@
         }
       },
       {
+        "path": "/users/{userId}/clients/{clientId}",
+        "definition": {
+          "entityName": "Client",
+          "schema": {
+            "$ref": "#/backend/entities/Client"
+          },
+          "description": "Stores clients for each user. Ownership is enforced via the path `/users/{userId}`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "clientId",
+              "description": "The unique identifier for the client."
+            }
+          ]
+        }
+      },
+      {
         "path": "/users/{userId}/whatsapp_connections/{connectionId}",
         "definition": {
           "entityName": "WhatsAppConnection",
@@ -385,26 +427,6 @@
             {
               "name": "messageId",
               "description": "The unique identifier for the message."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/customer_segments/{segmentId}",
-        "definition": {
-          "entityName": "CustomerSegment",
-          "schema": {
-            "$ref": "#/backend/entities/CustomerSegment"
-          },
-          "description": "Stores customer segments defined by each user. Ownership is enforced via the path `/users/{userId}`.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user."
-            },
-            {
-              "name": "segmentId",
-              "description": "The unique identifier for the customer segment."
             }
           ]
         }
