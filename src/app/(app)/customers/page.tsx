@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, Eye, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
@@ -260,7 +260,11 @@ function ClientDetailView({ client, onClose, onEdit }: { client: Client; onClose
 export default function CustomersPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
-  const [dialog, setDialog] = useState<{ type: 'view' | 'add' | 'edit', client?: Client } | null>(null);
+  
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogType, setDialogType] = useState<'view' | 'form' | null>(null);
+  const [dialogContent, setDialogContent] = useState<ReactNode | null>(null);
+
 
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -268,6 +272,68 @@ export default function CustomersPage() {
   }, [firestore, user]);
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setDialogOpen(isOpen);
+    if (!isOpen) {
+      // Clear content after animation
+      setTimeout(() => {
+        setDialogContent(null);
+        setDialogType(null);
+      }, 300);
+    }
+  };
+
+  const openDialog = (type: 'view' | 'form', content: ReactNode) => {
+    setDialogType(type);
+    setDialogContent(content);
+    setDialogOpen(true);
+  };
+  
+  const closeDialogAndClear = () => {
+    handleOpenChange(false);
+  }
+
+  const handleViewDetails = (client: Client) => {
+    openDialog(
+      'view',
+      <ClientDetailView
+        client={client}
+        onClose={closeDialogAndClear}
+        onEdit={(clientToEdit) => handleEdit(clientToEdit)}
+      />
+    );
+  };
+
+  const handleAdd = () => {
+    openDialog(
+      'form',
+      <>
+        <DialogHeader>
+            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+            <DialogDescription>
+                Preencha os detalhes do cliente abaixo.
+            </DialogDescription>
+        </DialogHeader>
+        <ClientForm onFinished={closeDialogAndClear} />
+      </>
+    );
+  };
+  
+  const handleEdit = (client: Client) => {
+    openDialog(
+        'form',
+        <>
+            <DialogHeader>
+                <DialogTitle>Editar Cliente</DialogTitle>
+                <DialogDescription>
+                    Atualize os detalhes do cliente abaixo.
+                </Description>
+            </DialogHeader>
+            <ClientForm initialData={client} onFinished={closeDialogAndClear} />
+        </>
+    );
+  };
 
   const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
     switch (status) {
@@ -293,7 +359,7 @@ export default function CustomersPage() {
               <SelectItem value="vencido">Vencido</SelectItem>
             </SelectContent>
           </Select>
-          <Button size="sm" className="gap-1" onClick={() => setDialog({ type: 'add' })}>
+          <Button size="sm" className="gap-1" onClick={handleAdd}>
             <PlusCircle className="h-4 w-4" />
             Adicionar Cliente
           </Button>
@@ -336,7 +402,7 @@ export default function CustomersPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => setDialog({ type: 'view', client: client })}><Eye className="mr-2 h-4 w-4" />Visualizar Detalhes</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleViewDetails(client)}><Eye className="mr-2 h-4 w-4" />Visualizar Detalhes</DropdownMenuItem>
                             <DropdownMenuItem><MessageSquare className="mr-2 h-4 w-4" />Enviar Mensagem</DropdownMenuItem>
                             <DropdownMenuItem><LifeBuoy className="mr-2 h-4 w-4" />Marcar Suporte</DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -355,37 +421,14 @@ export default function CustomersPage() {
         </Card>
       </main>
 
-      <Dialog open={!!dialog} onOpenChange={(open) => !open && setDialog(null)}>
+      <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
         <DialogContent
           className={cn({
-            'sm:max-w-2xl p-0': dialog?.type === 'view',
-            'sm:max-w-lg': dialog?.type === 'add' || dialog?.type === 'edit',
+            'sm:max-w-2xl p-0': dialogType === 'view',
+            'sm:max-w-lg': dialogType === 'form',
           })}
-          onInteractOutside={(e) => {
-            e.preventDefault();
-          }}
         >
-          {dialog?.type === 'view' && dialog.client && (
-            <ClientDetailView
-              client={dialog.client}
-              onClose={() => setDialog(null)}
-              onEdit={(clientToEdit) => setDialog({ type: 'edit', client: clientToEdit })}
-            />
-          )}
-          {(dialog?.type === 'add' || dialog?.type === 'edit') && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{dialog.type === 'edit' ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
-                <DialogDescription>
-                  {dialog.type === 'edit' ? 'Atualize os detalhes do cliente abaixo.' : 'Preencha os detalhes do cliente abaixo.'}
-                </DialogDescription>
-              </DialogHeader>
-              <ClientForm
-                initialData={dialog.type === 'edit' ? dialog.client : null}
-                onFinished={() => setDialog(null)}
-              />
-            </>
-          )}
+          {dialogContent}
         </DialogContent>
       </Dialog>
     </div>
