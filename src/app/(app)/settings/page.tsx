@@ -57,7 +57,7 @@ export default function SettingsPage() {
 
     setIsDisconnecting(true);
     try {
-        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

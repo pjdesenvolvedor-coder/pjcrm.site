@@ -223,7 +223,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setQrCode(null);
 
     try {
-        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
