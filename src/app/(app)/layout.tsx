@@ -157,7 +157,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const data = await response.json();
 
         if (data.qrcode) {
-            setQrCode(`data:image/png;base64,${data.qrcode}`);
+            const qrCodeValue = data.qrcode;
+            if (qrCodeValue.startsWith('data:image')) {
+                setQrCode(qrCodeValue);
+            } else {
+                setQrCode(`data:image/png;base64,${qrCodeValue}`);
+            }
             setConnectionStatus('qr_code');
             toast({
                 title: 'QR Code Pronto!',
