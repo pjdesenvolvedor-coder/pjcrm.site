@@ -392,7 +392,6 @@ export default function CustomersPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => handleViewDetails(client)}><Eye className="mr-2 h-4 w-4" />Visualizar Detalhes</DropdownMenuItem>
                             <DropdownMenuItem><MessageSquare className="mr-2 h-4 w-4" />Enviar Mensagem</DropdownMenuItem>
                             <DropdownMenuItem><LifeBuoy className="mr-2 h-4 w-4" />Marcar Suporte</DropdownMenuItem>
                             <DropdownMenuSeparator />
