@@ -6,16 +6,27 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   MessageSquare,
   LayoutDashboard,
-  MessageCircle,
-  Bot,
-  Users,
   UserCircle,
-  Settings as SettingsIcon, // Renamed to avoid conflict
   LogOut,
   Zap,
   WifiOff,
   Loader2,
   QrCode,
+  Home,
+  Users,
+  Bot,
+  Flame,
+  Send,
+  Tv,
+  FileText,
+  CheckSquare,
+  Megaphone,
+  Mail,
+  Webhook,
+  CreditCard,
+  ChevronRight,
+  Sparkles,
+  Settings as SettingsIcon, // Renamed to avoid conflict
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -29,7 +40,15 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   SidebarInset,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -54,16 +73,6 @@ import type { UserProfile, Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-
-const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Painel' },
-  { href: '#connect-zap', icon: Zap, label: 'Conectar Zap' },
-  { href: '/inbox', icon: MessageCircle, label: 'Caixa de Entrada' },
-  { href: '/automations', icon: Bot, label: 'Automações' },
-  { href: '/customers', icon: Users, label: 'Clientes' },
-  { href: '/users', icon: UserCircle, label: 'Usuários' },
-  { href: '/settings', icon: SettingsIcon, label: 'Configurações' },
-];
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -410,7 +419,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <MessageSquare className="w-8 h-8 text-sidebar-primary" />
+            <Sparkles className="w-8 h-8 text-sidebar-primary" />
             <span className="text-xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
               ZapConnect
             </span>
@@ -419,34 +428,161 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent>
           <Dialog open={isZapConnectOpen} onOpenChange={setZapConnectOpen}>
             <SidebarMenu>
-              {navItems.map((item) => {
-                if (item.href === '#connect-zap') {
-                  return (
-                    <DialogTrigger asChild key={item.href}>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton tooltip={{ children: item.label }}>
-                          <item.icon />
-                          <span>{item.label}</span>
+              <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip={{ children: 'Início' }}>
+                      <Link href="/dashboard"><Home /><span>Início</span></Link>
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Clientes'}}>
+                            <div className="flex items-center gap-2">
+                                <Users />
+                                <span>Clientes</span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                         </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    </DialogTrigger>
-                  );
-                }
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.href)}
-                      tooltip={{ children: item.label }}
-                    >
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/customers')}>
+                                    <Link href="/customers">Todos os Clientes</Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild>
+                                    <Link href="#">Suporte</Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Envio de Mensagens'}}>
+                            <div className="flex items-center gap-2">
+                                <MessageSquare />
+                                <span>Envio de Mensagens</span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                        </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#"><Bot className="h-4 w-4"/>Cobrança</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#"><Flame className="h-4 w-4"/>Remarketing</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#"><Users className="h-4 w-4"/>Grupos</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                             <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#"><Send className="h-4 w-4"/>Disparo</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+              
+              <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'IPTV'}}>
+                            <div className="flex items-center gap-2">
+                                <Tv />
+                                <span>IPTV</span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                        </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#">Testes (IPTV)</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild>
+                                  <Link href="#" className="flex w-full items-center justify-between">
+                                    <span>Testes Vencidos (IPTV)</span>
+                                    <Badge>10</Badge>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Notas'}}>
+                            <div className="flex items-center gap-2">
+                                <FileText />
+                                <span>Notas</span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                        </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#"><CheckSquare className="h-4 w-4" />Tarefas</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild><Link href="#"><Megaphone className="h-4 w-4" />Anúncios</Link></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip={{ children: 'Email Temp' }}>
+                      <Link href="#"><Mail /><span>Email Temp</span></Link>
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <DialogTrigger asChild>
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip={{ children: 'Conexão' }}>
+                    <Webhook />
+                    <span>Conexão</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </DialogTrigger>
+
+              <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Configurações'}}>
+                            <div className="flex items-center gap-2">
+                                <SettingsIcon />
+                                <span>Configurações</span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                        </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings')}>
+                                    <Link href="/settings">Planos e Assinaturas</Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm p-0">
                 <DialogHeader className="flex flex-row items-center justify-between p-6 border-b">
