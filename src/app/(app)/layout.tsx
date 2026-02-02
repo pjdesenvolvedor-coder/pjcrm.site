@@ -13,6 +13,8 @@ import {
   Settings,
   LogOut,
   ChevronDown,
+  Zap,
+  WifiOff,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -36,6 +38,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import type { UserProfile } from '@/lib/types';
@@ -43,6 +54,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Painel' },
+  { href: '#connect-zap', icon: Zap, label: 'Conectar Zap' },
   { href: '/inbox', icon: MessageCircle, label: 'Caixa de Entrada' },
   { href: '/automations', icon: Bot, label: 'Automações' },
   { href: '/customers', icon: Users, label: 'Clientes' },
@@ -106,22 +118,62 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarMenu>
-            {navItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(item.href)}
-                  tooltip={{ children: item.label }}
-                >
-                  <Link href={item.href}>
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
+          <Dialog>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                if (item.href === '#connect-zap') {
+                  return (
+                    <DialogTrigger asChild key={item.href}>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton tooltip={{ children: item.label }}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    </DialogTrigger>
+                  );
+                }
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith(item.href)}
+                      tooltip={{ children: item.label }}
+                    >
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+            <DialogContent className="sm:max-w-sm p-0">
+                <DialogHeader className="flex flex-row items-center justify-between p-6 border-b">
+                    <div className="flex items-center gap-2">
+                        <Zap className="h-6 w-6 text-primary" />
+                        <DialogTitle className="text-xl font-bold">ZapConnect</DialogTitle>
+                    </div>
+                </DialogHeader>
+                <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+                    <Badge variant="secondary" className="py-1 px-3">
+                        <WifiOff className="h-4 w-4 mr-2" />
+                        Disconnected
+                    </Badge>
+                    <p className="text-sm text-muted-foreground">Click 'Connect' to pair with WhatsApp.</p>
+                    <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
+                        <WifiOff className="h-20 w-20 text-muted-foreground/30" />
+                    </div>
+                </div>
+                <DialogFooter className="p-6 border-t">
+                    <Button type="button" className="w-full" size="lg">
+                        <Zap className="h-4 w-4 mr-2" />
+                        Connect
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </SidebarContent>
         <SidebarFooter className="p-4">
           <DropdownMenu>
@@ -176,5 +228,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    
