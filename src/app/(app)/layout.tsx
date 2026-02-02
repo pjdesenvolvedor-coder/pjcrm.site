@@ -279,7 +279,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Badge>
           <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
           <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2">
-            <Image src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
+            <img src={qrCode!} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
           </div>
         </div>
       );
@@ -425,9 +425,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       className="w-full"
                       size="lg"
                       onClick={handleConnect}
-                      disabled={isLoadingSettings || connectionStatus === 'connecting' || liveStatus?.status === 'connecting'}
+                      disabled={isLoadingSettings || connectionStatus === 'connecting'}
                     >
-                      {connectionStatus === 'connecting' || (liveStatus?.status === 'connecting' && connectionStatus !== 'qr_code') ? (
+                      {connectionStatus === 'connecting' ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           Conectando...
