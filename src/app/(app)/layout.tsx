@@ -85,6 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -153,6 +154,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
     };
     
+    // Only poll when the dialog is open and we have a token.
     if (settings?.webhookToken && isZapConnectOpen) {
         fetchStatus(); // Initial fetch
         pollingIntervalRef.current = setInterval(fetchStatus, 3000);
@@ -163,6 +165,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isZapConnectOpen) {
+      // Stop polling when dialog closes and reset connection attempt state
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
@@ -250,6 +257,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             title: 'Falha na Conexão',
             description: error.message || 'Não foi possível obter o QR code do webhook.',
         });
+    }
+  };
+  
+  const handleDisconnect = async () => {
+    if (!settings?.webhookToken) {
+        toast({
+            variant: 'destructive',
+            title: 'Token não encontrado',
+            description: 'Não é possível desconectar sem um token de autenticação.',
+        });
+        return;
+    }
+
+    setIsDisconnecting(true);
+    try {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: settings.webhookToken }),
+        });
+
+        if (!response.ok) {
+            throw new Error('A resposta da rede não foi boa ao desconectar.');
+        }
+
+        toast({
+            title: 'Desconectado!',
+            description: 'Sua sessão do WhatsApp foi encerrada.',
+        });
+        setLiveStatus({ status: 'disconnected' });
+
+    } catch (error: any) {
+        console.error('Falha ao desconectar:', error);
+        toast({
+            variant: 'destructive',
+            title: 'Falha ao Desconectar',
+            description: error.message || 'Não foi possível encerrar a conexão.',
+        });
+    } finally {
+        setIsDisconnecting(false);
     }
   };
 
@@ -409,7 +458,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {renderContent()}
 
                 <DialogFooter className="p-6 border-t flex flex-col sm:flex-row gap-2">
-                  {(liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') && (
+                  {liveStatus?.status === 'connected' ? (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="w-full"
+                      size="lg"
+                      onClick={handleDisconnect}
+                      disabled={isDisconnecting}
+                    >
+                      {isDisconnecting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Desconectando...
+                        </>
+                      ) : (
+                        <>
+                          <WifiOff className="h-4 w-4 mr-2" />
+                          Desconectar
+                        </>
+                      )}
+                    </Button>
+                  ) : (liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') ? (
                     <Button
                       type="button"
                       className="w-full"
@@ -434,7 +504,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         </>
                       )}
                     </Button>
-                  )}
+                  ) : null}
                 </DialogFooter>
             </DialogContent>
           </Dialog>
