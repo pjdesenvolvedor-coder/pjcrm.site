@@ -14,6 +14,8 @@ import {
   LogOut,
   Zap,
   WifiOff,
+  Loader2,
+  QrCode,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -70,7 +72,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const { toast } = useToast();
-  const [isConnecting, setIsConnecting] = useState(false);
+  
+  const [isZapConnectOpen, setZapConnectOpen] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'qr_code' | 'error'>('disconnected');
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -92,6 +97,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.push('/login');
     }
   }, [user, isUserLoading, router]);
+  
+  useEffect(() => {
+    if (!isZapConnectOpen) {
+      setTimeout(() => {
+        setConnectionStatus('disconnected');
+        setQrCode(null);
+      }, 300);
+    }
+  }, [isZapConnectOpen]);
+
 
   if (isUserLoading || !user) {
     return (
@@ -118,10 +133,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             title: 'Token não encontrado',
             description: 'Por favor, configure seu token de autenticação na página de Configurações.',
         });
+        setConnectionStatus('error');
         return;
     }
 
-    setIsConnecting(true);
+    setConnectionStatus('connecting');
+    setQrCode(null);
 
     try {
         const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
@@ -136,22 +153,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             throw new Error('A resposta da rede não foi boa.');
         }
 
-        toast({
-            title: 'Conexão Iniciada',
-            description: 'A solicitação de conexão foi enviada com sucesso.',
-        });
+        const data = await response.json();
 
-    } catch (error) {
+        if (data.qr) {
+            setQrCode(`data:image/png;base64,${data.qr}`);
+            setConnectionStatus('qr_code');
+            toast({
+                title: 'QR Code Pronto!',
+                description: 'Escaneie o código com seu WhatsApp para conectar.',
+            });
+        } else {
+            throw new Error('A resposta do webhook não continha um QR code válido.');
+        }
+
+    } catch (error: any) {
         console.error('Falha ao conectar:', error);
+        setConnectionStatus('error');
         toast({
             variant: 'destructive',
             title: 'Falha na Conexão',
-            description: 'Não foi possível enviar a solicitação para o webhook.',
+            description: error.message || 'Não foi possível obter o QR code do webhook.',
         });
-    } finally {
-        setIsConnecting(false);
     }
-};
+  };
 
 
   return (
@@ -170,7 +194,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <Dialog>
+          <Dialog open={isZapConnectOpen} onOpenChange={setZapConnectOpen}>
             <SidebarMenu>
               {navItems.map((item) => {
                 if (item.href === '#connect-zap') {
@@ -208,33 +232,67 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <DialogTitle className="text-xl font-bold">ZapConnect</DialogTitle>
                     </div>
                 </DialogHeader>
-                <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
-                    <Badge variant="secondary" className="py-1 px-3">
-                        <WifiOff className="h-4 w-4 mr-2" />
-                        Desconectado
-                    </Badge>
-                    <p className="text-sm text-muted-foreground">Clique em 'Conectar' para parear com o WhatsApp.</p>
-                    <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
-                        <WifiOff className="h-20 w-20 text-muted-foreground/30" />
+                
+                {connectionStatus === 'disconnected' && (
+                  <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+                      <Badge variant="secondary" className="py-1 px-3">
+                          <WifiOff className="h-4 w-4 mr-2" />
+                          Desconectado
+                      </Badge>
+                      <p className="text-sm text-muted-foreground">Clique em 'Conectar' para parear com o WhatsApp.</p>
+                      <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
+                          <WifiOff className="h-20 w-20 text-muted-foreground/30" />
+                      </div>
+                  </div>
+                )}
+
+                {connectionStatus === 'connecting' && (
+                  <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+                      <Loader2 className="h-16 w-16 text-primary animate-spin" />
+                      <p className="text-sm text-muted-foreground mt-4">Aguardando QR code...</p>
+                  </div>
+                )}
+
+                {connectionStatus === 'qr_code' && qrCode && (
+                  <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+                       <Badge variant="default" className="py-1 px-3 bg-green-500/20 text-green-700 hover:bg-green-500/30">
+                          <QrCode className="h-4 w-4 mr-2" />
+                          Pronto para escanear
+                      </Badge>
+                      <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
+                      <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2">
+                          <Image src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
+                      </div>
+                  </div>
+                )}
+
+                {connectionStatus === 'error' && (
+                    <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+                        <Badge variant="destructive" className="py-1 px-3">
+                            <WifiOff className="h-4 w-4 mr-2" />
+                            Falha na conexão
+                        </Badge>
+                        <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente.</p>
                     </div>
-                </div>
+                )}
+
                 <DialogFooter className="p-6 border-t">
                     <Button 
                         type="button" 
                         className="w-full" 
                         size="lg"
                         onClick={handleConnect}
-                        disabled={isConnecting || isLoadingSettings}
+                        disabled={connectionStatus === 'connecting' || isLoadingSettings}
                     >
-                        {isConnecting ? (
+                        {connectionStatus === 'connecting' ? (
                             <>
-                                <Zap className="h-4 w-4 mr-2 animate-pulse" />
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                 Conectando...
                             </>
                         ) : (
                             <>
                                 <Zap className="h-4 w-4 mr-2" />
-                                Conectar
+                                {connectionStatus === 'error' ? 'Tentar Novamente' : 'Conectar'}
                             </>
                         )}
                     </Button>
