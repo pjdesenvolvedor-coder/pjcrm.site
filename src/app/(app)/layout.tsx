@@ -76,6 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isZapConnectOpen, setZapConnectOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'qr_code' | 'error'>('disconnected');
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -177,6 +178,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleDisconnect = async () => {
+    if (!settings?.webhookToken) {
+        toast({
+            variant: 'destructive',
+            title: 'Token não encontrado',
+            description: 'Não é possível desconectar sem um token.',
+        });
+        return;
+    }
+
+    setIsDisconnecting(true);
+    try {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: settings.webhookToken }),
+        });
+
+        if (!response.ok) {
+            throw new Error('A resposta da rede não foi boa ao desconectar.');
+        }
+
+        toast({
+            title: 'Desconectado!',
+            description: 'Sua sessão do WhatsApp foi encerrada.',
+        });
+        setConnectionStatus('disconnected');
+        setQrCode(null);
+
+    } catch (error: any) {
+        console.error('Falha ao desconectar:', error);
+        toast({
+            variant: 'destructive',
+            title: 'Falha ao Desconectar',
+            description: error.message || 'Não foi possível encerrar a conexão.',
+        });
+        // Mesmo se a desconexão falhar, resetamos o estado localmente.
+        setConnectionStatus('disconnected');
+    } finally {
+        setIsDisconnecting(false);
+    }
+  };
+
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
@@ -272,30 +318,66 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             <WifiOff className="h-4 w-4 mr-2" />
                             Falha na conexão
                         </Badge>
-                        <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente.</p>
+                        <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente ou desconecte para reiniciar.</p>
                     </div>
                 )}
 
-                <DialogFooter className="p-6 border-t">
-                    <Button 
-                        type="button" 
-                        className="w-full" 
-                        size="lg"
-                        onClick={handleConnect}
-                        disabled={connectionStatus === 'connecting' || isLoadingSettings}
-                    >
-                        {connectionStatus === 'connecting' ? (
-                            <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Conectando...
-                            </>
-                        ) : (
-                            <>
-                                <Zap className="h-4 w-4 mr-2" />
-                                {connectionStatus === 'error' ? 'Tentar Novamente' : 'Conectar'}
-                            </>
-                        )}
-                    </Button>
+                <DialogFooter className="p-6 border-t flex flex-col sm:flex-row gap-2">
+                    {connectionStatus !== 'error' && (
+                      <Button 
+                          type="button" 
+                          className="w-full" 
+                          size="lg"
+                          onClick={handleConnect}
+                          disabled={connectionStatus === 'connecting' || isLoadingSettings}
+                      >
+                          {connectionStatus === 'connecting' ? (
+                              <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Conectando...
+                              </>
+                          ) : (
+                              <>
+                                  <Zap className="h-4 w-4 mr-2" />
+                                  Conectar
+                              </>
+                          )}
+                      </Button>
+                    )}
+                    {connectionStatus === 'error' && (
+                      <>
+                        <Button 
+                            type="button" 
+                            className="w-full" 
+                            size="lg"
+                            onClick={handleConnect}
+                            disabled={isLoadingSettings || isDisconnecting}
+                        >
+                            <Zap className="h-4 w-4 mr-2" />
+                            Tentar Novamente
+                        </Button>
+                        <Button 
+                            type="button" 
+                            variant="destructive"
+                            className="w-full" 
+                            size="lg"
+                            onClick={handleDisconnect}
+                            disabled={isLoadingSettings || isDisconnecting}
+                        >
+                            {isDisconnecting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Desconectando...
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff className="h-4 w-4 mr-2" />
+                                    Desconectar
+                                </>
+                            )}
+                        </Button>
+                      </>
+                    )}
                 </DialogFooter>
             </DialogContent>
           </Dialog>
