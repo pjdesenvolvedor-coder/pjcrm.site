@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, Eye, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -210,61 +210,47 @@ function ClientForm({ initialData, onFinished }: { initialData?: Client | null, 
   )
 }
 
-function ClientDetailView({ client, onClose, onEdit }: { client: Client; onClose: () => void; onEdit: (client: Client) => void }) {
-  const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
-    switch (status) {
-      case 'Ativo': return 'default';
-      case 'Inativo': return 'secondary';
-      case 'Vencido': return 'destructive';
-      default: return 'outline';
-    }
+function SendMessageDialog({ client, onClose, onSend }: { client: Client; onClose: () => void; onSend: (message: string) => void; }) {
+  const [message, setMessage] = useState('');
+
+  const handleSend = () => {
+    onSend(message);
   };
 
   return (
     <>
-      <DialogHeader className="p-6 pb-4">
-        <div className="flex items-center gap-3">
-          <User className="h-6 w-6 text-muted-foreground" />
-          <DialogTitle className="text-2xl font-bold">{client.name}</DialogTitle>
-        </div>
-        <DialogDescription>Visualizando detalhes completos do cliente.</DialogDescription>
+      <DialogHeader>
+        <DialogTitle>Enviar Mensagem para {client.name}</DialogTitle>
+        <DialogDescription>
+          Digite a mensagem que você deseja enviar para o número {client.phone}.
+        </DialogDescription>
       </DialogHeader>
-      <div className="px-6 pb-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3"><Phone className="h-5 w-5 text-muted-foreground" /><span>{client.phone}</span></div>
-            <div className="flex items-center gap-3"><Mail className="h-5 w-5 text-muted-foreground" /><span className="truncate">{client.email}</span></div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-green-500" /><Badge variant={getStatusVariant(client.status)}>{client.status}</Badge></div>
-            <div className="flex items-center gap-3"><ShoppingCart className="h-5 w-5 text-muted-foreground" /><span>{client.subscription}</span></div>
-            <div className="flex items-center gap-3"><CalendarDays className="h-5 w-5 text-muted-foreground" /><span>Vencimento: {client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy HH:mm') : '-'}</span></div>
-          </div>
-        </div>
-        <Separator />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-          <div className="flex items-center gap-3"><Banknote className="h-5 w-5 text-muted-foreground" /><span>Meio: {client.paymentMethod || 'N/A'}</span></div>
-          <div className="flex items-center gap-3"><Wallet className="h-5 w-5 text-muted-foreground" /><span>Valor Pago: {client.amountPaid || 'N/A'}</span></div>
-        </div>
+      <div className="py-4 space-y-2">
+        <Label htmlFor="message">Mensagem</Label>
+        <Textarea
+          id="message"
+          placeholder="Digite sua mensagem aqui..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          className="min-h-[100px]"
+        />
       </div>
-      <DialogFooter className="bg-muted/50 p-6 flex justify-end gap-2">
-        <Button variant="outline" onClick={() => onEdit(client)}><FilePenLine className="mr-2 h-4 w-4" /> Editar Cliente</Button>
-        <Button className="bg-yellow-400 hover:bg-yellow-500 text-black"><RefreshCw className="mr-2 h-4 w-4" /> Renovar</Button>
-        <Button onClick={onClose}>Fechar</Button>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button onClick={handleSend} disabled={!message.trim()}>Enviar Mensagem Agora</Button>
       </DialogFooter>
     </>
   );
 }
 
-
 export default function CustomersPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
-  
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogContent, setDialogContent] = useState<ReactNode | null>(null);
-  const [dialogClass, setDialogClass] = useState('');
+  const { toast } = useToast();
 
+  const [dialogView, setDialogView] = useState<'closed' | 'add' | 'edit' | 'send-message'>('closed');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
     return collection(firestore, 'users', user.uid, 'clients');
@@ -272,57 +258,25 @@ export default function CustomersPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const closeDialogAndClear = () => {
-    setDialogOpen(false);
-    // Use a timeout to allow the close animation to finish before clearing content
-    setTimeout(() => {
-        setDialogContent(null);
-        setDialogClass('');
-    }, 300);
-  }
-
-  const handleViewDetails = (client: Client) => {
-    setDialogContent(
-      <ClientDetailView
-        client={client}
-        onClose={closeDialogAndClear}
-        onEdit={(clientToEdit) => handleEdit(clientToEdit)}
-      />
-    );
-    setDialogClass('sm:max-w-2xl p-0');
-    setDialogOpen(true);
+  const openDialog = (view: 'add' | 'edit' | 'send-message', client?: Client) => {
+    setSelectedClient(client || null);
+    setDialogView(view);
   };
 
-  const handleAdd = () => {
-    setDialogContent(
-      <>
-        <DialogHeader>
-            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-            <DialogDescription>
-                Preencha os detalhes do cliente abaixo.
-            </DialogDescription>
-        </DialogHeader>
-        <ClientForm onFinished={closeDialogAndClear} />
-      </>
-    );
-    setDialogClass('sm:max-w-lg');
-    setDialogOpen(true);
+  const closeDialog = () => {
+    setDialogView('closed');
+    setSelectedClient(null);
   };
   
-  const handleEdit = (client: Client) => {
-    setDialogContent(
-        <>
-            <DialogHeader>
-                <DialogTitle>Editar Cliente</DialogTitle>
-                <DialogDescription>
-                    Atualize os detalhes do cliente abaixo.
-                </DialogDescription>
-            </DialogHeader>
-            <ClientForm initialData={client} onFinished={closeDialogAndClear} />
-        </>
-    );
-    setDialogClass('sm:max-w-lg');
-    setDialogOpen(true);
+  const handleSendMessage = (message: string) => {
+    if (!selectedClient) return;
+    // TODO: Implement actual message sending logic via webhook
+    console.log(`Sending message to ${selectedClient.phone}: ${message}`);
+    toast({
+      title: "Mensagem Enviada!",
+      description: `Sua mensagem foi enviada para ${selectedClient.name}.`,
+    });
+    closeDialog();
   };
 
   const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
@@ -333,6 +287,59 @@ export default function CustomersPage() {
       default: return 'outline';
     }
   };
+  
+  const renderDialogContent = () => {
+    switch (dialogView) {
+      case 'add':
+        return (
+          <>
+            <DialogHeader>
+              <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+              <DialogDescription>
+                Preencha os detalhes do cliente abaixo.
+              </DialogDescription>
+            </DialogHeader>
+            <ClientForm onFinished={closeDialog} />
+          </>
+        );
+      case 'edit':
+        if (!selectedClient) return null;
+        return (
+          <>
+            <DialogHeader>
+              <DialogTitle>Editar Cliente</DialogTitle>
+              <DialogDescription>
+                Atualize os detalhes do cliente abaixo.
+              </DialogDescription>
+            </DialogHeader>
+            <ClientForm initialData={selectedClient} onFinished={closeDialog} />
+          </>
+        );
+      case 'send-message':
+        if (!selectedClient) return null;
+        return (
+            <SendMessageDialog
+                client={selectedClient}
+                onClose={closeDialog}
+                onSend={handleSendMessage}
+            />
+        );
+      default:
+        return null;
+    }
+  };
+  
+  const getDialogClass = () => {
+      switch (dialogView) {
+          case 'add':
+          case 'edit':
+              return 'sm:max-w-lg';
+          case 'send-message':
+              return 'sm:max-w-md';
+          default:
+              return '';
+      }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -349,7 +356,7 @@ export default function CustomersPage() {
               <SelectItem value="vencido">Vencido</SelectItem>
             </SelectContent>
           </Select>
-          <Button size="sm" className="gap-1" onClick={handleAdd}>
+          <Button size="sm" className="gap-1" onClick={() => openDialog('add')}>
             <PlusCircle className="h-4 w-4" />
             Adicionar Cliente
           </Button>
@@ -392,10 +399,23 @@ export default function CustomersPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem><MessageSquare className="mr-2 h-4 w-4" />Enviar Mensagem</DropdownMenuItem>
-                            <DropdownMenuItem><LifeBuoy className="mr-2 h-4 w-4" />Marcar Suporte</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDialog('edit', client)}>
+                                <FilePenLine className="mr-2 h-4 w-4" />
+                                <span>Editar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDialog('send-message', client)}>
+                                <MessageSquare className="mr-2 h-4 w-4" />
+                                <span>Enviar Mensagem</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                                <LifeBuoy className="mr-2 h-4 w-4" />
+                                <span>Marcar Suporte</span>
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10"><Trash2 className="mr-2 h-4 w-4" />Apagar Cliente</DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                <span>Apagar Cliente</span>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -410,9 +430,9 @@ export default function CustomersPage() {
         </Card>
       </main>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className={cn(dialogClass)}>
-          {dialogContent}
+      <Dialog open={dialogView !== 'closed'} onOpenChange={(isOpen) => !isOpen && closeDialog()}>
+        <DialogContent className={cn(getDialogClass())} onInteractOutside={(e) => e.preventDefault()}>
+          {renderDialogContent()}
         </DialogContent>
       </Dialog>
     </div>
