@@ -114,14 +114,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
-        setLiveStatus(null);
       }, 300);
     }
   }, [isZapConnectOpen]);
   
-  // Poll for live connection status
+  // Poll for live connection status continuously
   useEffect(() => {
-    if (!isZapConnectOpen || isLoadingSettings || !settings?.webhookToken) {
+    if (isLoadingSettings || !settings?.webhookToken) {
       setLiveStatus(null);
       return;
     }
@@ -129,7 +128,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     let intervalId: NodeJS.Timeout;
 
     const fetchStatus = async () => {
-      setIsStatusLoading(true);
+      // Only show loading indicator when dialog is open and we don't have a status yet
+      if(isZapConnectOpen && !liveStatus) {
+        setIsStatusLoading(true);
+      }
       try {
         const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/ea50772a-1e0f-4d1f-bdcb-d205b1200ea8', {
           method: 'GET',
@@ -152,6 +154,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               setConnectionStatus('disconnected');
               setQrCode(null);
             }
+          } else {
+             setLiveStatus({ status: 'disconnected' });
           }
         } else {
            setLiveStatus({ status: 'disconnected' });
@@ -160,7 +164,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         console.error('Status polling error:', error);
         setLiveStatus({ status: 'disconnected' });
       } finally {
-        setIsStatusLoading(false);
+        if(isZapConnectOpen) {
+          setIsStatusLoading(false);
+        }
       }
     };
 
@@ -168,7 +174,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     intervalId = setInterval(fetchStatus, 3000);
 
     return () => clearInterval(intervalId);
-  }, [isZapConnectOpen, settings?.webhookToken, isLoadingSettings, connectionStatus]);
+  }, [settings?.webhookToken, isLoadingSettings, connectionStatus, isZapConnectOpen, liveStatus]);
 
 
   if (isUserLoading || !user) {
