@@ -117,15 +117,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         const data = await response.json();
-        // The API might return an array or a single object.
         const statusData = Array.isArray(data) ? data[0] : data;
 
         if (statusData) {
-          // Map the new response keys to our LiveStatus state type.
           const newStatus: LiveStatus = {
             status: statusData.status,
-            profileName: statusData.nomeperfil, // Use 'nomeperfil'
-            profilePicUrl: statusData.fotoperfil, // Use 'fotoperfil'
+            profileName: statusData.nomeperfil,
+            profilePicUrl: statusData.fotoperfil,
           };
           setLiveStatus(newStatus);
           
@@ -147,7 +145,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Effect for continuous polling
   useEffect(() => {
     const stopPolling = () => {
       if (pollingIntervalRef.current) {
@@ -156,27 +153,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
     };
     
-    if (settings?.webhookToken) {
+    if (settings?.webhookToken && isZapConnectOpen) {
         fetchStatus(); // Initial fetch
         pollingIntervalRef.current = setInterval(fetchStatus, 3000);
     }
 
-    return () => stopPolling(); // Cleanup on unmount or token change
-  }, [settings?.webhookToken]);
+    return () => stopPolling();
+  }, [settings?.webhookToken, isZapConnectOpen]);
 
-  // Effect to manage dialog UI state
   useEffect(() => {
     if (!isZapConnectOpen) {
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
       }, 300);
-    } else {
-      fetchStatus();
     }
   }, [isZapConnectOpen]);
   
-  // Handle UI logic based on live status changes
   useEffect(() => {
     if (liveStatus?.status === 'connected' && connectionStatus === 'qr_code') {
       setConnectionStatus('disconnected');
@@ -236,7 +229,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         }
 
         const data = await response.json();
-        const qrCodeValue = data[0]?.instance?.qrcode;
+        const qrCodeValue = data.qrcode;
 
         if (qrCodeValue) {
             setQrCode(qrCodeValue.startsWith('data:image') ? qrCodeValue : `data:image/png;base64,${qrCodeValue}`);
@@ -261,7 +254,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const renderContent = () => {
-    // 1. Active connection flow (QR code, spinners, errors) takes priority
     if (connectionStatus === 'connecting') {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
@@ -279,7 +271,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Badge>
           <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
           <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2">
-            <img src={qrCode!} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
+            <img src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
           </div>
         </div>
       );
@@ -292,16 +284,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Falha na conexão
           </Badge>
           <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente.</p>
-        </div>
-      );
-    }
-
-    // 2. Show live status from polling
-    if (!liveStatus) {
-       return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Loader2 className="h-16 w-16 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground mt-4">Verificando status...</p>
         </div>
       );
     }
@@ -332,7 +314,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       );
     }
 
-    // 3. Fallback to disconnected/connecting view
+    if (!liveStatus) {
+      return (
+       <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+         <Loader2 className="h-16 w-16 text-primary animate-spin" />
+         <p className="text-sm text-muted-foreground mt-4">Verificando status...</p>
+       </div>
+     );
+   }
+
     return (
       <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
         <Badge variant={liveStatus?.status === 'connecting' ? 'default' : 'secondary'} className="py-1 px-3">
@@ -419,7 +409,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {renderContent()}
 
                 <DialogFooter className="p-6 border-t flex flex-col sm:flex-row gap-2">
-                  {liveStatus?.status !== 'connected' && (
+                  {(liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') && (
                     <Button
                       type="button"
                       className="w-full"
