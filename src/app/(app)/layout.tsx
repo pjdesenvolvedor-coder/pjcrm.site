@@ -64,6 +64,12 @@ const navItems = [
   { href: '/settings', icon: SettingsIcon, label: 'Configurações' },
 ];
 
+type LiveStatus = {
+  status: 'disconnected' | 'connecting' | 'connected';
+  profileName?: string;
+  profilePicUrl?: string;
+};
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -77,6 +83,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'qr_code' | 'error'>('disconnected');
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  
+  const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
+  const [isStatusLoading, setIsStatusLoading] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -99,14 +108,67 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, isUserLoading, router]);
   
+  // Reset connection flow state when dialog is closed
   useEffect(() => {
     if (!isZapConnectOpen) {
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
+        setLiveStatus(null);
       }, 300);
     }
   }, [isZapConnectOpen]);
+  
+  // Poll for live connection status
+  useEffect(() => {
+    if (!isZapConnectOpen || isLoadingSettings || !settings?.webhookToken) {
+      setLiveStatus(null);
+      return;
+    }
+
+    let intervalId: NodeJS.Timeout;
+
+    const fetchStatus = async () => {
+      setIsStatusLoading(true);
+      try {
+        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/ea50772a-1e0f-4d1f-bdcb-d205b1200ea8', {
+          method: 'GET',
+          headers: {
+            'token': settings.webhookToken!,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const instance = data[0]?.instance;
+          if (instance) {
+            setLiveStatus({
+              status: instance.status,
+              profileName: instance.profileName,
+              profilePicUrl: instance.profilePicUrl,
+            });
+            // If we just got connected, hide the QR code flow
+            if (instance.status === 'connected' && connectionStatus === 'qr_code') {
+              setConnectionStatus('disconnected');
+              setQrCode(null);
+            }
+          }
+        } else {
+           setLiveStatus({ status: 'disconnected' });
+        }
+      } catch (error) {
+        console.error('Status polling error:', error);
+        setLiveStatus({ status: 'disconnected' });
+      } finally {
+        setIsStatusLoading(false);
+      }
+    };
+
+    fetchStatus(); // Initial fetch
+    intervalId = setInterval(fetchStatus, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [isZapConnectOpen, settings?.webhookToken, isLoadingSettings, connectionStatus]);
 
 
   if (isUserLoading || !user) {
@@ -155,14 +217,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         }
 
         const data = await response.json();
+        const qrCodeValue = data[0]?.instance?.qrcode;
 
-        if (data.qrcode) {
-            const qrCodeValue = data.qrcode;
-            if (qrCodeValue.startsWith('data:image')) {
-                setQrCode(qrCodeValue);
-            } else {
-                setQrCode(`data:image/png;base64,${qrCodeValue}`);
-            }
+        if (qrCodeValue) {
+            setQrCode(qrCodeValue.startsWith('data:image') ? qrCodeValue : `data:image/png;base64,${qrCodeValue}`);
             setConnectionStatus('qr_code');
             toast({
                 title: 'QR Code Pronto!',
@@ -211,6 +269,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             title: 'Desconectado!',
             description: 'Sua sessão do WhatsApp foi encerrada.',
         });
+        setLiveStatus({ status: 'disconnected' });
         setConnectionStatus('disconnected');
         setQrCode(null);
 
@@ -221,11 +280,110 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             title: 'Falha ao Desconectar',
             description: error.message || 'Não foi possível encerrar a conexão.',
         });
-        // Mesmo se a desconexão falhar, resetamos o estado localmente.
-        setConnectionStatus('disconnected');
+        setLiveStatus({ status: 'disconnected' });
     } finally {
         setIsDisconnecting(false);
     }
+  };
+
+  const renderContent = () => {
+    // 1. Active connection flow (QR code, spinners, errors) takes priority
+    if (connectionStatus === 'connecting') {
+      return (
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+          <Loader2 className="h-16 w-16 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground mt-4">Aguardando QR code...</p>
+        </div>
+      );
+    }
+    if (connectionStatus === 'qr_code' && qrCode) {
+      return (
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+          <Badge variant="default" className="py-1 px-3 bg-blue-500/20 text-blue-700 hover:bg-blue-500/30">
+            <QrCode className="h-4 w-4 mr-2" />
+            Pronto para escanear
+          </Badge>
+          <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
+          <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2">
+            <Image src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
+          </div>
+        </div>
+      );
+    }
+     if (connectionStatus === 'error') {
+      return (
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+          <Badge variant="destructive" className="py-1 px-3">
+            <WifiOff className="h-4 w-4 mr-2" />
+            Falha na conexão
+          </Badge>
+          <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente ou desconecte para reiniciar.</p>
+        </div>
+      );
+    }
+
+    // 2. Show live status from polling
+    if (isStatusLoading && !liveStatus) {
+       return (
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+          <Loader2 className="h-16 w-16 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground mt-4">Verificando status...</p>
+        </div>
+      );
+    }
+
+    if (liveStatus?.status === 'connected') {
+      return (
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+          <Badge variant="default" className="py-1 px-3 bg-green-500/20 text-green-700 hover:bg-green-500/30">
+            <div className="h-2 w-2 mr-2 rounded-full bg-green-700 animate-pulse"></div>
+            Conectado
+          </Badge>
+          {liveStatus.profilePicUrl ? (
+            <Image 
+                src={liveStatus.profilePicUrl} 
+                alt="Foto de Perfil" 
+                width={96} 
+                height={96} 
+                className="rounded-full my-4 border"
+                data-ai-hint="person avatar"
+            />
+          ) : (
+            <div className="w-24 h-24 my-4 rounded-full bg-muted flex items-center justify-center">
+              <UserCircle className="w-16 h-16 text-muted-foreground" />
+            </div>
+          )}
+          <p className="font-semibold text-lg">{liveStatus.profileName || 'Nome não disponível'}</p>
+        </div>
+      );
+    }
+
+    // 3. Fallback to disconnected/connecting view
+    return (
+      <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+        <Badge variant={liveStatus?.status === 'connecting' ? 'default' : 'secondary'} className="py-1 px-3">
+          {liveStatus?.status === 'connecting' ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Conectando...
+            </>
+          ) : (
+            <>
+              <WifiOff className="h-4 w-4 mr-2" />
+              Desconectado
+            </>
+          )}
+        </Badge>
+        <p className="text-sm text-muted-foreground">
+          {liveStatus?.status === 'connecting' 
+            ? 'Aguarde um momento, estamos estabelecendo a conexão.' 
+            : "Clique em 'Conectar' para parear com o WhatsApp."}
+        </p>
+        <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
+          <WifiOff className="h-20 w-20 text-muted-foreground/30" />
+        </div>
+      </div>
+    );
   };
 
 
@@ -284,84 +442,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </div>
                 </DialogHeader>
                 
-                {connectionStatus === 'disconnected' && (
-                  <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
-                      <Badge variant="secondary" className="py-1 px-3">
-                          <WifiOff className="h-4 w-4 mr-2" />
-                          Desconectado
-                      </Badge>
-                      <p className="text-sm text-muted-foreground">Clique em 'Conectar' para parear com o WhatsApp.</p>
-                      <div className="w-40 h-40 bg-muted/50 rounded-lg flex items-center justify-center my-4">
-                          <WifiOff className="h-20 w-20 text-muted-foreground/30" />
-                      </div>
-                  </div>
-                )}
-
-                {connectionStatus === 'connecting' && (
-                  <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-                      <Loader2 className="h-16 w-16 text-primary animate-spin" />
-                      <p className="text-sm text-muted-foreground mt-4">Aguardando QR code...</p>
-                  </div>
-                )}
-
-                {connectionStatus === 'qr_code' && qrCode && (
-                  <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
-                       <Badge variant="default" className="py-1 px-3 bg-green-500/20 text-green-700 hover:bg-green-500/30">
-                          <QrCode className="h-4 w-4 mr-2" />
-                          Pronto para escanear
-                      </Badge>
-                      <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
-                      <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2">
-                          <Image src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
-                      </div>
-                  </div>
-                )}
-
-                {connectionStatus === 'error' && (
-                    <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-                        <Badge variant="destructive" className="py-1 px-3">
-                            <WifiOff className="h-4 w-4 mr-2" />
-                            Falha na conexão
-                        </Badge>
-                        <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente ou desconecte para reiniciar.</p>
-                    </div>
-                )}
+                {renderContent()}
 
                 <DialogFooter className="p-6 border-t flex flex-col sm:flex-row gap-2">
-                    {connectionStatus !== 'error' && (
-                      <Button 
-                          type="button" 
-                          className="w-full" 
-                          size="lg"
-                          onClick={handleConnect}
-                          disabled={connectionStatus === 'connecting' || isLoadingSettings}
-                      >
-                          {connectionStatus === 'connecting' ? (
-                              <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Conectando...
-                              </>
-                          ) : (
-                              <>
-                                  <Zap className="h-4 w-4 mr-2" />
-                                  Conectar
-                              </>
-                          )}
-                      </Button>
-                    )}
-                    {connectionStatus === 'error' && (
-                      <>
-                        <Button 
-                            type="button" 
-                            className="w-full" 
-                            size="lg"
-                            onClick={handleConnect}
-                            disabled={isLoadingSettings || isDisconnecting}
-                        >
-                            <Zap className="h-4 w-4 mr-2" />
-                            Tentar Novamente
-                        </Button>
-                        <Button 
+                    {liveStatus?.status === 'connected' ? (
+                       <Button 
                             type="button" 
                             variant="destructive"
                             className="w-full" 
@@ -381,6 +466,63 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 </>
                             )}
                         </Button>
+                    ) : (
+                      <>
+                        {connectionStatus !== 'error' && (
+                          <Button 
+                              type="button" 
+                              className="w-full" 
+                              size="lg"
+                              onClick={handleConnect}
+                              disabled={connectionStatus === 'connecting' || isLoadingSettings || liveStatus?.status === 'connecting'}
+                          >
+                              {connectionStatus === 'connecting' ? (
+                                  <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Conectando...
+                                  </>
+                              ) : (
+                                  <>
+                                      <Zap className="h-4 w-4 mr-2" />
+                                      Conectar
+                                  </>
+                              )}
+                          </Button>
+                        )}
+                        {connectionStatus === 'error' && (
+                          <>
+                            <Button 
+                                type="button" 
+                                className="w-full" 
+                                size="lg"
+                                onClick={handleConnect}
+                                disabled={isLoadingSettings || isDisconnecting}
+                            >
+                                <Zap className="h-4 w-4 mr-2" />
+                                Tentar Novamente
+                            </Button>
+                            <Button 
+                                type="button" 
+                                variant="destructive"
+                                className="w-full" 
+                                size="lg"
+                                onClick={handleDisconnect}
+                                disabled={isLoadingSettings || isDisconnecting}
+                            >
+                                {isDisconnecting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Desconectando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <WifiOff className="h-4 w-4 mr-2" />
+                                        Desconectar
+                                    </>
+                                )}
+                            </Button>
+                          </>
+                        )}
                       </>
                     )}
                 </DialogFooter>
