@@ -88,7 +88,6 @@ export default function CustomersPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const [open, setOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const clientsQuery = useMemoFirebase(() => {
@@ -160,11 +159,6 @@ export default function CustomersPage() {
       default:
         return 'outline';
     }
-  };
-
-  const handleViewDetails = (client: Client) => {
-    setSelectedClient(client);
-    setDetailsOpen(true);
   };
 
   return (
@@ -548,7 +542,7 @@ export default function CustomersPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => handleViewDetails(client)}>
+                                <DropdownMenuItem onSelect={() => setSelectedClient(client)}>
                                     <Eye className="mr-2 h-4 w-4" />
                                     Visualizar Detalhes
                                 </DropdownMenuItem>
@@ -584,7 +578,7 @@ export default function CustomersPage() {
       </main>
 
        {selectedClient && (
-        <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <Dialog open={!!selectedClient} onOpenChange={(open) => { if(!open) setSelectedClient(null) }}>
           <DialogContent className="sm:max-w-2xl p-0">
             <DialogHeader className="p-6 pb-4">
               <div className="flex items-center gap-3">
@@ -637,7 +631,7 @@ export default function CustomersPage() {
             <DialogFooter className="bg-muted/50 p-6 flex justify-end gap-2">
                 <Button variant="outline"><FilePenLine className="mr-2 h-4 w-4" /> Editar Cliente</Button>
                 <Button className="bg-yellow-400 hover:bg-yellow-500 text-black"><RefreshCw className="mr-2 h-4 w-4" /> Renovar</Button>
-                <Button onClick={() => setDetailsOpen(false)}>Fechar</Button>
+                <Button onClick={() => setSelectedClient(null)}>Fechar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
