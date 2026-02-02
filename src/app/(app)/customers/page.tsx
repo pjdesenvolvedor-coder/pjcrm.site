@@ -45,8 +45,8 @@ import {
 } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useCollection, useFirebase, useUser, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import type { Client } from '@/lib/types';
+import { useCollection, useFirebase, useUser, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking, useDoc } from '@/firebase';
+import type { Client, Settings } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -186,7 +186,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   )
 }
 
-function SendMessageDialog({ client, onSend, onCancel }: { client: Client; onSend: (message: string) => void; onCancel: () => void; }) {
+function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Client; onSend: (message: string) => void; onCancel: () => void; isSending: boolean; }) {
   const [message, setMessage] = useState('');
   return (
     <>
@@ -195,8 +195,17 @@ function SendMessageDialog({ client, onSend, onCancel }: { client: Client; onSen
         <Textarea id="message" placeholder="Digite sua mensagem aqui..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[100px]" />
       </div>
       <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button onClick={() => onSend(message)} disabled={!message.trim()}>Enviar Mensagem Agora</Button>
+        <Button variant="ghost" onClick={onCancel} disabled={isSending}>Cancelar</Button>
+        <Button onClick={() => onSend(message)} disabled={!message.trim() || isSending}>
+            {isSending ? (
+                <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Enviando...
+                </>
+            ) : (
+                'Enviar Mensagem Agora'
+            )}
+        </Button>
       </DialogFooter>
     </>
   );
@@ -214,13 +223,21 @@ export default function CustomersPage() {
   const { toast } = useToast();
 
   const [dialogState, setDialogState] = useState<DialogState>({ view: 'closed' });
+  const [isSending, setIsSending] = useState(false);
   
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
     return collection(firestore, 'users', user.uid, 'clients');
   }, [firestore, user]);
 
+  const settingsDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid, 'settings', 'config');
+  }, [firestore, user]);
+
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
+  const { data: settings } = useDoc<Settings>(settingsDocRef);
+
 
   const openDialog = (view: 'add' | 'edit' | 'sendMessage', client?: Client) => {
     if (view === 'edit' && client) {
@@ -236,15 +253,52 @@ export default function CustomersPage() {
     setDialogState({ view: 'closed' });
   };
   
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = async (message: string) => {
     if (dialogState.view !== 'sendMessage') return;
 
-    console.log(`Sending message to ${dialogState.client.phone}: ${message}`);
-    toast({
-      title: "Mensagem Enviada!",
-      description: `Sua mensagem foi enviada para ${dialogState.client.name}.`,
-    });
-    closeDialogAndClear();
+    if (!settings?.webhookToken) {
+        toast({
+            variant: "destructive",
+            title: "Token não configurado",
+            description: "Por favor, configure seu token de webhook na página de Configurações.",
+        });
+        return;
+    }
+
+    setIsSending(true);
+
+    try {
+        const response = await fetch('/api/send-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message,
+                phoneNumber: dialogState.client.phone,
+                token: settings.webhookToken,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha ao enviar mensagem.');
+        }
+
+        toast({
+            title: "Mensagem Enviada!",
+            description: `Sua mensagem foi enviada para ${dialogState.client.name}.`,
+        });
+        closeDialogAndClear();
+
+    } catch (error: any) {
+        console.error("Failed to send message:", error);
+        toast({
+            variant: "destructive",
+            title: "Erro ao Enviar",
+            description: error.message || "Não foi possível enviar a mensagem.",
+        });
+    } finally {
+        setIsSending(false);
+    }
   };
 
   const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
@@ -291,7 +345,7 @@ export default function CustomersPage() {
                             Digite a mensagem que você deseja enviar para o número {dialogState.client.phone}.
                         </DialogDescription>
                     </DialogHeader>
-                    <SendMessageDialog client={dialogState.client} onSend={handleSendMessage} onCancel={closeDialogAndClear} />
+                    <SendMessageDialog client={dialogState.client} onSend={handleSendMessage} onCancel={closeDialogAndClear} isSending={isSending} />
                 </>
             );
         case 'closed':
