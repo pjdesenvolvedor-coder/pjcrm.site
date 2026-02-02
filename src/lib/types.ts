@@ -21,6 +21,10 @@ export type Client = {
   telegramUser?: string;
   clientType?: ('PACOTE' | 'REVENDA')[];
   notes?: string;
+  quantity?: number;
+  subscription?: string;
+  paymentMethod?: 'PIX' | 'Cartão' | 'Boleto';
+  amountPaid?: string;
 };
 
 export type WhatsAppConnection = {

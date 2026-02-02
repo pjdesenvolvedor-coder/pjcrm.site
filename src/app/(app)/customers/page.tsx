@@ -62,6 +62,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
+const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
+
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -73,6 +75,10 @@ const clientSchema = z.object({
   dueTimeHour: z.string().optional(),
   dueTimeMinute: z.string().optional(),
   notes: z.string().optional(),
+  quantity: z.string().optional(),
+  subscription: z.string().min(1, 'Assinatura é obrigatória'),
+  paymentMethod: z.enum(paymentMethods).optional(),
+  amountPaid: z.string().optional(),
 });
 
 
@@ -100,6 +106,10 @@ export default function CustomersPage() {
       dueTimeHour: '18',
       dueTimeMinute: '19',
       notes: '',
+      quantity: '1',
+      subscription: '',
+      paymentMethod: undefined,
+      amountPaid: '',
     },
   });
 
@@ -125,6 +135,10 @@ export default function CustomersPage() {
       status: 'Ativo',
       dueDate: dueDateTimestamp,
       notes: values.notes,
+      quantity: values.quantity ? parseInt(values.quantity, 10) : 1,
+      subscription: values.subscription,
+      paymentMethod: values.paymentMethod,
+      amountPaid: values.amountPaid,
     };
     addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), newClient);
     form.reset();
@@ -369,9 +383,73 @@ export default function CustomersPage() {
                       </div>
                     </TabsContent>
                     <TabsContent value="pagamento">
-                        <div className="space-y-4 py-6 text-center text-sm text-muted-foreground">
-                            <p>Configurações de pagamento aparecerão aqui.</p>
-                        </div>
+                      <div className="space-y-4 py-6">
+                        <FormField
+                          control={form.control}
+                          name="quantity"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Quantidade</FormLabel>
+                              <FormControl>
+                                <Input {...field} className="col-span-3" />
+                              </FormControl>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="subscription"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Assinatura *</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Selecione uma assinatura" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="plano_mensal">Plano Mensal</SelectItem>
+                                  <SelectItem value="plano_trimestral">Plano Trimestral</SelectItem>
+                                  <SelectItem value="plano_anual">Plano Anual</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="paymentMethod"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Meio</FormLabel>
+                              <FormControl>
+                                <div className="col-span-3 flex items-center gap-2">
+                                  <Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button>
+                                  <Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button>
+                                  <Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button>
+                                </div>
+                              </FormControl>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="amountPaid"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                              <FormLabel className="text-right">Valor Pago</FormLabel>
+                              <FormControl>
+                                <Input placeholder="R$ 0,00" {...field} className="col-span-3" />
+                              </FormControl>
+                              <FormMessage className="col-start-2 col-span-3" />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     </TabsContent>
                   </Tabs>
                   <DialogFooter className='pt-4'>

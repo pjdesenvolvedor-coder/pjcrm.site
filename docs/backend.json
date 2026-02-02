@@ -102,6 +102,27 @@
         "notes": {
           "type": "string",
           "description": "Notes about the client."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "The quantity of subscriptions."
+        },
+        "subscription": {
+          "type": "string",
+          "description": "The type of subscription."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "The payment method.",
+          "enum": [
+            "PIX",
+            "Cartão",
+            "Boleto"
+          ]
+        },
+        "amountPaid": {
+          "type": "string",
+          "description": "The amount paid by the client."
         }
       },
       "required": [
