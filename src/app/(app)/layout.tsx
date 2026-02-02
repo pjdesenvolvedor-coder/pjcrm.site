@@ -102,19 +102,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
 
 
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, isUserLoading, router]);
-
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-    }
-  };
-
   const fetchStatus = async () => {
     if (isLoadingSettings || !settings?.webhookToken) {
       setLiveStatus({ status: 'disconnected' });
@@ -122,8 +109,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
     try {
       const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/58da289a-e20c-460a-8e35-d01c9b567dad', {
-        method: 'GET',
-        headers: { 'token': settings.webhookToken },
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'token': settings.webhookToken 
+        },
+        body: JSON.stringify({ token: settings.webhookToken }),
       });
 
       if (response.ok) {
@@ -138,9 +129,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           setLiveStatus(newStatus);
           
           if (instance.status === 'connected') {
-            stopPolling();
-            setConnectionStatus('disconnected'); // Reset view to show connected status
-            setQrCode(null);
+            if (connectionStatus === 'qr_code' || connectionStatus === 'connecting') {
+              setConnectionStatus('disconnected');
+              setQrCode(null);
+            }
           }
         } else {
           setLiveStatus({ status: 'disconnected' });
@@ -154,33 +146,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Reset connection flow state and stop polling when dialog is closed
+  // Effect for continuous polling
+  useEffect(() => {
+    const stopPolling = () => {
+      if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+      }
+    };
+    
+    if (settings?.webhookToken) {
+        fetchStatus(); // Initial fetch
+        pollingIntervalRef.current = setInterval(fetchStatus, 3000);
+    }
+
+    return () => stopPolling(); // Cleanup on unmount or token change
+  }, [settings?.webhookToken]);
+
+  // Effect to manage dialog UI state
   useEffect(() => {
     if (!isZapConnectOpen) {
-      stopPolling();
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
-        // fetch initial status next time it opens
-        setLiveStatus(null); 
       }, 300);
     } else {
-        fetchStatus(); // Fetch initial status when dialog opens
+      fetchStatus();
     }
-    
-    // Cleanup on unmount
-    return () => stopPolling();
   }, [isZapConnectOpen]);
   
-  // Handle UI logic based on status changes
+  // Handle UI logic based on live status changes
   useEffect(() => {
-    // If we just got connected, hide the QR code flow
     if (liveStatus?.status === 'connected' && connectionStatus === 'qr_code') {
       setConnectionStatus('disconnected');
       setQrCode(null);
     }
   }, [liveStatus, connectionStatus]);
 
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
 
   if (isUserLoading || !user) {
     return (
@@ -237,9 +244,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 title: 'QR Code Pronto!',
                 description: 'Escaneie o código com seu WhatsApp para conectar.',
             });
-            // Start polling AFTER QR code is shown
-            stopPolling(); // ensure no other polling is running
-            pollingIntervalRef.current = setInterval(fetchStatus, 3000);
         } else {
             throw new Error('A resposta do webhook não continha um QR code válido.');
         }
@@ -256,7 +260,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const handleDisconnect = async () => {
-    stopPolling();
     if (!settings?.webhookToken) {
         toast({
             variant: 'destructive',
