@@ -1,0 +1,355 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the ZapConnect SaaS platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the user account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "email",
+        "createdAt"
+      ]
+    },
+    "WhatsAppConnection": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "WhatsAppConnection",
+      "type": "object",
+      "description": "Stores the connection details for a WhatsApp Business API integration.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the WhatsApp connection."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N WhatsAppConnection)"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The phone number associated with the WhatsApp Business API."
+        },
+        "apiKey": {
+          "type": "string",
+          "description": "The API key used to authenticate with the WhatsApp Business API."
+        },
+        "connectionStatus": {
+          "type": "string",
+          "description": "The status of the WhatsApp connection (e.g., connected, disconnected)."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "phoneNumber",
+        "apiKey",
+        "connectionStatus"
+      ]
+    },
+    "AutomatedMessageWorkflow": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AutomatedMessageWorkflow",
+      "type": "object",
+      "description": "Defines an automated message workflow for common customer interactions.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the automated message workflow."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N AutomatedMessageWorkflow)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the automated message workflow."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the automated message workflow."
+        },
+        "triggerEvent": {
+          "type": "string",
+          "description": "The event that triggers the workflow (e.g., new customer, order placed)."
+        },
+        "messageTemplate": {
+          "type": "string",
+          "description": "The message template to be sent when the workflow is triggered."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "description",
+        "triggerEvent",
+        "messageTemplate"
+      ]
+    },
+    "CustomerSegment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CustomerSegment",
+      "type": "object",
+      "description": "Represents a segment of customers based on specific criteria.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the customer segment."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N CustomerSegment)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the customer segment."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the customer segment."
+        },
+        "criteria": {
+          "type": "string",
+          "description": "The criteria used to define the customer segment (e.g., location, purchase history)."
+        },
+        "customerIds": {
+          "type": "array",
+          "description": "References to Users that belong to this segment. (Relationship: CustomerSegment N:N User)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "description",
+        "criteria",
+        "customerIds"
+      ]
+    },
+    "MessageAnalytics": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MessageAnalytics",
+      "type": "object",
+      "description": "Stores analytics data related to message volume, engagement, and customer satisfaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the message analytics data."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The timestamp for the analytics data.",
+          "format": "date-time"
+        },
+        "messagesSent": {
+          "type": "number",
+          "description": "The number of messages sent during the specified time period."
+        },
+        "messagesReceived": {
+          "type": "number",
+          "description": "The number of messages received during the specified time period."
+        },
+        "engagementRate": {
+          "type": "number",
+          "description": "The engagement rate for the messages sent."
+        },
+        "satisfactionScore": {
+          "type": "number",
+          "description": "The customer satisfaction score based on message interactions."
+        }
+      },
+      "required": [
+        "id",
+        "timestamp",
+        "messagesSent",
+        "messagesReceived",
+        "engagementRate",
+        "satisfactionScore"
+      ]
+    },
+    "AIResponseSuggestion": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AIResponseSuggestion",
+      "type": "object",
+      "description": "Stores AI-powered reply suggestions based on message context.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the AI response suggestion."
+        },
+        "messageContext": {
+          "type": "string",
+          "description": "The context of the message for which the suggestion is generated."
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "The AI-powered reply suggestion."
+        },
+        "confidenceScore": {
+          "type": "number",
+          "description": "The confidence score for the AI suggestion."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp indicating when the suggestion was generated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "messageContext",
+        "suggestion",
+        "confidenceScore",
+        "timestamp"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information. The collection is path-based, so ownership is implicitly tied to the {userId} in the path.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/whatsapp_connections/{connectionId}",
+        "definition": {
+          "entityName": "WhatsAppConnection",
+          "schema": {
+            "$ref": "#/backend/entities/WhatsAppConnection"
+          },
+          "description": "Stores WhatsApp connection details for each user.  Ownership is enforced via the path `/users/{userId}`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "connectionId",
+              "description": "The unique identifier for the WhatsApp connection."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/automated_message_workflows/{workflowId}",
+        "definition": {
+          "entityName": "AutomatedMessageWorkflow",
+          "schema": {
+            "$ref": "#/backend/entities/AutomatedMessageWorkflow"
+          },
+          "description": "Stores automated message workflows defined by each user. Ownership is enforced via the path `/users/{userId}`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "workflowId",
+              "description": "The unique identifier for the automated message workflow."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/customer_segments/{segmentId}",
+        "definition": {
+          "entityName": "CustomerSegment",
+          "schema": {
+            "$ref": "#/backend/entities/CustomerSegment"
+          },
+          "description": "Stores customer segments defined by each user. Ownership is enforced via the path `/users/{userId}`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "segmentId",
+              "description": "The unique identifier for the customer segment."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/message_analytics/{analyticsId}",
+        "definition": {
+          "entityName": "MessageAnalytics",
+          "schema": {
+            "$ref": "#/backend/entities/MessageAnalytics"
+          },
+          "description": "Stores message analytics data.  Security rules must validate the attributes of the document itself. There is no ownership enforced in the current structure.",
+          "params": [
+            {
+              "name": "analyticsId",
+              "description": "The unique identifier for the message analytics data."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/ai_response_suggestions/{suggestionId}",
+        "definition": {
+          "entityName": "AIResponseSuggestion",
+          "schema": {
+            "$ref": "#/backend/entities/AIResponseSuggestion"
+          },
+          "description": "Stores AI-powered response suggestions.  Security rules must validate the attributes of the document itself. There is no ownership enforced in the current structure.",
+          "params": [
+            {
+              "name": "suggestionId",
+              "description": "The unique identifier for the AI response suggestion."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support the ZapConnect SaaS platform, prioritizing security, scalability, and debuggability as per the core design principles.  Authorization Independence is achieved through path-based ownership for user data and denormalization where collaborative access is needed. This eliminates the need for `get()` calls in security rules, enabling atomic operations.\n\nThe design adheres to Structural Segregation by ensuring collections contain documents with similar security requirements. User-specific data is stored under the `/users/{userId}` path, while shared data, if any, would use membership maps and denormalization. Rules-are-not-filters (QAPs) is achieved by having homogeneous security postures within each collection. For instance, each document in `/users/{userId}/whatsapp_connections` has the same ownership security rule.\n\nThe structure uses consistent access modeling. Private user data is stored under path-based ownership (`/users/{userId}/...`). Collaborative data would leverage membership maps if the SaaS platform evolves to include sharing features. Data clarity is maintained with explicit state modeling (if applicable in future features), predictable schemas, and radical consistency in naming conventions.\n\nSince the request mentions that all rules must be removed to prevent errors, the data structure is prepared without considering authorization rules. Authorization Independence is achieved by ensuring all data relating to an entity is contained within that entity's document or subcollection and not relying on outside documents. Each collection follows a homogeneous security posture. In collaborative contexts (which are not described in the provided entities, but anticipated by the structure), membership maps would be denormalized to eliminate dependency on parent documents. This approach ensures that list operations are secure, as rules only need to validate the existence or attributes of the documents being listed, not related parent documents."
+  }
+}

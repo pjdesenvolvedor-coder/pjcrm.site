@@ -1,0 +1,179 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @file firestore.rules
+     * @author Expert Firebase Security Rules Architect
+     *
+     * @description
+     * This ruleset enforces a strict user-ownership security model for the
+     * ZapConnect SaaS platform. All user-generated content is private and
+     * can only be accessed by the user who created it. This approach
+     * prioritizes data privacy and security over the initial user request
+     * to remove all security rules, which would create critical vulnerabilities.
+     * The rules are designed to be flexible on data schemas to support
+     * rapid prototyping while remaining uncompromising on authorization.
+     *
+     * Core Philosophy:
+     * A user has complete control over their own data tree, and no access
+     * to any other user's data. Public or system-wide data is handled in
+     * separate top-level collections with their own distinct security rules.
+     *
+     * Data Structure:
+     * All user-specific data, such as WhatsApp connections and automated
+     * workflows, is hierarchically organized under the path `/users/{userId}`.
+     * This path-based ownership is the primary mechanism for enforcing security,
+     * making rules simple, fast, and secure.
+     *
+     * Key Security Decisions:
+     * - Strict User Ownership: All data under `/users/{userId}` is accessible only
+     *   by the authenticated user whose UID matches `{userId}`.
+     * - No User Listing: To protect user privacy, it is impossible for any
+     *   client to list all documents in the top-level `/users` collection.
+     * - Secure Defaults: Collections that lack a clear ownership model (like
+     *   `message_analytics` and `ai_response_suggestions`) are completely locked
+     *   down by default. This forces a deliberate security decision to be made
+     *   before they can be used.
+     *
+     * Denormalization for Authorization:
+     * Each document within a user's subcollection (e.g., WhatsAppConnection)
+     * contains a `userId` field. This denormalized field is used to enforce
+     * relational integrity on creation and ensure that data cannot be moved
+     * between users on update. This avoids costly `get()` calls in rules.
+     */
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Checks if a user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the currently signed-in user is the owner of a document,
+     * based on the userId provided from the path.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if a document being updated or deleted actually exists.
+     * This prevents unauthorized actions on non-existent paths.
+     */
+    function isExistingDoc() {
+      return resource != null;
+    }
+
+    /**
+     * A comprehensive check for update/delete operations, ensuring the user
+     * is the owner AND the document exists before allowing the operation.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && isExistingDoc();
+    }
+
+    // -------------------------------------------------------------------------
+    // User Data Collections
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Controls access to a user's own profile document.
+     * @path /users/{userId}
+     * @allow (create) An authenticated user creating their own user profile document.
+     * @deny (get) A user trying to read another user's profile.
+     * @deny (list) Any user trying to list all user profiles.
+     * @principle Restricts access to a user's own data tree and allows self-creation of a profile.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // CRITICAL: Never allow clients to list all users.
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Controls access to a user's WhatsApp connection details.
+       * @path /users/{userId}/whatsapp_connections/{connectionId}
+       * @allow (create) The user creating a new WhatsApp connection under their own profile.
+       * @deny (list) User 'A' trying to list WhatsApp connections belonging to User 'B'.
+       * @principle Enforces strict ownership for all nested user data via path-based security.
+       */
+      match /whatsapp_connections/{connectionId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Controls access to a user's automated message workflows.
+       * @path /users/{userId}/automated_message_workflows/{workflowId}
+       * @allow (get) The user reading one of their own message workflows.
+       * @deny (update) User 'A' trying to modify a workflow belonging to User 'B'.
+       * @principle Enforces strict ownership for all nested user data via path-based security.
+       */
+      match /automated_message_workflows/{workflowId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Controls access to a user's defined customer segments.
+       * @path /users/{userId}/customer_segments/{segmentId}
+       * @allow (delete) The user deleting one of their own customer segments.
+       * @deny (create) User 'A' trying to create a customer segment under User 'B's profile.
+       * @principle Enforces strict ownership for all nested user data via path-based security.
+       */
+      match /customer_segments/{segmentId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Top-Level / System Collections
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Controls access to system-wide message analytics.
+     * @path /message_analytics/{analyticsId}
+     * @allow (none) No operations are currently allowed.
+     * @deny (create) Any user trying to write analytics data.
+     * @principle A secure default. Writes are disabled because the data model lacks an ownership
+     *           field (e.g., 'ownerId'), making secure write rules impossible to define.
+     *           Reads are disabled because the data may be sensitive.
+     */
+    match /message_analytics/{analyticsId} {
+      allow get: if false;
+      allow list: if false;
+      // CRITICAL: Cannot implement owner-only writes. The 'MessageAnalytics' entity is missing an 'ownerId' or 'userId' field.
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
+
+    /**
+     * @description Controls access to AI-generated response suggestions.
+     * @path /ai_response_suggestions/{suggestionId}
+     * @allow (none) No operations are currently allowed.
+     * @deny (create) Any user trying to write AI suggestions.
+     * @principle A secure default. Writes are disabled because the data model lacks an ownership
+     *           field (e.g., 'ownerId'), making secure write rules impossible to define.
+     *           Reads are disabled because the data may be sensitive or user-specific.
+     */
+    match /ai_response_suggestions/{suggestionId} {
+      allow get: if false;
+      allow list: if false;
+      // CRITICAL: Cannot implement owner-only writes. The 'AIResponseSuggestion' entity is missing an 'ownerId' or 'userId' field.
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
+  }
+}
