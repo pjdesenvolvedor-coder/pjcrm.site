@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, WifiOff } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
   const { firestore } = useFirebase();
@@ -138,6 +139,7 @@ export default function SettingsPage() {
                     variant="destructive" 
                     onClick={handleDisconnect} 
                     disabled={isLoading || isDisconnecting || !token}
+                    className={cn(!isDisconnecting && !!token && 'animate-pulse-destructive')}
                 >
                     {isDisconnecting ? (
                         <>

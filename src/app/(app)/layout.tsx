@@ -299,6 +299,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             description: 'Sua sessão do WhatsApp foi encerrada.',
         });
         setLiveStatus({ status: 'disconnected' });
+        // Reset the main dialog view
+        setConnectionStatus('disconnected');
+        setQrCode(null);
 
     } catch (error: any) {
         console.error('Falha ao desconectar:', error);
@@ -369,6 +372,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           )}
           <p className="font-semibold text-lg">{liveStatus.profileName || 'Nome não disponível'}</p>
+           <Button
+              type="button"
+              variant="destructive"
+              className="mt-4"
+              onClick={handleDisconnect}
+              disabled={isDisconnecting}
+            >
+              {isDisconnecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Desconectando...
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-4 w-4 mr-2" />
+                  Desconectar
+                </>
+              )}
+            </Button>
         </div>
       );
     }
@@ -578,6 +600,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     <Link href="/settings">Planos e Assinaturas</Link>
                                 </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/users')}>
+                                    <Link href="/users">Gerenciamento de Usuários</Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
                         </SidebarMenuSub>
                     </CollapsibleContent>
                 </Collapsible>
@@ -594,29 +621,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 
                 {renderContent()}
 
-                <DialogFooter className="p-6 border-t flex flex-col sm:flex-row gap-2">
-                  {liveStatus?.status === 'connected' ? (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className={cn("w-full", !isDisconnecting && "animate-pulse-destructive")}
-                      size="lg"
-                      onClick={handleDisconnect}
-                      disabled={isDisconnecting}
-                    >
-                      {isDisconnecting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Desconectando...
-                        </>
-                      ) : (
-                        <>
-                          <WifiOff className="h-4 w-4 mr-2" />
-                          Desconectar
-                        </>
-                      )}
-                    </Button>
-                  ) : (liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') ? (
+                <DialogFooter className="p-6 border-t bg-muted/50">
+                  {(liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') && (
                     <Button
                       type="button"
                       className={cn("w-full", !(isLoadingSettings || connectionStatus === 'connecting') && "animate-pulse-primary")}
@@ -641,7 +647,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         </>
                       )}
                     </Button>
-                  ) : null}
+                  )}
                 </DialogFooter>
             </DialogContent>
           </Dialog>

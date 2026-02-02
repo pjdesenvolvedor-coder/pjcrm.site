@@ -64,7 +64,7 @@ export default function CustomersPage() {
     const newSegment = {
       ...values,
       userId: user.uid,
-      customerCount: 0, // Default value
+      customerCount: Math.floor(Math.random() * 200), // Mock data
     };
     addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'customer_segments'), newSegment);
     form.reset();
@@ -173,5 +173,3 @@ export default function CustomersPage() {
     </div>
   );
 }
-
-    
