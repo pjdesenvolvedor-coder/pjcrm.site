@@ -355,32 +355,37 @@ export default function CustomersPage() {
         </Card>
       </main>
 
-      {/* View Dialog */}
-      <Dialog open={dialog?.type === 'view'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-2xl p-0">
-          {dialog?.client && (
-            <ClientDetailView 
-              client={dialog.client} 
+      <Dialog open={!!dialog} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent
+          className={cn({
+            'sm:max-w-2xl p-0': dialog?.type === 'view',
+            'sm:max-w-lg': dialog?.type === 'add' || dialog?.type === 'edit',
+          })}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+        >
+          {dialog?.type === 'view' && dialog.client && (
+            <ClientDetailView
+              client={dialog.client}
               onClose={() => setDialog(null)}
               onEdit={(clientToEdit) => setDialog({ type: 'edit', client: clientToEdit })}
             />
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Add/Edit Dialog */}
-      <Dialog open={dialog?.type === 'add' || dialog?.type === 'edit'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{dialog?.type === 'edit' ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
-            <DialogDescription>
-              {dialog?.type === 'edit' ? 'Atualize os detalhes do cliente abaixo.' : 'Preencha os detalhes do cliente abaixo.'}
-            </DialogDescription>
-          </DialogHeader>
-          <ClientForm 
-            initialData={dialog?.type === 'edit' ? dialog.client : null}
-            onFinished={() => setDialog(null)}
-          />
+          {(dialog?.type === 'add' || dialog?.type === 'edit') && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{dialog.type === 'edit' ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
+                <DialogDescription>
+                  {dialog.type === 'edit' ? 'Atualize os detalhes do cliente abaixo.' : 'Preencha os detalhes do cliente abaixo.'}
+                </DialogDescription>
+              </DialogHeader>
+              <ClientForm
+                initialData={dialog.type === 'edit' ? dialog.client : null}
+                onFinished={() => setDialog(null)}
+              />
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
