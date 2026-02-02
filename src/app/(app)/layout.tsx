@@ -118,16 +118,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         const data = await response.json();
-        const instance = data[0]?.instance;
-        if (instance) {
+        // The API might return an array or a single object.
+        const statusData = Array.isArray(data) ? data[0] : data;
+
+        if (statusData) {
+          // Map the new response keys to our LiveStatus state type.
           const newStatus: LiveStatus = {
-            status: instance.status,
-            profileName: instance.profileName,
-            profilePicUrl: instance.profilePicUrl,
+            status: statusData.status,
+            profileName: statusData.nomeperfil, // Use 'nomeperfil'
+            profilePicUrl: statusData.fotoperfil, // Use 'fotoperfil'
           };
           setLiveStatus(newStatus);
           
-          if (instance.status === 'connected') {
+          if (newStatus.status === 'connected') {
             if (connectionStatus === 'qr_code' || connectionStatus === 'connecting') {
               setConnectionStatus('disconnected');
               setQrCode(null);
