@@ -122,7 +122,7 @@ export default function CustomersPage() {
     
     let dueDateTimestamp: Timestamp | undefined = undefined;
     if (values.dueDate) {
-        const date = values.dueDate;
+        const date = new Date(values.dueDate);
         const hour = parseInt(values.dueTimeHour || '0', 10);
         const minute = parseInt(values.dueTimeMinute || '0', 10);
         date.setHours(hour, minute);
