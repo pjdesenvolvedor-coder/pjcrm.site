@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, Eye, MessageSquare, LifeBuoy, Trash2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, Eye, MessageSquare, LifeBuoy, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -61,6 +61,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
@@ -87,6 +88,8 @@ export default function CustomersPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const [open, setOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -117,7 +120,7 @@ export default function CustomersPage() {
   const onSubmit = (values: z.infer<typeof clientSchema>) => {
     if (!user) return;
     
-    let dueDateTimestamp = Timestamp.now();
+    let dueDateTimestamp: Timestamp | undefined = undefined;
     if (values.dueDate) {
         const date = values.dueDate;
         const hour = parseInt(values.dueTimeHour || '0', 10);
@@ -157,6 +160,11 @@ export default function CustomersPage() {
       default:
         return 'outline';
     }
+  };
+
+  const handleViewDetails = (client: Client) => {
+    setSelectedClient(client);
+    setDetailsOpen(true);
   };
 
   return (
@@ -540,7 +548,7 @@ export default function CustomersPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handleViewDetails(client)}>
                                     <Eye className="mr-2 h-4 w-4" />
                                     Visualizar Detalhes
                                 </DropdownMenuItem>
@@ -574,6 +582,67 @@ export default function CustomersPage() {
           </CardContent>
         </Card>
       </main>
+
+       {selectedClient && (
+        <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+          <DialogContent className="sm:max-w-2xl p-0">
+            <DialogHeader className="p-6 pb-4">
+              <div className="flex items-center gap-3">
+                <User className="h-6 w-6 text-muted-foreground" />
+                <DialogTitle className="text-2xl font-bold">{selectedClient.name}</DialogTitle>
+              </div>
+              <DialogDescription>
+                Visualizando detalhes completos do cliente.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="px-6 pb-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                            <Phone className="h-5 w-5 text-muted-foreground" />
+                            <span>{selectedClient.phone}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Mail className="h-5 w-5 text-muted-foreground" />
+                            <span className="truncate">{selectedClient.email}</span>
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            <Badge variant={getStatusVariant(selectedClient.status)}>{selectedClient.status}</Badge>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+                            <span>{selectedClient.subscription}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                            <span>Vencimento: {selectedClient.dueDate ? format(selectedClient.dueDate.toDate(), 'dd/MM/yyyy HH:mm') : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="flex items-center gap-3">
+                        <Banknote className="h-5 w-5 text-muted-foreground" />
+                        <span>Meio: {selectedClient.paymentMethod || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Wallet className="h-5 w-5 text-muted-foreground" />
+                        <span>Valor Pago: {selectedClient.amountPaid || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+            <DialogFooter className="bg-muted/50 p-6 flex justify-end gap-2">
+                <Button variant="outline"><FilePenLine className="mr-2 h-4 w-4" /> Editar Cliente</Button>
+                <Button className="bg-yellow-400 hover:bg-yellow-500 text-black"><RefreshCw className="mr-2 h-4 w-4" /> Renovar</Button>
+                <Button onClick={() => setDetailsOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
     </div>
   );
 }
