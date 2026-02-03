@@ -1,10 +1,62 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // Check if the user making the request has an 'Admin' role in their user profile.
+      // This requires a read to the user's own document.
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
+    match /users/{userId} {
+      // GET: Admins can get any user's profile. Users can get their own profile.
+      allow get: if isOwner(userId) || isAdmin();
+
+      // LIST: Only Admins can list all users.
+      allow list: if isAdmin();
+      
+      // CREATE: A user can create their own profile document.
+      allow create: if isOwner(userId);
+
+      // UPDATE: A user can update their own profile. An admin can update any profile.
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // DELETE: A user can delete their own account. An admin can delete any.
+      allow delete: if isOwner(userId) || isAdmin();
+
+
+      // Subcollections are only accessible by the owner of the parent user document.
+      match /clients/{clientId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /whatsapp_connections/{connectionId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /automated_message_workflows/{workflowId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /conversations/{conversationId} {
+        allow read, write: if isOwner(userId);
+        match /messages/{messageId} {
+          allow read, write: if isOwner(userId);
+        }
+      }
+      match /settings/{settingsId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Lock down other collections for now.
+    match /message_analytics/{analyticsId} {
+      allow read, write: if false;
+    }
+    match /ai_response_suggestions/{suggestionId} {
+      allow read, write: if false;
     }
   }
 }
-
-    
