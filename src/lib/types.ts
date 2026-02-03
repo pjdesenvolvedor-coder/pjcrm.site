@@ -25,6 +25,7 @@ export type Client = {
   subscription?: string;
   paymentMethod?: 'PIX' | 'Cartão' | 'Boleto';
   amountPaid?: string;
+  needsSupport?: boolean;
 };
 
 export type WhatsAppConnection = {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect, useCallback } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -56,6 +56,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import Image from 'next/image';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
@@ -114,7 +115,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         dueDateTimestamp = Timestamp.fromDate(date);
     }
 
-    const clientData: Omit<Client, 'id' | 'status'> = {
+    const clientData: Omit<Client, 'id' | 'status' | 'needsSupport'> = {
       userId: user.uid,
       name: values.name,
       email: values.email,
@@ -132,10 +133,11 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     if (isEditing && initialData?.id) {
         const docRef = doc(firestore, 'users', user.uid, 'clients', initialData.id);
         const currentStatus = (initialData as Client)?.status || 'Ativo';
-        setDocumentNonBlocking(docRef, { ...clientData, status: currentStatus }, { merge: true });
+        const currentSupportStatus = (initialData as Client)?.needsSupport || false;
+        setDocumentNonBlocking(docRef, { ...clientData, status: currentStatus, needsSupport: currentSupportStatus }, { merge: true });
         toast({ title: "Cliente atualizado!", description: `${values.name} foi atualizado com sucesso.` });
     } else {
-        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: 'Ativo' });
+        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: 'Ativo', needsSupport: false });
         toast({ title: "Cliente adicionado!", description: `${values.name} foi adicionado com sucesso.` });
     }
 
@@ -267,7 +269,6 @@ export default function CustomersPage() {
           if (dir === 'next') setHasNextPage(false);
           if (dir === 'prev') setHasPrevPage(false);
           setIsLoading(false);
-          // Do not clear clients if we are on a page that exists
           if(dir === 'initial') setClients([]);
           return;
       }
@@ -277,7 +278,6 @@ export default function CustomersPage() {
       const last = querySnapshot.docs[querySnapshot.docs.length - 1];
       setPagination({ first, last });
       
-      // Check for next/prev pages
       const prevCheck = query(clientsRef, orderBy('name'), endBefore(first), limitToLast(1));
       const prevSnap = await getDocs(prevCheck);
       setHasPrevPage(!prevSnap.empty);
@@ -300,6 +300,20 @@ export default function CustomersPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const handleToggleSupport = (client: Client) => {
+    if (!user) return;
+    const newSupportStatus = !client.needsSupport;
+    const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+    setDocumentNonBlocking(docRef, { needsSupport: newSupportStatus }, { merge: true });
+    toast({
+        title: `Suporte ${newSupportStatus ? 'marcado' : 'desmarcado'}`,
+        description: `O cliente ${client.name} foi atualizado.`,
+    });
+    setClients(prevClients => 
+        prevClients.map(c => c.id === client.id ? { ...c, needsSupport: newSupportStatus } : c)
+    );
+  };
 
 
   const openDialog = (view: 'add' | 'edit' | 'sendMessage', client?: Client) => {
@@ -459,8 +473,13 @@ export default function CustomersPage() {
                   <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
                 ) : clients && clients.length > 0 ? (
                   clients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableRow key={client.id} data-state={client.needsSupport ? 'selected' : ''}>
+                      <TableCell className="font-medium">
+                        <div className='flex items-center gap-2'>
+                          {client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}
+                          {client.name}
+                        </div>
+                      </TableCell>
                       <TableCell>{client.email}</TableCell>
                       <TableCell><Badge variant={getStatusVariant(client.status)} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{client.status}</Badge></TableCell>
                       <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
@@ -473,6 +492,18 @@ export default function CustomersPage() {
                             <Button variant="ghost" size="icon" onClick={() => openDialog('sendMessage', client)}>
                                 <MessageSquare className="h-4 w-4" />
                             </Button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" onClick={() => handleToggleSupport(client)}>
+                                            <LifeBuoy className={cn("h-4 w-4", client.needsSupport && "text-primary fill-primary/20")} />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Marcar/Desmarcar Suporte</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -494,5 +525,3 @@ export default function CustomersPage() {
     </div>
   );
 }
-
-    

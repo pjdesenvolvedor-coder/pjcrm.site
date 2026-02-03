@@ -123,6 +123,10 @@
         "amountPaid": {
           "type": "string",
           "description": "The amount paid by the client."
+        },
+        "needsSupport": {
+          "type": "boolean",
+          "description": "Indicates if the client needs support."
         }
       },
       "required": [

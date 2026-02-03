@@ -470,8 +470,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild>
-                                    <Link href="#">Suporte</Link>
+                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/support')}>
+                                    <Link href="/support">Suporte</Link>
                                 </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                         </SidebarMenuSub>
