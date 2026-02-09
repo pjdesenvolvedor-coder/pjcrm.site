@@ -398,7 +398,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!liveStatus || liveStatus.status === 'disconnected') {
        return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant={'secondary'} className="py-1 px-3">
+          <Badge variant="secondary" className="py-1 px-3 bg-red-100 text-red-800">
             <WifiOff className="h-4 w-4 mr-2" />
             Desconectado
           </Badge>
@@ -505,7 +505,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           Conectado
                         </Badge>
                       ) : (
-                        <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium">
+                        <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-red-100 text-red-800 border-red-200">
                           Desconectado
                         </Badge>
                       )}
