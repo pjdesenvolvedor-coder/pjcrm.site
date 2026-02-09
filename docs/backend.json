@@ -429,6 +429,61 @@
         "name",
         "value"
       ]
+    },
+    "ScheduledMessage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ScheduledMessage",
+      "type": "object",
+      "description": "Represents a message scheduled to be sent to a WhatsApp group.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the scheduled message."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who scheduled this message."
+        },
+        "jid": {
+          "type": "string",
+          "description": "The JID of the WhatsApp group."
+        },
+        "message": {
+          "type": "string",
+          "description": "The content of the message to be sent."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the image to be sent with the message.",
+          "format": "uri"
+        },
+        "sendAt": {
+          "type": "string",
+          "description": "The date and time when the message should be sent.",
+          "format": "date-time"
+        },
+        "repeatDaily": {
+          "type": "boolean",
+          "description": "Whether the message should be sent daily."
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the scheduled message.",
+          "enum": [
+            "Scheduled",
+            "Sent",
+            "Error"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "jid",
+        "message",
+        "sendAt",
+        "status"
+      ]
     }
   },
   "auth": {
@@ -627,6 +682,26 @@
             {
               "name": "subscriptionId",
               "description": "The unique identifier for the subscription."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/scheduled_messages/{messageId}",
+        "definition": {
+          "entityName": "ScheduledMessage",
+          "schema": {
+            "$ref": "#/backend/entities/ScheduledMessage"
+          },
+          "description": "Stores messages scheduled by each user for groups. Ownership is enforced via the path `/users/{userId}`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "messageId",
+              "description": "The unique identifier for the scheduled message."
             }
           ]
         }

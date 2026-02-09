@@ -100,3 +100,14 @@ export type Subscription = {
   name: string;
   value: string;
 };
+
+export type ScheduledMessage = {
+  id: string;
+  userId: string;
+  jid: string;
+  message: string;
+  imageUrl?: string;
+  sendAt: Timestamp;
+  repeatDaily: boolean;
+  status: 'Scheduled' | 'Sent' | 'Error';
+};
