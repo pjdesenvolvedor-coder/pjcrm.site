@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { PlusCircle, Upload, CalendarIcon, Trash2 } from 'lucide-react';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,9 +24,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking, useDoc } from '@/firebase';
 import { collection, query, orderBy, Timestamp, doc } from 'firebase/firestore';
-import type { ScheduledMessage } from '@/lib/types';
+import type { ScheduledMessage, Settings } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -56,6 +56,14 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
     const { toast } = useToast();
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [isSending, setIsSending] = useState(false);
+
+    const settingsDocRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid, 'settings', 'config');
+    }, [firestore, user]);
+    const { data: settings } = useDoc<Settings>(settingsDocRef);
+
 
     const form = useForm<ScheduleFormData>({
         resolver: zodResolver(scheduleSchema),
@@ -96,151 +104,220 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
         }
     };
     
-    // NOTE: Image upload to a storage bucket is not implemented.
-    // This will require setting up Firebase Storage and generating a public URL.
-    const onSubmit = (values: ScheduleFormData) => {
+    const onSubmit = async (values: ScheduleFormData) => {
         if (!user) return;
+
+        if (!settings?.webhookToken) {
+            toast({
+                variant: "destructive",
+                title: "Token não configurado",
+                description: "Por favor, configure seu token de webhook na página de Configurações.",
+            });
+            return;
+        }
+
+        setIsSending(true);
 
         const [day, month, year] = values.sendDate.split('/');
         const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
         
         if (isNaN(date.getTime())) {
             toast({ variant: 'destructive', title: 'Data inválida' });
+            setIsSending(false);
             return;
         }
 
         date.setHours(parseInt(values.sendHour, 10), parseInt(values.sendMinute, 10));
         const sendAtTimestamp = Timestamp.fromDate(date);
 
-        const newScheduledMessage = {
+        let imageUrlDataUri: string | undefined = undefined;
+        if (values.image instanceof File) {
+            try {
+                imageUrlDataUri = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = error => reject(error);
+                    reader.readAsDataURL(values.image);
+                });
+            } catch (error) {
+                console.error("Error converting image to base64:", error);
+                toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível ler o arquivo da imagem.' });
+                setIsSending(false);
+                return;
+            }
+        }
+
+        const newScheduledMessageForFirestore = {
             userId: user.uid,
             jid: values.jid,
             message: values.message,
             sendAt: sendAtTimestamp,
             repeatDaily: values.repeatDaily,
             status: 'Scheduled',
-            // imageUrl: 'TODO' // Placeholder for uploaded image URL
+            imageUrl: imagePreview || undefined
+        };
+        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'scheduled_messages'), newScheduledMessageForFirestore);
+
+        const webhookPayload = {
+            token: settings.webhookToken,
+            jid: values.jid,
+            message: values.message,
+            sendAt: date.toISOString(),
+            repeatDaily: values.repeatDaily,
+            imageUrl: imageUrlDataUri,
         };
 
-        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'scheduled_messages'), newScheduledMessage);
-        toast({ title: "Mensagem Agendada!", description: "Sua mensagem foi agendada com sucesso." });
-        onFinished();
+        try {
+            const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/6b70ac73-9025-4ace-b7c9-24db23376c4c', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(webhookPayload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Falha no webhook: ${errorText}`);
+            }
+
+            toast({ title: "Agendamento Enviado!", description: "Sua mensagem foi agendada com sucesso." });
+            onFinished();
+        } catch (error: any) {
+            console.error('Webhook error:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Erro no Envio',
+                description: error.message || 'Não foi possível se comunicar com o webhook.',
+            });
+        } finally {
+            setIsSending(false);
+        }
     };
 
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                 <DialogHeader>
-                    <DialogTitle>Agendar Mensagem de Grupo</DialogTitle>
-                    <DialogDescription>
-                        Preencha os detalhes para agendar uma nova mensagem para um grupo.
-                    </DialogDescription>
-                </DialogHeader>
-                <FormField
-                    control={form.control}
-                    name="jid"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Grupo (JID)</FormLabel>
-                            <FormControl>
-                                <Input placeholder="Cole o JID do grupo aqui..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                 <FormField
-                    control={form.control}
-                    name="message"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Mensagem</FormLabel>
-                            <FormControl>
-                                <Textarea placeholder="Escreva sua mensagem..." className="resize-none" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                 <FormItem>
-                    <FormLabel>Imagem *</FormLabel>
-                    <FormControl>
-                        <Button type="button" variant="outline" className="w-full" onClick={() => imageInputRef.current?.click()}>
-                           <Upload className="mr-2 h-4 w-4" />
-                           Selecionar Imagem
-                        </Button>
-                    </FormControl>
-                    <Input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-                     {imagePreview && <img src={imagePreview} alt="Preview" className="mt-2 h-20 w-20 object-cover rounded-md" data-ai-hint="image preview" />}
-                    <FormMessage />
-                </FormItem>
-                <div className='space-y-2'>
-                    <Label>Data e Hora do Envio</Label>
-                    <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                            <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <fieldset disabled={isSending} className="space-y-4">
+                    <DialogHeader>
+                        <DialogTitle>Agendar Mensagem de Grupo</DialogTitle>
+                        <DialogDescription>
+                            Preencha os detalhes para agendar uma nova mensagem para um grupo.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <FormField
+                        control={form.control}
+                        name="jid"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Grupo (JID)</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Cole o JID do grupo aqui..." {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="message"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Mensagem</FormLabel>
+                                <FormControl>
+                                    <Textarea placeholder="Escreva sua mensagem..." className="resize-none" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormItem>
+                        <FormLabel>Imagem</FormLabel>
+                        <FormControl>
+                            <Button type="button" variant="outline" className="w-full" onClick={() => imageInputRef.current?.click()}>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Selecionar Imagem (Opcional)
+                            </Button>
+                        </FormControl>
+                        <Input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                        {imagePreview && <img src={imagePreview} alt="Preview" className="mt-2 h-20 w-20 object-cover rounded-md" data-ai-hint="image preview" />}
+                        <FormMessage />
+                    </FormItem>
+                    <div className='space-y-2'>
+                        <Label>Data e Hora do Envio</Label>
+                        <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <FormField
+                                    control={form.control}
+                                    name="sendDate"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormControl>
+                                            <Input placeholder="dd/mm/aaaa" {...field} className="pl-9" onChange={handleDateInputChange} />
+                                        </FormControl>
+                                    </FormItem>
+                                    )}
+                                />
+                            </div>
                             <FormField
                                 control={form.control}
-                                name="sendDate"
+                                name="sendHour"
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormControl>
-                                        <Input placeholder="dd/mm/aaaa" {...field} className="pl-9" onChange={handleDateInputChange} />
+                                        <Input className="w-20 text-center" {...field} />
+                                    </FormControl>
+                                </FormItem>
+                                )}
+                            />
+                            <span>:</span>
+                            <FormField
+                                control={form.control}
+                                name="sendMinute"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormControl>
+                                        <Input className="w-20 text-center" {...field} />
                                     </FormControl>
                                 </FormItem>
                                 )}
                             />
                         </div>
+                        <div className="flex items-center space-x-2 pt-2">
                         <FormField
-                            control={form.control}
-                            name="sendHour"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
-                                    <Input className="w-20 text-center" {...field} />
-                                </FormControl>
-                            </FormItem>
-                            )}
-                        />
-                        <span>:</span>
-                         <FormField
-                            control={form.control}
-                            name="sendMinute"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
-                                    <Input className="w-20 text-center" {...field} />
-                                </FormControl>
-                            </FormItem>
-                            )}
-                        />
+                                control={form.control}
+                                name="repeatDaily"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                            />
+                                        </FormControl>
+                                        <div className="space-y-1 leading-none">
+                                            <FormLabel>
+                                                Repetir diariamente
+                                            </FormLabel>
+                                        </div>
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
                     </div>
-                     <div className="flex items-center space-x-2 pt-2">
-                       <FormField
-                            control={form.control}
-                            name="repeatDaily"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                    <FormControl>
-                                        <Checkbox
-                                            checked={field.value}
-                                            onCheckedChange={field.onChange}
-                                        />
-                                    </FormControl>
-                                    <div className="space-y-1 leading-none">
-                                        <FormLabel>
-                                            Repetir diariamente
-                                        </FormLabel>
-                                    </div>
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                </div>
+                </fieldset>
 
                 <DialogFooter>
-                    <Button type="button" variant="ghost" onClick={onFinished}>Cancelar</Button>
-                    <Button type="submit">Salvar Agendamento</Button>
+                    <Button type="button" variant="ghost" onClick={onFinished} disabled={isSending}>Cancelar</Button>
+                    <Button type="submit" disabled={isSending}>
+                        {isSending ? (
+                            <>
+                                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                Enviando...
+                            </>
+                        ) : (
+                            'Salvar Agendamento'
+                        )}
+                    </Button>
                 </DialogFooter>
             </form>
         </Form>
