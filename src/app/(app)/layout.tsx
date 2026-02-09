@@ -26,7 +26,6 @@ import {
   CreditCard,
   ChevronRight,
   Sparkles,
-  Building2,
   Settings as SettingsIcon, // Renamed to avoid conflict
 } from 'lucide-react';
 import Image from 'next/image';
@@ -452,7 +451,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <Building2 className="w-8 h-8 text-sidebar-primary" />
+            <Image
+              src="https://i.imgur.com/sgoiuiz.png"
+              alt="PJ EMPREENDIMENTOS Logo"
+              width={32}
+              height={32}
+              className="w-8 h-8"
+              data-ai-hint="logo"
+            />
             <span className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
               PJ EMPREENDIMENTOS - CRM
             </span>

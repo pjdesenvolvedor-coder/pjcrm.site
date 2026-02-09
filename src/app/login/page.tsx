@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { MessageSquare, Building2 } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -98,7 +99,14 @@ export default function LoginPage() {
       <Card className="mx-auto w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="mb-4 flex items-center justify-center gap-2">
-            <Building2 className="h-8 w-8 text-primary" />
+            <Image
+              src="https://i.imgur.com/sgoiuiz.png"
+              alt="PJ EMPREENDIMENTOS Logo"
+              width={32}
+              height={32}
+              className="h-8 w-8"
+              data-ai-hint="logo"
+            />
             <h1 className="text-2xl font-bold">PJ EMPREENDIMENTOS</h1>
           </div>
           <CardTitle className="text-2xl">Acessar CRM</CardTitle>
