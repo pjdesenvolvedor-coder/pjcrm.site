@@ -138,7 +138,7 @@ export default function GroupsPage() {
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle className="font-bold">Atenção</AlertTitle>
                     <AlertDescription>
-                    ⚠️ OBS: Você precisa ser administrador do grupo para solicitar o JID do grupo. 🔐👥📲
+                    ⚠️ Você precisa ser administrador do grupo para solicitar o JID do grupo. 🔐👥📲
                     </AlertDescription>
                 </Alert>
                 <div className="space-y-2">
