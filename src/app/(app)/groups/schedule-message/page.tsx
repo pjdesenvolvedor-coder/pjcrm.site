@@ -43,9 +43,9 @@ const scheduleSchema = z.object({
     jid: z.string().min(1, { message: "O JID do grupo é obrigatório." }),
     message: z.string().min(1, { message: "A mensagem é obrigatória." }),
     image: z.any(), // File upload handling is simplified for now
-    sendDate: z.string().min(8, { message: "A data de envio é obrigatória." }),
-    sendHour: z.string().min(1, { message: "A hora de envio é obrigatória." }),
-    sendMinute: z.string().min(1, { message: "O minuto de envio é obrigatório." }),
+    sendDate: z.string().min(10, { message: "A data é obrigatória no formato dd/mm/aaaa." }),
+    sendHour: z.string().min(1, { message: "A hora é obrigatória." }),
+    sendMinute: z.string().min(1, { message: "O minuto é obrigatório." }),
     repeatDaily: z.boolean().default(false),
 });
 
@@ -243,44 +243,53 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
                     </FormItem>
                     <div className='space-y-2'>
                         <Label>Data e Hora do Envio</Label>
-                        <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-start gap-2">
+                            <div className="flex-1">
                                 <FormField
                                     control={form.control}
                                     name="sendDate"
                                     render={({ field }) => (
                                     <FormItem>
-                                        <FormControl>
-                                            <Input placeholder="dd/mm/aaaa" {...field} className="pl-9" onChange={handleDateInputChange} />
-                                        </FormControl>
+                                        <div className="relative">
+                                            <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                            <FormControl>
+                                                <Input placeholder="dd/mm/aaaa" {...field} className="pl-9" onChange={handleDateInputChange} />
+                                            </FormControl>
+                                        </div>
+                                        <FormMessage />
                                     </FormItem>
                                     )}
                                 />
                             </div>
-                            <FormField
-                                control={form.control}
-                                name="sendHour"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormControl>
-                                        <Input className="w-20 text-center" {...field} />
-                                    </FormControl>
-                                </FormItem>
-                                )}
-                            />
-                            <span>:</span>
-                            <FormField
-                                control={form.control}
-                                name="sendMinute"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormControl>
-                                        <Input className="w-20 text-center" {...field} />
-                                    </FormControl>
-                                </FormItem>
-                                )}
-                            />
+                            <div className="w-20">
+                                <FormField
+                                    control={form.control}
+                                    name="sendHour"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormControl>
+                                            <Input className="w-full text-center" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                            </div>
+                            <span className="pt-2">:</span>
+                            <div className="w-20">
+                                <FormField
+                                    control={form.control}
+                                    name="sendMinute"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormControl>
+                                            <Input className="w-full text-center" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                            </div>
                         </div>
                         <div className="flex items-center space-x-2 pt-2">
                         <FormField
