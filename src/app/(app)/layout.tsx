@@ -483,7 +483,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     <Link href="/support">
                                         <span>Suporte</span>
                                         {supportCount > 0 && (
-                                            <Badge variant="secondary" className="ml-auto">
+                                            <Badge variant="secondary" className="ml-auto h-5 w-5 flex items-center justify-center p-0">
                                                 {supportCount}
                                             </Badge>
                                         )}
@@ -530,8 +530,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <CollapsibleContent>
                         <SidebarMenuSub>
                             <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings')}>
+                                <SidebarMenuSubButton asChild isActive={pathname === '/settings'}>
                                     <Link href="/settings">Token</Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/subscriptions')}>
+                                    <Link href="/settings/subscriptions">Assinaturas</Link>
                                 </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
@@ -640,3 +645,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    

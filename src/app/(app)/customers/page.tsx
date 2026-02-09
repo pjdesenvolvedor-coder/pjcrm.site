@@ -45,8 +45,8 @@ import {
 } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking, useDoc, addDocumentNonBlocking } from '@/firebase';
-import type { Client, Settings } from '@/lib/types';
+import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking, useDoc, addDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
+import type { Client, Settings, Subscription } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -79,10 +79,15 @@ const clientSchema = z.object({
 });
 
 function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>, onFinished: () => void }) {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user } = useFirebase();
   const { toast } = useToast();
   const isEditing = !!initialData?.id;
+
+  const subscriptionsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'subscriptions'), orderBy('name'));
+  }, [firestore, user]);
+  const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
   const form = useForm<z.infer<typeof clientSchema>>({
     resolver: zodResolver(clientSchema),
@@ -173,7 +178,39 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
           <TabsContent value="pagamento">
             <div className="space-y-4 py-6">
                 <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Quantidade</FormLabel><FormControl><Input {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
-                <FormField control={form.control} name="subscription" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Assinatura *</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="col-span-3"><SelectValue placeholder="Selecione uma assinatura" /></SelectTrigger></FormControl><SelectContent><SelectItem value="plano_mensal">Plano Mensal</SelectItem><SelectItem value="plano_trimestral">Plano Trimestral</SelectItem><SelectItem value="plano_anual">Plano Anual</SelectItem></SelectContent></Select><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <FormField
+                  control={form.control}
+                  name="subscription"
+                  render={({ field }) => (
+                    <FormItem className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel className="text-right">Assinatura *</FormLabel>
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          const selectedSub = subscriptions?.find(s => s.name === value);
+                          if (selectedSub) {
+                            form.setValue('amountPaid', selectedSub.value, { shouldValidate: true });
+                          }
+                        }}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Selecione uma assinatura" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {subscriptions?.map((sub) => (
+                            <SelectItem key={sub.id} value={sub.name}>
+                              {sub.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage className="col-start-2 col-span-3" />
+                    </FormItem>
+                  )}
+                />
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Meio</FormLabel><FormControl><div className="col-span-3 flex items-center gap-2"><Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button><Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button><Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button></div></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Valor Pago</FormLabel><FormControl><Input placeholder="R$ 0,00" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
             </div>
@@ -525,3 +562,5 @@ export default function CustomersPage() {
     </div>
   );
 }
+
+    

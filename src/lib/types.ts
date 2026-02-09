@@ -81,3 +81,12 @@ export type Message = {
 export type Settings = {
   webhookToken?: string;
 };
+
+export type Subscription = {
+  id: string;
+  userId: string;
+  name: string;
+  value: string;
+};
+
+    
