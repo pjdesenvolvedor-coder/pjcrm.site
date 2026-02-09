@@ -1,18 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { doc } from 'firebase/firestore';
+import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Send } from 'lucide-react';
+import { Send, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import type { Settings } from '@/lib/types';
+
 
 export default function GroupsPage() {
   const { toast } = useToast();
+  const { firestore, user } = useFirebase();
   const [groupCode, setGroupCode] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
+  const settingsDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid, 'settings', 'config');
+  }, [firestore, user]);
+
+  const { data: settings } = useDoc<Settings>(settingsDocRef);
 
   const handleGetGroupCode = async () => {
     if (!groupCode.trim()) {
@@ -23,14 +36,50 @@ export default function GroupsPage() {
       });
       return;
     }
+    
+    if (!settings?.webhookToken) {
+      toast({
+        variant: 'destructive',
+        title: 'Token não configurado',
+        description: 'Por favor, configure seu token de webhook na página de Configurações.',
+      });
+      return;
+    }
 
-    // Placeholder for API call
-    console.log('Submitting group code:', groupCode);
-    toast({
-      title: 'Código Enviado',
-      description: `O código "${groupCode}" foi enviado para processamento.`,
-    });
-    setGroupCode('');
+    setIsSending(true);
+
+    try {
+      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/9c5d6ca0-8469-48f3-9a40-115f4d712362', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          groupCode: groupCode,
+          token: settings.webhookToken,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao enviar para o webhook.');
+      }
+
+      toast({
+        title: 'Código Enviado',
+        description: `O código do grupo foi enviado com sucesso.`,
+      });
+      setGroupCode('');
+
+    } catch (error: any) {
+      console.error('Webhook error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro no Envio',
+        description: error.message || 'Não foi possível enviar o código para o webhook.',
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -63,11 +112,21 @@ export default function GroupsPage() {
                     placeholder="Insira o código do convite aqui..."
                     value={groupCode}
                     onChange={(e) => setGroupCode(e.target.value)}
+                    disabled={isSending}
                   />
                 </div>
-                <Button onClick={handleGetGroupCode} className="w-full">
-                  <Send className="mr-2 h-4 w-4" />
-                  Enviar
+                <Button onClick={handleGetGroupCode} className="w-full" disabled={isSending}>
+                   {isSending ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Enviar
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
