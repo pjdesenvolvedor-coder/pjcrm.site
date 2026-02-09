@@ -128,6 +128,21 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
         }
 
         date.setHours(parseInt(values.sendHour, 10), parseInt(values.sendMinute, 10));
+
+        const now = new Date();
+        const timeDifferenceInMs = date.getTime() - now.getTime();
+
+        if (timeDifferenceInMs < 0) {
+            toast({
+                variant: "destructive",
+                title: "Data/Hora inválida",
+                description: "O horário de envio não pode ser no passado.",
+            });
+            setIsSending(false);
+            return;
+        }
+        
+        const timeInMinutes = timeDifferenceInMs / (1000 * 60);
         const sendAtTimestamp = Timestamp.fromDate(date);
 
         let imageUrlDataUri: string | undefined = undefined;
@@ -162,13 +177,13 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
             token: settings.webhookToken,
             jid: values.jid,
             message: values.message,
-            sendAt: date.toISOString(),
+            waitTime: timeInMinutes.toFixed(2),
             repeatDaily: values.repeatDaily,
             imageUrl: imageUrlDataUri,
         };
 
         try {
-            const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/6b70ac73-9025-4ace-b7c9-24db23376c4c', {
+            const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/6b70ac73-9025-4ace-b7c9-24db23376c4c', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(webhookPayload)
