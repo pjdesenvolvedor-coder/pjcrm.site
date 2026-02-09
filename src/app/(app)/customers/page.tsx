@@ -56,6 +56,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
@@ -221,10 +222,11 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         </FormItem>
                     )}
                 />
-                {clientType && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
-                        <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
-                        <div className="md:col-span-3 space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
+                    <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
+                    <div className="md:col-span-3 space-y-2">
+                        <ScrollArea className="h-40 w-full rounded-md border">
+                           <div className="p-4 space-y-2">
                             {fields.map((item, index) => (
                                 <FormField
                                     key={item.id}
@@ -247,19 +249,21 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                                     )}
                                 />
                             ))}
+                           </div>
+                        </ScrollArea>
+                        {clientType && (
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="mt-2"
                                 onClick={() => append({ value: '' })}
                             >
                                 <Plus className="mr-2 h-4 w-4" />
                                 Adicionar Email
                             </Button>
-                        </div>
+                        )}
                     </div>
-                )}
+                </div>
             </div>
           </TabsContent>
           <TabsContent value="vencimento">
