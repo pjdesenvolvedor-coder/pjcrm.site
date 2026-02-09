@@ -87,6 +87,13 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   }, [firestore, user]);
   const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
+  const defaultEmails = useMemo(() => {
+    if (initialData?.email) {
+      return Array.isArray(initialData.email) ? initialData.email.map(e => ({ value: e })) : [{ value: initialData.email }];
+    }
+    return [{ value: '' }];
+  }, [initialData]);
+
   const form = useForm<z.infer<typeof clientSchema>>({
     resolver: zodResolver(clientSchema),
     defaultValues: {
@@ -94,12 +101,12 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       telegramUser: initialData?.telegramUser || '',
       phone: initialData?.phone || '',
       clientType: initialData?.clientType,
-      emails: initialData?.email ? (Array.isArray(initialData.email) ? initialData.email.map(e => ({ value: e })) : [{ value: initialData.email }]) : [{ value: '' }],
+      emails: defaultEmails,
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
       notes: initialData?.notes || '',
-      quantity: initialData?.quantity?.toString() || '1',
+      quantity: defaultEmails.length.toString(),
       subscription: initialData?.subscription || '',
       paymentMethod: initialData?.paymentMethod,
       amountPaid: initialData?.amountPaid || ''
@@ -121,6 +128,10 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing]);
+  
+  useEffect(() => {
+    form.setValue('quantity', fields.length.toString());
+  }, [fields, form]);
 
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
@@ -162,7 +173,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       clientType: values.clientType,
       dueDate: dueDateTimestamp,
       notes: values.notes,
-      quantity: values.quantity ? parseInt(values.quantity, 10) : 1,
+      quantity: values.emails.length,
       subscription: values.subscription,
       paymentMethod: values.paymentMethod,
       amountPaid: values.amountPaid,
@@ -287,7 +298,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                   name="dueDate"
                   render={({ field }) => (
                       <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                        <div />
+                        <FormLabel className="md:text-right">Data</FormLabel>
                         <div className='md:col-span-3'>
                            <div className="relative">
                             <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -307,13 +318,13 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                     )
                   }
                 />
-                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><div /><div className="md:col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Horário</Label><div className="md:col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
                 <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Adicione uma observação..." className="md:col-span-3 resize-none" {...field} /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
             </div>
           </TabsContent>
           <TabsContent value="pagamento">
             <div className="space-y-4 py-6">
-                <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Quantidade</FormLabel><FormControl><Input {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Quantidade</FormLabel><FormControl><Input {...field} readOnly className="md:col-span-3 bg-muted" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField
                   control={form.control}
                   name="subscription"
