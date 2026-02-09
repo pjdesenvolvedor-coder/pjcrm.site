@@ -399,7 +399,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
        return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
           <Badge variant="secondary" className="py-1 px-3 bg-red-100 text-red-800">
-            <WifiOff className="h-4 w-4 mr-2" />
+            <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
             Desconectado
           </Badge>
           <p className="text-sm text-muted-foreground">
@@ -502,11 +502,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <div className="group-data-[collapsible=icon]:hidden">
                       {liveStatus?.status === 'connected' ? (
                         <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-green-100 text-green-800 border-green-200">
+                          <div className="h-2 w-2 mr-1 rounded-full bg-green-500 animate-pulse"></div>
                           Conectado
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-red-100 text-red-800 border-red-200">
-                          Desconectado
+                           <div className="h-2 w-2 mr-1 rounded-full bg-red-500"></div>
+                           Desconectado
                         </Badge>
                       )}
                     </div>
