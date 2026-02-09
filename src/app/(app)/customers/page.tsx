@@ -111,6 +111,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     control: form.control,
     name: 'emails'
   });
+  
+  const clientType = form.watch('clientType');
 
   useEffect(() => {
     if (!isEditing) {
@@ -192,17 +194,17 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
           </TabsList>
           <TabsContent value="dados">
             <div className="space-y-4 py-6">
-                <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome do Cliente" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
-                <FormField control={form.control} name="telegramUser" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Usuário Telegram</FormLabel><FormControl><Input placeholder="@usuario_telegram (opcional)" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
-                <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Número *</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome do Cliente" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="telegramUser" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Usuário Telegram</FormLabel><FormControl><Input placeholder="@usuario_telegram (opcional)" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField
                     control={form.control}
                     name="clientType"
                     render={({ field }) => (
-                        <FormItem className="grid grid-cols-4 items-center gap-4">
-                            <FormLabel className="text-right">Tipo</FormLabel>
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                            <FormLabel className="md:text-right">Tipo</FormLabel>
                             <FormControl>
-                                <div className="col-span-3 flex items-center gap-2">
+                                <div className="md:col-span-3 flex items-center gap-2">
                                     {clientTypes.map((type) => (
                                         <Button
                                             type="button"
@@ -215,52 +217,54 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                                     ))}
                                 </div>
                             </FormControl>
-                            <FormMessage className="col-start-2 col-span-3" />
+                            <FormMessage className="md:col-start-2 md:col-span-3" />
                         </FormItem>
                     )}
                 />
-                <div className="grid grid-cols-4 items-start gap-4">
-                    <FormLabel className="text-right pt-2">Emails *</FormLabel>
-                    <div className="col-span-3 space-y-2">
-                        {fields.map((item, index) => (
-                            <FormField
-                                key={item.id}
-                                control={form.control}
-                                name={`emails.${index}.value`}
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <div className="flex items-center gap-2">
-                                            <FormControl>
-                                                <Input type="email" placeholder="email@exemplo.com" {...field} />
-                                            </FormControl>
-                                            {fields.length > 1 ? (
-                                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            ) : null}
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        ))}
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-2"
-                            onClick={() => append({ value: '' })}
-                        >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Adicionar Email
-                        </Button>
+                {clientType && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
+                        <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
+                        <div className="md:col-span-3 space-y-2">
+                            {fields.map((item, index) => (
+                                <FormField
+                                    key={item.id}
+                                    control={form.control}
+                                    name={`emails.${index}.value`}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <div className="flex items-center gap-2">
+                                                <FormControl>
+                                                    <Input type="email" placeholder="email@exemplo.com" {...field} />
+                                                </FormControl>
+                                                {fields.length > 1 ? (
+                                                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            ))}
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => append({ value: '' })}
+                            >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Adicionar Email
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
           </TabsContent>
           <TabsContent value="vencimento">
             <div className="space-y-4 py-6">
-                <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Definir</Label><div className="col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 3 }), 'dd/MM/yy'))}>3 meses</Button></div></div>
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Definir</Label><div className="md:col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 3 }), 'dd/MM/yy'))}>3 meses</Button></div></div>
                 <FormField
                   control={form.control}
                   name="dueDate"
@@ -274,9 +278,9 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                       }
                     }
                     return (
-                      <FormItem className="grid grid-cols-4 items-center gap-4">
+                      <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
                         <div />
-                        <div className='col-span-3'>
+                        <div className='md:col-span-3'>
                           <Popover>
                             <PopoverTrigger asChild>
                                <div className="relative">
@@ -302,24 +306,24 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                             </PopoverContent>
                           </Popover>
                         </div>
-                        <FormMessage className="col-start-2 col-span-3" />
+                        <FormMessage className="md:col-start-2 md:col-span-3" />
                       </FormItem>
                     )
                   }}
                 />
-                <div className="grid grid-cols-4 items-center gap-4"><div /><div className="col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
-                <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-start gap-4"><FormLabel className="text-right pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Adicione uma observação..." className="col-span-3 resize-none" {...field} /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><div /><div className="md:col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
+                <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Adicione uma observação..." className="md:col-span-3 resize-none" {...field} /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
             </div>
           </TabsContent>
           <TabsContent value="pagamento">
             <div className="space-y-4 py-6">
-                <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Quantidade</FormLabel><FormControl><Input {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Quantidade</FormLabel><FormControl><Input {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField
                   control={form.control}
                   name="subscription"
                   render={({ field }) => (
-                    <FormItem className="grid grid-cols-4 items-center gap-4">
-                      <FormLabel className="text-right">Assinatura *</FormLabel>
+                    <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                      <FormLabel className="md:text-right">Assinatura *</FormLabel>
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value);
@@ -331,7 +335,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         defaultValue={field.value}
                       >
                         <FormControl>
-                          <SelectTrigger className="col-span-3">
+                          <SelectTrigger className="md:col-span-3">
                             <SelectValue placeholder="Selecione uma assinatura" />
                           </SelectTrigger>
                         </FormControl>
@@ -343,18 +347,18 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage className="col-start-2 col-span-3" />
+                      <FormMessage className="md:col-start-2 md:col-span-3" />
                     </FormItem>
                   )}
                 />
-                <FormField control={form.control} name="paymentMethod" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Meio</FormLabel><FormControl><div className="col-span-3 flex items-center gap-2"><Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button><Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button><Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button></div></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="paymentMethod" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Meio</FormLabel><FormControl><div className="md:col-span-3 flex items-center gap-2"><Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button><Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button><Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField
                   control={form.control}
                   name="amountPaid"
                   render={({ field }) => (
-                    <FormItem className="grid grid-cols-4 items-center gap-4">
-                      <FormLabel className="text-right">Valor Pago</FormLabel>
-                      <div className="relative col-span-3">
+                    <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                      <FormLabel className="md:text-right">Valor Pago</FormLabel>
+                      <div className="relative md:col-span-3">
                         <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
                           R$
                         </span>
@@ -362,7 +366,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                           <Input {...field} placeholder="0,00" className="pl-9 w-full" />
                         </FormControl>
                       </div>
-                      <FormMessage className="col-start-2 col-span-3" />
+                      <FormMessage className="md:col-start-2 md:col-span-3" />
                     </FormItem>
                   )}
                 />
