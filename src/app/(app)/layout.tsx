@@ -121,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const supportCount = supportClients?.length ?? 0;
 
 
-  const fetchStatus = async () => {
+  const fetchStatus = React.useCallback(async () => {
     if (isLoadingSettings || !settings?.webhookToken) {
       setLiveStatus({ status: 'disconnected' });
       return;
@@ -163,32 +163,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       console.error('Status polling error:', error);
       setLiveStatus({ status: 'disconnected' });
     }
-  };
+  }, [isLoadingSettings, settings, connectionStatus, setConnectionStatus, setQrCode]);
 
   useEffect(() => {
-    const stopPolling = () => {
-      if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-      }
-    };
-    
-    // Only poll when the dialog is open and we have a token.
-    if (settings?.webhookToken && isZapConnectOpen && connectionStatus !== 'qr_code' && liveStatus?.status !== 'connected') {
-        fetchStatus(); // Initial fetch
-        pollingIntervalRef.current = setInterval(fetchStatus, 3000);
+    if (settings?.webhookToken) {
+      fetchStatus(); // Initial fetch
+      const intervalId = setInterval(fetchStatus, 5000); // Poll every 5 seconds
+      return () => clearInterval(intervalId);
     }
-
-    return () => stopPolling();
-  }, [settings?.webhookToken, isZapConnectOpen, connectionStatus, liveStatus?.status]);
+  }, [settings?.webhookToken, fetchStatus]);
 
   useEffect(() => {
     if (!isZapConnectOpen) {
-      // Stop polling when dialog closes and reset connection attempt state
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
+      // Reset dialog-specific state when it closes
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
@@ -511,7 +498,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                   <SidebarMenuButton tooltip={{ children: 'Conexão' }}>
                     <Webhook />
-                    <span>Conexão</span>
+                    <span className="flex-1">Conexão</span>
+                    <div className="group-data-[collapsible=icon]:hidden">
+                      {liveStatus?.status === 'connected' ? (
+                        <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-green-100 text-green-800 border-green-200">
+                          Conectado
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium">
+                          Desconectado
+                        </Badge>
+                      )}
+                    </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </DialogTrigger>
@@ -645,5 +643,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    
