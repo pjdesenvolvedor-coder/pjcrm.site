@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { collection, query, where, orderBy, doc } from 'firebase/firestore';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useFirebase, useUser, setDocumentNonBlocking, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import type { Client, Settings } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
@@ -68,13 +68,17 @@ export default function SupportPage() {
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
   
-  const supportClientsQuery = useMemoFirebase(() => {
+  const allClientsQuery = useMemoFirebase(() => {
     if (!user) return null;
     const clientsRef = collection(firestore, 'users', user.uid, 'clients');
-    return query(clientsRef, where("needsSupport", "==", true), orderBy("name"));
+    return query(clientsRef, orderBy("name"));
   }, [user, firestore]);
 
-  const { data: supportClients, isLoading } = useCollection<Client>(supportClientsQuery);
+  const { data: allClients, isLoading } = useCollection<Client>(allClientsQuery);
+
+  const supportClients = useMemo(() => {
+    return allClients?.filter(client => client.needsSupport);
+  }, [allClients]);
 
   const handleMarkAsCompleted = (client: Client) => {
     if (!user) return;
