@@ -454,7 +454,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-2">
             <Building2 className="w-8 h-8 text-sidebar-primary" />
             <span className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              PJ EMPREENDIMENTOS
+              PJ EMPREENDIMENTOS - CRM
             </span>
           </Link>
         </SidebarHeader>
