@@ -212,7 +212,24 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                   )}
                 />
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Meio</FormLabel><FormControl><div className="col-span-3 flex items-center gap-2"><Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button><Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button><Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button></div></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
-                <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Valor Pago</FormLabel><FormControl><Input placeholder="R$ 0,00" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <FormField
+                  control={form.control}
+                  name="amountPaid"
+                  render={({ field }) => (
+                    <FormItem className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel className="text-right">Valor Pago</FormLabel>
+                      <div className="relative col-span-3">
+                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
+                          R$
+                        </span>
+                        <FormControl>
+                          <Input {...field} placeholder="0,00" className="pl-9 w-full" />
+                        </FormControl>
+                      </div>
+                      <FormMessage className="col-start-2 col-span-3" />
+                    </FormItem>
+                  )}
+                />
             </div>
           </TabsContent>
         </Tabs>
@@ -562,5 +579,3 @@ export default function CustomersPage() {
     </div>
   );
 }
-
-    

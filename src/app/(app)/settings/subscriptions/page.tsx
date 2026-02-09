@@ -120,9 +120,14 @@ export default function SubscriptionsPage() {
                     render={({ field }) => (
                       <FormItem className="grid grid-cols-4 items-center gap-4">
                         <FormLabel className="text-right">Valor</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="R$ 0,00" className="col-span-3" />
-                        </FormControl>
+                        <div className="relative col-span-3">
+                            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
+                                R$
+                            </span>
+                            <FormControl>
+                                <Input {...field} placeholder="0,00" className="pl-9 w-full" />
+                            </FormControl>
+                        </div>
                         <FormMessage className="col-start-2 col-span-3" />
                       </FormItem>
                     )}
@@ -162,7 +167,7 @@ export default function SubscriptionsPage() {
                 {!isLoading && subscriptions?.map((subscription) => (
                   <TableRow key={subscription.id}>
                     <TableCell className="font-medium">{subscription.name}</TableCell>
-                    <TableCell>{subscription.value}</TableCell>
+                    <TableCell>R$ {subscription.value}</TableCell>
                     <TableCell className="text-right">
                        <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -199,5 +204,3 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
-
-    
