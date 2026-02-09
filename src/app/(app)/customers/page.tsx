@@ -68,7 +68,7 @@ const clientSchema = z.object({
   phone: z.string().min(1, 'Número é obrigatório'),
   clientType: z.array(z.enum(clientTypes)).optional(),
   email: z.string().email('Email inválido'),
-  dueDate: z.date().optional(),
+  dueDate: z.string().optional(),
   dueTimeHour: z.string().optional(),
   dueTimeMinute: z.string().optional(),
   notes: z.string().optional(),
@@ -97,7 +97,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       phone: initialData?.phone || '',
       clientType: initialData?.clientType || [],
       email: initialData?.email || '',
-      dueDate: initialData?.dueDate ? (initialData.dueDate as any).toDate() : undefined,
+      dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '18',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '19',
       notes: initialData?.notes || '',
@@ -108,16 +108,35 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     },
   });
 
+  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 6) value = value.slice(0, 6);
+  
+    let formatted = value;
+    if (value.length > 2) {
+      formatted = `${value.slice(0, 2)}/${value.slice(2)}`;
+    }
+    if (value.length > 4) {
+      formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
+    }
+    
+    form.setValue('dueDate', formatted);
+  };
+
   const onSubmit = (values: z.infer<typeof clientSchema>) => {
     if (!user) return;
     
     let dueDateTimestamp: Timestamp | undefined = undefined;
-    if (values.dueDate) {
-        const date = new Date(values.dueDate);
-        const hour = parseInt(values.dueTimeHour || '0', 10);
-        const minute = parseInt(values.dueTimeMinute || '0', 10);
-        date.setHours(hour, minute);
-        dueDateTimestamp = Timestamp.fromDate(date);
+    if (values.dueDate && values.dueDate.length === 8) {
+        const [day, month, year] = values.dueDate.split('/');
+        const date = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
+
+        if (!isNaN(date.getTime())) {
+            const hour = parseInt(values.dueTimeHour || '0', 10);
+            const minute = parseInt(values.dueTimeMinute || '0', 10);
+            date.setHours(hour, minute);
+            dueDateTimestamp = Timestamp.fromDate(date);
+        }
     }
 
     const clientData: Omit<Client, 'id' | 'status' | 'needsSupport'> = {
@@ -169,8 +188,53 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
           </TabsContent>
           <TabsContent value="vencimento">
             <div className="space-y-4 py-6">
-                <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Definir</Label><div className="col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { days: 15 }))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { months: 1 }))}>1 mês</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', add(new Date(), { months: 3 }))}>3 meses</Button></div></div>
-                <FormField control={form.control} name="dueDate" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><div /><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("col-span-3 justify-start text-left font-normal", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value ? format(field.value, "dd/MM/yyyy") : <span>Selecione uma data</span>}</Button></FormControl></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage className="col-start-2 col-span-3" /></FormItem> )} />
+                <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Definir</Label><div className="col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 3 }), 'dd/MM/yy'))}>3 meses</Button></div></div>
+                <FormField
+                  control={form.control}
+                  name="dueDate"
+                  render={({ field }) => {
+                    let selectedDate: Date | undefined;
+                    if (field.value && field.value.length === 8) {
+                      const [day, month, year] = field.value.split('/');
+                      const parsed = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
+                      if (!isNaN(parsed.getTime())) {
+                        selectedDate = parsed;
+                      }
+                    }
+                    return (
+                      <FormItem className="grid grid-cols-4 items-center gap-4">
+                        <div />
+                        <div className='col-span-3'>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                               <div className="relative">
+                                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <FormControl>
+                                  <Input
+                                    placeholder="dd/mm/aa"
+                                    {...field}
+                                    onChange={handleDateInputChange}
+                                    value={field.value || ''}
+                                    className="pl-9"
+                                  />
+                                </FormControl>
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                              <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={(date) => field.onChange(date ? format(date, 'dd/MM/yy') : '')}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <FormMessage className="col-start-2 col-span-3" />
+                      </FormItem>
+                    )
+                  }}
+                />
                 <div className="grid grid-cols-4 items-center gap-4"><div /><div className="col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
                 <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-start gap-4"><FormLabel className="text-right pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Adicione uma observação..." className="col-span-3 resize-none" {...field} /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
             </div>
