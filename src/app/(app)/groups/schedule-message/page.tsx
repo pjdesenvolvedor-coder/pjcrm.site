@@ -329,6 +329,19 @@ export default function ScheduleMessagePage() {
     }
   };
 
+  const translateStatus = (status: 'Scheduled' | 'Sent' | 'Error'): string => {
+    switch (status) {
+      case 'Scheduled':
+        return 'Agendado';
+      case 'Sent':
+        return 'Enviado';
+      case 'Error':
+        return 'Erro';
+      default:
+        return status;
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
@@ -378,7 +391,7 @@ export default function ScheduleMessagePage() {
                             <TableCell className="truncate max-w-xs">{msg.message}</TableCell>
                             <TableCell>{format(msg.sendAt.toDate(), 'dd/MM/yyyy HH:mm')}</TableCell>
                             <TableCell>
-                                <Badge variant={getStatusVariant(msg.status)} className={cn(msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30', msg.status === 'Sent' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{msg.status}</Badge>
+                                <Badge variant={getStatusVariant(msg.status)} className={cn(msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30', msg.status === 'Sent' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{translateStatus(msg.status)}</Badge>
                             </TableCell>
                             <TableCell className="text-right">
                                 <AlertDialog>
