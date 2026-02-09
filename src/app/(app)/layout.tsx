@@ -496,9 +496,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <DialogTrigger asChild>
                 <SidebarMenuItem>
-                  <SidebarMenuButton tooltip={{ children: 'Conexão' }}>
-                    <Webhook />
-                    <span className="flex-1">Conexão</span>
+                  <SidebarMenuButton tooltip={{ children: 'ZapConexão' }}>
+                    <Zap />
+                    <span className="flex-1">ZapConexão</span>
                     <div className="group-data-[collapsible=icon]:hidden">
                       {liveStatus?.status === 'connected' ? (
                         <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-green-100 text-green-800 border-green-200">
@@ -552,7 +552,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <DialogHeader className="flex flex-row items-center justify-between p-6 border-b">
                     <div className="flex items-center gap-2">
                         <Zap className="h-6 w-6 text-primary" />
-                        <DialogTitle className="text-xl font-bold">ZapConnect</DialogTitle>
+                        <DialogTitle className="text-xl font-bold">ZapConexão</DialogTitle>
                     </div>
                 </DialogHeader>
                 
