@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Send, RefreshCw, Copy } from 'lucide-react';
+import { Send, RefreshCw, Copy, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 export default function GroupsPage() {
@@ -133,6 +134,13 @@ export default function GroupsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <Alert className="border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle className="font-bold">Atenção</AlertTitle>
+                    <AlertDescription>
+                    ⚠️ OBS: Você precisa ser administrador do grupo para solicitar o JID do grupo. 🔐👥📲
+                    </AlertDescription>
+                </Alert>
                 <div className="space-y-2">
                   <Label htmlFor="group-code">Link do grupo do zap</Label>
                   <Input
