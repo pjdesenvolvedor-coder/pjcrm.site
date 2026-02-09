@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Send, RefreshCw } from 'lucide-react';
+import { Send, RefreshCw, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
 
@@ -19,6 +19,7 @@ export default function GroupsPage() {
   const { firestore, user } = useFirebase();
   const [groupCode, setGroupCode] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [jid, setJid] = useState('');
 
   const settingsDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -26,6 +27,23 @@ export default function GroupsPage() {
   }, [firestore, user]);
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
+
+  const handleCopyJid = () => {
+    if (!jid) return;
+    navigator.clipboard.writeText(jid).then(() => {
+        toast({
+            title: 'Copiado!',
+            description: 'O JID foi copiado para a área de transferência.',
+        });
+    }).catch(err => {
+        console.error('Failed to copy JID: ', err);
+        toast({
+            variant: 'destructive',
+            title: 'Falha ao copiar',
+            description: 'Não foi possível copiar o JID.',
+        });
+    });
+  };
 
   const handleGetGroupCode = async () => {
     if (!groupCode.trim()) {
@@ -47,6 +65,7 @@ export default function GroupsPage() {
     }
 
     setIsSending(true);
+    setJid('');
 
     try {
       const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/9c5d6ca0-8469-48f3-9a40-115f4d712362', {
@@ -61,13 +80,22 @@ export default function GroupsPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao enviar para o webhook.');
+        const errorText = await response.text();
+        throw new Error(`Falha no webhook: ${errorText}`);
       }
 
-      toast({
-        title: 'Código Enviado',
-        description: `O código do grupo foi enviado com sucesso.`,
-      });
+      const data = await response.json();
+
+      if (data && data.JID) {
+        setJid(data.JID);
+        toast({
+          title: 'JID Recebido!',
+          description: `O JID do grupo foi obtido com sucesso.`,
+        });
+      } else {
+        throw new Error('A resposta do webhook não continha um JID válido.');
+      }
+
       setGroupCode('');
 
     } catch (error: any) {
@@ -75,7 +103,7 @@ export default function GroupsPage() {
       toast({
         variant: 'destructive',
         title: 'Erro no Envio',
-        description: error.message || 'Não foi possível enviar o código para o webhook.',
+        description: error.message || 'Não foi possível se comunicar com o webhook.',
       });
     } finally {
       setIsSending(false);
@@ -128,6 +156,18 @@ export default function GroupsPage() {
                     </>
                   )}
                 </Button>
+                {jid && (
+                  <div className="pt-4 space-y-2">
+                    <Label htmlFor="jid-result">JID Retornado</Label>
+                    <div className="flex items-center gap-2">
+                        <Input id="jid-result" value={jid} readOnly className="bg-muted" />
+                        <Button variant="outline" size="icon" onClick={handleCopyJid}>
+                            <Copy className="h-4 w-4" />
+                            <span className="sr-only">Copiar JID</span>
+                        </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
