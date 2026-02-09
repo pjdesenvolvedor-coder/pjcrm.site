@@ -98,8 +98,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       clientType: initialData?.clientType || [],
       email: initialData?.email || '',
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
-      dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '18',
-      dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '19',
+      dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
+      dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
       notes: initialData?.notes || '',
       quantity: initialData?.quantity?.toString() || '1',
       subscription: initialData?.subscription || '',
@@ -107,6 +107,15 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       amountPaid: initialData?.amountPaid || ''
     },
   });
+
+  useEffect(() => {
+    if (!isEditing) {
+      const now = new Date();
+      form.setValue('dueTimeHour', now.getHours().toString().padStart(2, '0'));
+      form.setValue('dueTimeMinute', now.getMinutes().toString().padStart(2, '0'));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
 
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
