@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { FirebaseClientProvider } from '@/firebase';
 
 export const metadata: Metadata = {
-  title: 'PJ EMPREENDIMENTOS - CRM',
+  title: 'EMPREENDIMENTOS - CRM',
   description: 'CRM para gestão de clientes e empreendimentos.',
 };
 

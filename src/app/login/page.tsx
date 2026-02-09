@@ -101,13 +101,13 @@ export default function LoginPage() {
           <div className="mb-4 flex items-center justify-center gap-2">
             <Image
               src="https://i.imgur.com/sgoiuiz.png"
-              alt="PJ EMPREENDIMENTOS Logo"
+              alt="EMPREENDIMENTOS Logo"
               width={32}
               height={32}
               className="h-8 w-8"
               data-ai-hint="logo"
             />
-            <h1 className="text-2xl font-bold">PJ EMPREENDIMENTOS</h1>
+            <h1 className="text-2xl font-bold">EMPREENDIMENTOS</h1>
           </div>
           <CardTitle className="text-2xl">Acessar CRM</CardTitle>
           <CardDescription>

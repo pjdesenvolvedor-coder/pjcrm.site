@@ -453,14 +453,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-2">
             <Image
               src="https://i.imgur.com/sgoiuiz.png"
-              alt="PJ EMPREENDIMENTOS Logo"
+              alt="EMPREENDIMENTOS Logo"
               width={32}
               height={32}
               className="w-8 h-8"
               data-ai-hint="logo"
             />
             <span className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              PJ EMPREENDIMENTOS - CRM
+              EMPREENDIMENTOS - CRM
             </span>
           </Link>
         </SidebarHeader>
