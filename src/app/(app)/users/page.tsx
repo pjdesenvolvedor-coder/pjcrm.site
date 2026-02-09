@@ -244,8 +244,11 @@ export default function UsersPage() {
   }, [firestore, pagination.first, pagination.last]);
 
   useEffect(() => {
-    fetchUsers('initial');
-  }, [fetchUsers]);
+    if (firestore) {
+        fetchUsers('initial');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore]);
   
   const handleEditFinished = () => {
     setEditingUser(null);
