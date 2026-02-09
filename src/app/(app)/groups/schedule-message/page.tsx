@@ -168,7 +168,7 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
         };
 
         try {
-            const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/6b70ac73-9025-4ace-b7c9-24db23376c4c', {
+            const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/6b70ac73-9025-4ace-b7c9-24db23376c4c', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(webhookPayload)
