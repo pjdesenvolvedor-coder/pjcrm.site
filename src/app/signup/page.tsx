@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Building2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -122,12 +122,12 @@ export default function SignupPage() {
       <Card className="mx-auto w-full max-w-sm">
         <CardHeader className="text-center">
           <div className="mb-4 flex items-center justify-center gap-2">
-            <MessageSquare className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold">ZapConnect</h1>
+            <Building2 className="h-8 w-8 text-primary" />
+            <h1 className="text-2xl font-bold">PJ EMPREENDIMENTOS</h1>
           </div>
           <CardTitle className="text-2xl">Criar uma conta</CardTitle>
           <CardDescription>
-            Insira seus dados para começar a usar
+            Insira seus dados para criar seu acesso ao CRM.
           </CardDescription>
         </CardHeader>
         <CardContent>

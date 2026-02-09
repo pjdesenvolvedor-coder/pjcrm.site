@@ -26,6 +26,7 @@ import {
   CreditCard,
   ChevronRight,
   Sparkles,
+  Building2,
   Settings as SettingsIcon, // Renamed to avoid conflict
 } from 'lucide-react';
 import Image from 'next/image';
@@ -405,7 +406,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </>
               ) : (
                 <>
-                  <WifiOff className="h-4 w-4 mr-2" />
+                  <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
                   Desconectar
                 </>
               )}
@@ -451,9 +452,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <Sparkles className="w-8 h-8 text-sidebar-primary" />
-            <span className="text-xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              ZapConnect
+            <Building2 className="w-8 h-8 text-sidebar-primary" />
+            <span className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+              PJ EMPREENDIMENTOS
             </span>
           </Link>
         </SidebarHeader>
@@ -587,8 +588,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
 
             </SidebarMenu>
-            <DialogContent className="sm:max-w-sm p-0">
-                <DialogHeader className="flex flex-row items-center justify-between p-6 border-b">
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader className="p-6 border-b">
                     <div className="flex items-center gap-2">
                         <Zap className="h-6 w-6 text-primary" />
                         <DialogTitle className="text-xl font-bold">ZapConexão</DialogTitle>

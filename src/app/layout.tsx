@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils';
 import { FirebaseClientProvider } from '@/firebase';
 
 export const metadata: Metadata = {
-  title: 'ZapConnect SaaS',
-  description: 'Conecte-se e automatize seu atendimento no WhatsApp.',
+  title: 'PJ EMPREENDIMENTOS - CRM',
+  description: 'CRM para gestão de clientes e empreendimentos.',
 };
 
 export default function RootLayout({
