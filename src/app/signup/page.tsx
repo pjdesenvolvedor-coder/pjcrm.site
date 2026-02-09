@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useFirebase, setDocumentNonBlocking } from '@/firebase';
 import { FirebaseError } from "firebase/app";
+import { UserPermissions } from "@/lib/types";
 
 const signupSchema = z.object({
   firstName: z.string().min(1, { message: "O nome é obrigatório." }),
@@ -58,13 +59,27 @@ export default function SignupPage() {
       });
 
       const userDocRef = doc(firestore, "users", firebaseUser.uid);
+      
+      // By default, new users are Agents with only dashboard access.
+      // The first user should go to the Firebase Console to change their role to 'Admin'.
+      const defaultPermissions: UserPermissions = {
+        dashboard: true,
+        customers: false,
+        inbox: false,
+        automations: false,
+        zapconnect: false,
+        settings: false,
+        users: false,
+      };
+
       setDocumentNonBlocking(userDocRef, {
         id: firebaseUser.uid,
         firstName: values.firstName,
         lastName: values.lastName,
         email: firebaseUser.email,
         createdAt: serverTimestamp(),
-        role: "Admin", // First user is always an Admin
+        role: "Agent", 
+        permissions: defaultPermissions,
         avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`
       }, { merge: true });
 
@@ -190,5 +205,3 @@ export default function SignupPage() {
     </div>
   )
 }
-
-    

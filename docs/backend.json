@@ -31,7 +31,37 @@
         "role": {
           "type": "string",
           "description": "The role of the user.",
-          "enum": ["Admin", "Agent"]
+          "enum": [
+            "Admin",
+            "Agent"
+          ]
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Defines user access to different app sections.",
+          "properties": {
+            "dashboard": {
+              "type": "boolean"
+            },
+            "customers": {
+              "type": "boolean"
+            },
+            "inbox": {
+              "type": "boolean"
+            },
+            "automations": {
+              "type": "boolean"
+            },
+            "zapconnect": {
+              "type": "boolean"
+            },
+            "settings": {
+              "type": "boolean"
+            },
+            "users": {
+              "type": "boolean"
+            }
+          }
         }
       },
       "required": [

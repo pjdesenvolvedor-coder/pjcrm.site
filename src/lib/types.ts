@@ -1,5 +1,15 @@
 import { Timestamp } from 'firebase/firestore';
 
+export type UserPermissions = {
+  dashboard: boolean;
+  customers: boolean;
+  inbox: boolean;
+  automations: boolean;
+  zapconnect: boolean;
+  settings: boolean;
+  users: boolean;
+};
+
 export type UserProfile = {
   id: string;
   firstName: string;
@@ -8,6 +18,7 @@ export type UserProfile = {
   createdAt: Timestamp;
   role: 'Admin' | 'Agent';
   avatarUrl?: string;
+  permissions?: Partial<UserPermissions>;
 };
 
 export type Client = {

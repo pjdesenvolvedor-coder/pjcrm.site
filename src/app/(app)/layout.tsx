@@ -120,6 +120,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const supportCount = supportClients?.length ?? 0;
 
+  const permissions = useMemo(() => {
+    const defaultPermissions = {
+        dashboard: false,
+        customers: false,
+        inbox: false,
+        automations: false,
+        zapconnect: false,
+        settings: false,
+        users: false,
+    };
+
+    if (userProfile?.role === 'Admin') {
+        return Object.keys(defaultPermissions).reduce((acc, key) => {
+            acc[key as keyof typeof defaultPermissions] = true;
+            return acc;
+        }, {} as typeof defaultPermissions);
+    }
+    return { ...defaultPermissions, ...userProfile?.permissions };
+  }, [userProfile]);
 
   const fetchStatus = React.useCallback(async () => {
     if (isLoadingSettings || !settings?.webhookToken) {
@@ -342,7 +361,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
           <Badge variant="destructive" className="py-1 px-3">
-            <WifiOff className="h-4 w-4 mr-2" />
+            <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
             Falha na conexão
           </Badge>
           <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente.</p>
@@ -398,7 +417,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!liveStatus || liveStatus.status === 'disconnected') {
        return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="secondary" className="py-1 px-3 bg-red-100 text-red-800">
+          <Badge variant="destructive" className="py-1 px-3">
             <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
             Desconectado
           </Badge>
@@ -441,113 +460,131 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent>
           <Dialog open={isZapConnectOpen} onOpenChange={setZapConnectOpen}>
             <SidebarMenu>
-              <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip={{ children: 'Início' }}>
-                      <Link href="/dashboard"><Home /><span>Início</span></Link>
-                  </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <Collapsible>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Clientes'}}>
-                            <div className="flex items-center gap-2">
-                                <Users />
-                                <span>Clientes</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/customers')}>
-                                    <Link href="/customers">Todos os Clientes</Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/support')}>
-                                    <Link href="/support">
-                                        <span>Suporte</span>
-                                        {supportCount > 0 && (
-                                            <Badge variant="secondary" className="ml-auto h-5 w-5 flex items-center justify-center p-0">
-                                                {supportCount}
-                                            </Badge>
-                                        )}
-                                    </Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'Inbox' }}>
-                      <Link href="/inbox"><MessageSquare /><span>Inbox</span></Link>
-                  </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/automations'} tooltip={{ children: 'Automações' }}>
-                      <Link href="/automations"><Bot /><span>Automações</span></Link>
-                  </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <DialogTrigger asChild>
+              {permissions.dashboard && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton tooltip={{ children: 'ZapConexão' }}>
-                    <Zap />
-                    <span className="flex-1">ZapConexão</span>
-                    <div className="group-data-[collapsible=icon]:hidden">
-                      {liveStatus?.status === 'connected' ? (
-                        <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-green-100 text-green-800 border-green-200">
-                          <div className="h-2 w-2 mr-1 rounded-full bg-green-500 animate-pulse"></div>
-                          Conectado
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-red-100 text-red-800 border-red-200">
-                           <div className="h-2 w-2 mr-1 rounded-full bg-red-500"></div>
-                           Desconectado
-                        </Badge>
-                      )}
-                    </div>
-                  </SidebarMenuButton>
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip={{ children: 'Início' }}>
+                        <Link href="/dashboard"><Home /><span>Início</span></Link>
+                    </SidebarMenuButton>
                 </SidebarMenuItem>
-              </DialogTrigger>
+              )}
 
-              <SidebarMenuItem>
-                <Collapsible>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Configurações'}}>
-                            <div className="flex items-center gap-2">
-                                <SettingsIcon />
-                                <span>Configurações</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={pathname === '/settings'}>
-                                    <Link href="/settings">Token</Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/subscriptions')}>
-                                    <Link href="/settings/subscriptions">Assinaturas</Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={pathname.startsWith('/users')}>
-                                    <Link href="/users">Gerenciamento de Usuários</Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
-              </SidebarMenuItem>
+              {permissions.customers && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Clientes'}}>
+                              <div className="flex items-center gap-2">
+                                  <Users />
+                                  <span>Clientes</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                              <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/customers')}>
+                                      <Link href="/customers">Todos os Clientes</Link>
+                                  </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/support')}>
+                                      <Link href="/support">
+                                          <span>Suporte</span>
+                                          {supportCount > 0 && (
+                                              <Badge variant="secondary" className="ml-auto h-5 w-5 flex items-center justify-center p-0">
+                                                  {supportCount}
+                                              </Badge>
+                                          )}
+                                      </Link>
+                                  </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+              
+              {permissions.inbox && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'Inbox' }}>
+                        <Link href="/inbox"><MessageSquare /><span>Inbox</span></Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              
+              {permissions.automations && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === '/automations'} tooltip={{ children: 'Automações' }}>
+                        <Link href="/automations"><Bot /><span>Automações</span></Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.zapconnect && (
+                <DialogTrigger asChild>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip={{ children: 'ZapConexão' }}>
+                      <Zap />
+                      <span className="flex-1">ZapConexão</span>
+                      <div className="group-data-[collapsible=icon]:hidden">
+                        {liveStatus?.status === 'connected' ? (
+                          <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-green-100 text-green-800 border-green-200">
+                            <div className="h-2 w-2 mr-1 rounded-full bg-green-500 animate-pulse"></div>
+                            Conectado
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="py-0.5 px-2 text-xs font-medium">
+                            <div className="h-2 w-2 mr-1 rounded-full bg-red-500"></div>
+                            Desconectado
+                          </Badge>
+                        )}
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </DialogTrigger>
+              )}
+
+              {(permissions.settings || permissions.users) && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Configurações'}}>
+                              <div className="flex items-center gap-2">
+                                  <SettingsIcon />
+                                  <span>Configurações</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                              {permissions.settings && (
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings'}>
+                                        <Link href="/settings">Token</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                              {permissions.settings && (
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/subscriptions')}>
+                                        <Link href="/settings/subscriptions">Assinaturas</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                              {permissions.users && (
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/users')}>
+                                        <Link href="/users">Gerenciamento de Usuários</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
 
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm p-0">

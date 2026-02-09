@@ -1,6 +1,6 @@
 'use client';
 
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -26,26 +26,168 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase } from '@/firebase';
-import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot } from 'firebase/firestore';
-import type { UserProfile } from '@/lib/types';
+import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
+import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc } from 'firebase/firestore';
+import type { UserProfile, UserPermissions } from '@/lib/types';
 import { useState, useCallback, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
-const userSchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório'),
-  email: z.string().email('Email inválido'),
-  role: z.enum(['Admin', 'Agent']),
+
+const permissionsSchema = z.object({
+  dashboard: z.boolean().default(false),
+  customers: z.boolean().default(false),
+  inbox: z.boolean().default(false),
+  automations: z.boolean().default(false),
+  zapconnect: z.boolean().default(false),
+  settings: z.boolean().default(false),
+  users: z.boolean().default(false),
 });
+
+const userFormSchema = z.object({
+  role: z.enum(['Admin', 'Agent']),
+  permissions: permissionsSchema,
+});
+
+type UserFormData = z.infer<typeof userFormSchema>;
+
+const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
+    { key: 'dashboard', label: 'Início' },
+    { key: 'customers', label: 'Clientes & Suporte' },
+    { key: 'inbox', label: 'Inbox' },
+    { key: 'automations', label: 'Automações' },
+    { key: 'zapconnect', label: 'ZapConexão' },
+    { key: 'settings', label: 'Configurações (Token & Assinaturas)' },
+    { key: 'users', label: 'Gerenciamento de Usuários' },
+];
+
+function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () => void }) {
+    const { firestore, user: currentUser } = useFirebase();
+    const { toast } = useToast();
+
+    const form = useForm<UserFormData>({
+        resolver: zodResolver(userFormSchema),
+        defaultValues: {
+            role: user.role,
+            permissions: {
+                dashboard: user.permissions?.dashboard ?? true,
+                customers: user.permissions?.customers ?? false,
+                inbox: user.permissions?.inbox ?? false,
+                automations: user.permissions?.automations ?? false,
+                zapconnect: user.permissions?.zapconnect ?? false,
+                settings: user.permissions?.settings ?? false,
+                users: user.permissions?.users ?? false,
+            },
+        },
+    });
+
+    const role = form.watch('role');
+
+    useEffect(() => {
+        if (role === 'Admin') {
+            permissionLabels.forEach(({ key }) => {
+                form.setValue(`permissions.${key}`, true);
+            });
+        }
+    }, [role, form]);
+
+
+    const onSubmit = (data: UserFormData) => {
+        const userDocRef = doc(firestore, "users", user.id);
+        
+        const finalPermissions = role === 'Admin' 
+            ? permissionLabels.reduce((acc, p) => ({ ...acc, [p.key]: true }), {})
+            : data.permissions;
+
+        setDocumentNonBlocking(userDocRef, { 
+            role: data.role,
+            permissions: finalPermissions,
+        }, { merge: true });
+
+        toast({
+            title: "Usuário Atualizado!",
+            description: `As permissões para ${user.firstName} foram salvas.`
+        });
+        onFinished();
+    };
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <DialogHeader>
+                    <DialogTitle>Editar Usuário: {user.firstName} {user.lastName}</DialogTitle>
+                    <DialogDescription>
+                        Defina a função e as permissões de acesso para este usuário.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Função</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={user.id === currentUser?.uid}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione uma função" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="Agent">Agente</SelectItem>
+                                    <SelectItem value="Admin">Admin</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {user.id === currentUser?.uid && <p className="text-xs text-muted-foreground pt-1">Você não pode alterar sua própria função.</p>}
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
+                <div>
+                    <Label>Permissões de Acesso</Label>
+                    <div className="space-y-2 rounded-md border p-4 mt-2">
+                        {permissionLabels.map(({ key, label }) => (
+                            <FormField
+                                key={key}
+                                control={form.control}
+                                name={`permissions.${key}`}
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between">
+                                        <FormLabel className="font-normal">{label}</FormLabel>
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                                disabled={role === 'Admin'}
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button type="button" variant="ghost" onClick={onFinished}>Cancelar</Button>
+                    <Button type="submit">Salvar Alterações</Button>
+                </DialogFooter>
+            </form>
+        </Form>
+    );
+}
 
 const PAGE_SIZE = 15;
 
 export default function UsersPage() {
-  const { firestore } = useFirebase();
-  const [open, setOpen] = useState(false);
+  const { firestore, user: currentUser } = useFirebase();
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,15 +197,6 @@ export default function UsersPage() {
   }>({ first: null, last: null });
   const [hasPrevPage, setHasPrevPage] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
-  
-  const form = useForm<z.infer<typeof userSchema>>({
-    resolver: zodResolver(userSchema),
-    defaultValues: {
-      name: '',
-      email: '',
-      role: 'Agent',
-    },
-  });
 
   const fetchUsers = useCallback(async (dir: 'next' | 'prev' | 'initial') => {
     setIsLoading(true);
@@ -113,15 +246,16 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers('initial');
   }, [fetchUsers]);
+  
+  const handleEditFinished = () => {
+    setEditingUser(null);
+    fetchUsers('initial'); // Re-fetch to show updated data
+  }
 
-  // TODO: Implement user invitation logic (e.g., via Firebase Functions)
-  // This form currently doesn't do anything.
-  const onSubmit = (values: z.infer<typeof userSchema>) => {
-    console.log("Inviting user:", values);
-    form.reset();
-    setOpen(false);
-  };
-
+  // TODO: Implement user deletion logic (e.g., via Firebase Functions)
+  const handleDeleteUser = (user: UserProfile) => {
+      console.log("Deleting user (not implemented):", user.id);
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -136,78 +270,7 @@ export default function UsersPage() {
             <Button variant="outline" size="sm" onClick={() => fetchUsers('next')} disabled={!hasNextPage || isLoading}>
                 Próximo
             </Button>
-            <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button size="sm" className="gap-1">
-                <PlusCircle className="h-4 w-4" />
-                Adicionar Usuário
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-            <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)}>
-                    <DialogHeader>
-                    <DialogTitle>Novo Usuário</DialogTitle>
-                    <DialogDescription>
-                        Convide um novo membro para sua equipe.
-                    </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-4">
-                                <FormLabel className="text-right">Nome</FormLabel>
-                                <FormControl>
-                                <Input {...field} placeholder="Nome Completo" className="col-span-3" />
-                                </FormControl>
-                                <FormMessage className="col-start-2 col-span-3" />
-                            </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="email"
-                            render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-4">
-                                <FormLabel className="text-right">Email</FormLabel>
-                                <FormControl>
-                                <Input {...field} type="email" placeholder="m@example.com" className="col-span-3" />
-                                </FormControl>
-                                <FormMessage className="col-start-2 col-span-3" />
-                            </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="role"
-                            render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-4">
-                                <FormLabel className="text-right">Função</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl>
-                                        <SelectTrigger className="col-span-3">
-                                            <SelectValue placeholder="Selecione uma função" />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="Agent">Agente</SelectItem>
-                                        <SelectItem value="Admin">Admin</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage className="col-start-2 col-span-3" />
-                            </FormItem>
-                            )}
-                        />
-                    </div>
-                    <DialogFooter>
-                    <Button type="submit">Convidar</Button>
-                    </DialogFooter>
-                </form>
-                </Form>
-            </DialogContent>
-            </Dialog>
+            <p className="text-sm text-muted-foreground">Novos usuários se cadastram na página de <a href="/signup" className="underline">cadastro</a>.</p>
         </div>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
@@ -224,9 +287,7 @@ export default function UsersPage() {
                 <TableRow>
                   <TableHead>Usuário</TableHead>
                   <TableHead>Função</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Ações</span>
-                  </TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -256,8 +317,25 @@ export default function UsersPage() {
                     <TableCell>
                       <Badge variant={user.role === 'Admin' ? 'destructive' : 'outline'}>{user.role}</Badge>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">Remover</Button>
+                    <TableCell className="text-right space-x-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
+                       <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" disabled={user.id === currentUser?.uid}>Remover</Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Essa ação não pode ser desfeita. A exclusão de usuários precisa ser implementada com segurança no backend.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteUser(user)}>Continuar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -271,6 +349,12 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </main>
+
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent className="sm:max-w-md">
+            {editingUser && <UserEditForm user={editingUser} onFinished={handleEditFinished} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
