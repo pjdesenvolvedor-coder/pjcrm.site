@@ -211,7 +211,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                                             type="button"
                                             variant={field.value === type ? 'default' : 'outline'}
                                             key={type}
-                                            onClick={() => field.onChange(type)}
+                                            onClick={() => field.onChange(field.value === type ? undefined : type)}
                                         >
                                             {type}
                                         </Button>
@@ -225,42 +225,57 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
                     <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
                     <div className="md:col-span-3 space-y-2">
-                        <ScrollArea className="h-40 w-full rounded-md border">
-                           <div className="p-4 space-y-2">
-                            {fields.map((item, index) => (
-                                <FormField
-                                    key={item.id}
-                                    control={form.control}
-                                    name={`emails.${index}.value`}
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <div className="flex items-center gap-2">
-                                                <FormControl>
-                                                    <Input type="email" placeholder="email@exemplo.com" {...field} />
-                                                </FormControl>
-                                                {fields.length > 1 ? (
-                                                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
-                                                ) : null}
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            ))}
-                           </div>
-                        </ScrollArea>
-                        {clientType && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => append({ value: '' })}
-                            >
-                                <Plus className="mr-2 h-4 w-4" />
-                                Adicionar Email
-                            </Button>
+                        {!clientType ? (
+                             <FormField
+                                control={form.control}
+                                name="emails.0.value"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormControl>
+                                            <Input type="email" placeholder="email@exemplo.com" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        ) : (
+                            <>
+                                <ScrollArea className="h-40 w-full rounded-md border">
+                                <div className="p-4 space-y-2">
+                                    {fields.map((item, index) => (
+                                        <FormField
+                                            key={item.id}
+                                            control={form.control}
+                                            name={`emails.${index}.value`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-2">
+                                                        <FormControl>
+                                                            <Input type="email" placeholder="email@exemplo.com" {...field} />
+                                                        </FormControl>
+                                                        {fields.length > 1 ? (
+                                                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        ) : null}
+                                                    </div>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    ))}
+                                </div>
+                                </ScrollArea>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => append({ value: '' })}
+                                >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Adicionar Email
+                                </Button>
+                            </>
                         )}
                     </div>
                 </div>
