@@ -55,7 +55,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import Image from 'next/image';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
@@ -95,7 +95,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       telegramUser: initialData?.telegramUser || '',
       phone: initialData?.phone || '',
       clientType: initialData?.clientType,
-      emails: initialData?.email ? initialData.email.map(e => ({ value: e })) : [{ value: '' }],
+      emails: initialData?.email ? (Array.isArray(initialData.email) ? initialData.email : [initialData.email]).map(e => ({ value: e })) : [{ value: '' }],
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
@@ -681,7 +681,7 @@ export default function CustomersPage() {
                           {client.name}
                         </div>
                       </TableCell>
-                      <TableCell>{client.email.join(', ')}</TableCell>
+                      <TableCell>{Array.isArray(client.email) ? client.email.join(', ') : client.email}</TableCell>
                       <TableCell><Badge variant={getStatusVariant(client.status)} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{client.status}</Badge></TableCell>
                       <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                       <TableCell>{client.clientType}</TableCell>

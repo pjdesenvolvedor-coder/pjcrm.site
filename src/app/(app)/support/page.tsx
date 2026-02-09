@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { collection, query, orderBy, doc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, where } from 'firebase/firestore';
 import { useFirebase, useUser, setDocumentNonBlocking, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import type { Client, Settings } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
@@ -68,17 +68,13 @@ export default function SupportPage() {
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
   
-  const allClientsQuery = useMemoFirebase(() => {
+  const supportClientsQuery = useMemoFirebase(() => {
     if (!user) return null;
     const clientsRef = collection(firestore, 'users', user.uid, 'clients');
-    return query(clientsRef, orderBy("name"));
+    return query(clientsRef, where("needsSupport", "==", true));
   }, [user, firestore]);
 
-  const { data: allClients, isLoading } = useCollection<Client>(allClientsQuery);
-
-  const supportClients = useMemo(() => {
-    return allClients?.filter(client => client.needsSupport);
-  }, [allClients]);
+  const { data: supportClients, isLoading } = useCollection<Client>(supportClientsQuery);
 
   const handleMarkAsCompleted = (client: Client) => {
     if (!user) return;
@@ -187,7 +183,9 @@ export default function SupportPage() {
                     <div className="mt-6">
                         <h4 className="font-semibold text-sm">Contatos de Suporte:</h4>
                         <ul className="mt-2 list-disc list-inside text-muted-foreground text-sm">
-                            <li>{client.email}</li>
+                            {client.email && (Array.isArray(client.email) ? client.email : [client.email]).map((email, i) => (
+                              <li key={i}>{email}</li>
+                            ))}
                         </ul>
                     </div>
                 </CardContent>
