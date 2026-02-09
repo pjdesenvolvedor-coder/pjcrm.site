@@ -49,8 +49,6 @@ import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking
 import type { Client, Settings, Subscription } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -96,7 +94,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       telegramUser: initialData?.telegramUser || '',
       phone: initialData?.phone || '',
       clientType: initialData?.clientType,
-      emails: initialData?.email ? (Array.isArray(initialData.email) ? initialData.email : [initialData.email]).map(e => ({ value: e })) : [{ value: '' }],
+      emails: initialData?.email ? (Array.isArray(initialData.email) ? initialData.email.map(e => ({ value: e })) : [{ value: initialData.email }]) : [{ value: '' }],
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
@@ -287,48 +285,27 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField
                   control={form.control}
                   name="dueDate"
-                  render={({ field }) => {
-                    let selectedDate: Date | undefined;
-                    if (field.value && field.value.length === 8) {
-                      const [day, month, year] = field.value.split('/');
-                      const parsed = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
-                      if (!isNaN(parsed.getTime())) {
-                        selectedDate = parsed;
-                      }
-                    }
-                    return (
+                  render={({ field }) => (
                       <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
                         <div />
                         <div className='md:col-span-3'>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                               <div className="relative">
-                                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <FormControl>
-                                  <Input
-                                    placeholder="dd/mm/aa"
-                                    {...field}
-                                    onChange={handleDateInputChange}
-                                    value={field.value || ''}
-                                    className="pl-9"
-                                  />
-                                </FormControl>
-                              </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                              <Calendar
-                                mode="single"
-                                selected={selectedDate}
-                                onSelect={(date) => field.onChange(date ? format(date, 'dd/MM/yy') : '')}
-                                initialFocus
+                           <div className="relative">
+                            <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                placeholder="dd/mm/aa"
+                                {...field}
+                                onChange={handleDateInputChange}
+                                value={field.value || ''}
+                                className="pl-9"
                               />
-                            </PopoverContent>
-                          </Popover>
+                            </FormControl>
+                          </div>
                         </div>
                         <FormMessage className="md:col-start-2 md:col-span-3" />
                       </FormItem>
                     )
-                  }}
+                  }
                 />
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><div /><div className="md:col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
                 <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Adicione uma observação..." className="md:col-span-3 resize-none" {...field} /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
