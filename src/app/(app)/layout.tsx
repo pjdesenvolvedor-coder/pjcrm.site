@@ -228,7 +228,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
   
-  const userAvatar = userProfile?.avatarUrl || "https://picsum.photos/seed/1/40/40";
+  const userAvatar = (liveStatus?.status === 'connected' && liveStatus.profilePicUrl) ? liveStatus.profilePicUrl : (userProfile?.avatarUrl || "https://picsum.photos/seed/1/40/40");
 
   const handleConnect = async () => {
     if (!settings?.webhookToken) {
