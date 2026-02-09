@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Settings as SettingsIcon, // Renamed to avoid conflict
   Contact,
+  Building,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -523,9 +524,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.groups && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/groups'} tooltip={{ children: 'Grupos' }}>
-                        <Link href="/groups"><Users /><span>Grupos</span></Link>
-                    </SidebarMenuButton>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Grupos'}}>
+                              <div className="flex items-center gap-2">
+                                  <Users />
+                                  <span>Grupos</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/get-jid')}>
+                                        <Link href="/groups/get-jid">Obter JID Grupo</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/schedule-message')}>
+                                        <Link href="/groups/schedule-message">Agendar Mensagem</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
                 </SidebarMenuItem>
               )}
 
