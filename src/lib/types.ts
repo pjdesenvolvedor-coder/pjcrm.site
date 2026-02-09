@@ -14,12 +14,12 @@ export type Client = {
   id: string;
   userId: string;
   name: string;
-  email: string;
+  email: string[];
   phone: string;
   dueDate: Timestamp;
   status: 'Ativo' | 'Inativo' | 'Vencido';
   telegramUser?: string;
-  clientType?: ('PACOTE' | 'REVENDA')[];
+  clientType?: 'PACOTE' | 'REVENDA';
   notes?: string;
   quantity?: number;
   subscription?: string;
@@ -88,5 +88,3 @@ export type Subscription = {
   name: string;
   value: string;
 };
-
-    

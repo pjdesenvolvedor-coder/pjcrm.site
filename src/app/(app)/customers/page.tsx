@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect, useCallback } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus } from 'lucide-react';
 import { add, format } from 'date-fns';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { collection, Timestamp, doc, query, orderBy, limit, getDocs, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot } from 'firebase/firestore';
@@ -49,7 +49,6 @@ import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking
 import type { Client, Settings, Subscription } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,8 +65,8 @@ const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   telegramUser: z.string().optional(),
   phone: z.string().min(1, 'Número é obrigatório'),
-  clientType: z.array(z.enum(clientTypes)).optional(),
-  email: z.string().email('Email inválido'),
+  clientType: z.enum(clientTypes).optional(),
+  emails: z.array(z.object({ value: z.string().email('Email inválido') })).min(1, { message: 'Pelo menos um email é obrigatório.'}),
   dueDate: z.string().optional(),
   dueTimeHour: z.string().optional(),
   dueTimeMinute: z.string().optional(),
@@ -95,8 +94,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       name: initialData?.name || '',
       telegramUser: initialData?.telegramUser || '',
       phone: initialData?.phone || '',
-      clientType: initialData?.clientType || [],
-      email: initialData?.email || '',
+      clientType: initialData?.clientType,
+      emails: initialData?.email ? initialData.email.map(e => ({ value: e })) : [{ value: '' }],
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
@@ -106,6 +105,11 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       paymentMethod: initialData?.paymentMethod,
       amountPaid: initialData?.amountPaid || ''
     },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'emails'
   });
 
   useEffect(() => {
@@ -151,7 +155,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     const clientData: Omit<Client, 'id' | 'status' | 'needsSupport'> = {
       userId: user.uid,
       name: values.name,
-      email: values.email,
+      email: values.emails.map(email => email.value),
       phone: values.phone,
       telegramUser: values.telegramUser,
       clientType: values.clientType,
@@ -191,8 +195,67 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome do Cliente" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="telegramUser" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Usuário Telegram</FormLabel><FormControl><Input placeholder="@usuario_telegram (opcional)" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Número *</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
-                <div className="grid grid-cols-4 items-center gap-4"><div/><div className="col-span-3 flex items-center space-x-4">{clientTypes.map((item) => ( <FormField key={item} control={form.control} name="clientType" render={({ field }) => ( <FormItem key={item} className="flex flex-row items-start space-x-2 space-y-0"><FormControl><Checkbox checked={field.value?.includes(item)} onCheckedChange={(checked) => { return checked ? field.onChange([...(field.value || []), item]) : field.onChange(field.value?.filter((value) => value !== item)) }} /></FormControl><FormLabel className="font-normal text-sm">{item}</FormLabel></FormItem> )} /> ))}</div></div>
-                <FormField control={form.control} name="email" render={({ field }) => ( <FormItem className="grid grid-cols-4 items-center gap-4"><FormLabel className="text-right">Email *</FormLabel><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} className="col-span-3" /></FormControl><FormMessage className="col-start-2 col-span-3" /></FormItem>)} />
+                <FormField
+                    control={form.control}
+                    name="clientType"
+                    render={({ field }) => (
+                        <FormItem className="grid grid-cols-4 items-center gap-4">
+                            <FormLabel className="text-right">Tipo</FormLabel>
+                            <FormControl>
+                                <div className="col-span-3 flex items-center gap-2">
+                                    {clientTypes.map((type) => (
+                                        <Button
+                                            type="button"
+                                            variant={field.value === type ? 'default' : 'outline'}
+                                            key={type}
+                                            onClick={() => field.onChange(type)}
+                                        >
+                                            {type}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </FormControl>
+                            <FormMessage className="col-start-2 col-span-3" />
+                        </FormItem>
+                    )}
+                />
+                <div className="grid grid-cols-4 items-start gap-4">
+                    <FormLabel className="text-right pt-2">Emails *</FormLabel>
+                    <div className="col-span-3 space-y-2">
+                        {fields.map((item, index) => (
+                            <FormField
+                                key={item.id}
+                                control={form.control}
+                                name={`emails.${index}.value`}
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center gap-2">
+                                            <FormControl>
+                                                <Input type="email" placeholder="email@exemplo.com" {...field} />
+                                            </FormControl>
+                                            {fields.length > 1 ? (
+                                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        ))}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => append({ value: '' })}
+                        >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Adicionar Email
+                        </Button>
+                    </div>
+                </div>
             </div>
           </TabsContent>
           <TabsContent value="vencimento">
@@ -618,10 +681,10 @@ export default function CustomersPage() {
                           {client.name}
                         </div>
                       </TableCell>
-                      <TableCell>{client.email}</TableCell>
+                      <TableCell>{client.email.join(', ')}</TableCell>
                       <TableCell><Badge variant={getStatusVariant(client.status)} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{client.status}</Badge></TableCell>
                       <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
-                      <TableCell>{client.clientType?.join(', ')}</TableCell>
+                      <TableCell>{client.clientType}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                             <Button variant="outline" size="sm" onClick={() => openDialog('edit', client)}>
