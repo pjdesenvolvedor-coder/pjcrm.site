@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { collection, query, where, orderBy, doc, getDocs } from 'firebase/firestore';
-import { useFirebase, useUser, setDocumentNonBlocking, useDoc } from '@/firebase';
+import { useState, useMemo } from 'react';
+import { collection, query, where, orderBy, doc } from 'firebase/firestore';
+import { useFirebase, useUser, setDocumentNonBlocking, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import type { Client, Settings } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -58,43 +58,23 @@ export default function SupportPage() {
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
-  const [supportClients, setSupportClients] = useState<Client[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
   const [dialogClient, setDialogClient] = useState<Client | null>(null);
   const [isSending, setIsSending] = useState(false);
   
-  const settingsDocRef = useMemo(() => {
+  const settingsDocRef = useMemoFirebase(() => {
     if (!user) return null;
     return doc(firestore, 'users', user.uid, 'settings', 'config');
   }, [firestore, user]);
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
   
-  const fetchSupportClients = useCallback(async () => {
-    if (!user) {
-        setSupportClients([]);
-        setIsLoading(false);
-        return;
-    };
-    setIsLoading(true);
-    try {
-      const clientsRef = collection(firestore, 'users', user.uid, 'clients');
-      const q = query(clientsRef, where("needsSupport", "==", true), orderBy("name"));
-      const querySnapshot = await getDocs(q);
-      const clients = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
-      setSupportClients(clients);
-    } catch (error) {
-      console.error("Error fetching support clients:", error);
-      setSupportClients([]);
-    } finally {
-      setIsLoading(false);
-    }
+  const supportClientsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    const clientsRef = collection(firestore, 'users', user.uid, 'clients');
+    return query(clientsRef, where("needsSupport", "==", true), orderBy("name"));
   }, [user, firestore]);
 
-  useEffect(() => {
-    fetchSupportClients();
-  }, [fetchSupportClients]);
+  const { data: supportClients, isLoading } = useCollection<Client>(supportClientsQuery);
 
   const handleMarkAsCompleted = (client: Client) => {
     if (!user) return;
@@ -104,8 +84,6 @@ export default function SupportPage() {
         title: "Suporte Concluído",
         description: `O cliente ${client.name} foi removido da lista de suporte.`,
     });
-    // Optimistically update the UI
-    setSupportClients(prev => prev ? prev.filter(c => c.id !== client.id) : null);
   };
 
   const handleSendMessage = async (message: string) => {
