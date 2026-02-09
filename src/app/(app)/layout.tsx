@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -67,9 +67,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
-import type { UserProfile, Settings } from '@/lib/types';
+import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
+import { doc, collection, query, where } from 'firebase/firestore';
+import type { UserProfile, Settings, Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -110,6 +110,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [firestore, user]);
 
   const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
+
+  const supportClientsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'clients'), where('needsSupport', '==', true));
+  }, [firestore, user]);
+
+  const { data: supportClients } = useCollection<Client>(supportClientsQuery);
+
+  const supportCount = supportClients?.length ?? 0;
 
 
   const fetchStatus = async () => {
@@ -471,7 +480,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
                                 <SidebarMenuSubButton asChild isActive={pathname.startsWith('/support')}>
-                                    <Link href="/support">Suporte</Link>
+                                    <Link href="/support">
+                                        <span>Suporte</span>
+                                        {supportCount > 0 && (
+                                            <Badge variant="secondary" className="ml-auto">
+                                                {supportCount}
+                                            </Badge>
+                                        )}
+                                    </Link>
                                 </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                         </SidebarMenuSub>
