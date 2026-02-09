@@ -68,7 +68,7 @@ export default function GroupsPage() {
     setJid('');
 
     try {
-      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/9c5d6ca0-8469-48f3-9a40-115f4d712362', {
+      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/9c5d6ca0-8469-48f3-9a40-115f4d712362', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
