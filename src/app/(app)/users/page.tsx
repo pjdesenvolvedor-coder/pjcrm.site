@@ -44,6 +44,7 @@ const permissionsSchema = z.object({
   customers: z.boolean().default(false),
   inbox: z.boolean().default(false),
   automations: z.boolean().default(false),
+  groups: z.boolean().default(false),
   zapconnect: z.boolean().default(false),
   settings: z.boolean().default(false),
   users: z.boolean().default(false),
@@ -61,6 +62,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'customers', label: 'Clientes & Suporte' },
     { key: 'inbox', label: 'Inbox' },
     { key: 'automations', label: 'Automações' },
+    { key: 'groups', label: 'Grupos' },
     { key: 'zapconnect', label: 'ZapConexão' },
     { key: 'settings', label: 'Configurações (Token & Assinaturas)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
@@ -79,6 +81,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 customers: user.permissions?.customers ?? false,
                 inbox: user.permissions?.inbox ?? false,
                 automations: user.permissions?.automations ?? false,
+                groups: user.permissions?.groups ?? false,
                 zapconnect: user.permissions?.zapconnect ?? false,
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
@@ -200,6 +203,10 @@ export default function UsersPage() {
 
   const fetchUsers = useCallback(async (dir: 'next' | 'prev' | 'initial') => {
     setIsLoading(true);
+    if (!firestore) {
+        setIsLoading(false);
+        return;
+    }
     const usersRef = collection(firestore, 'users');
     let q;
   
@@ -244,11 +251,8 @@ export default function UsersPage() {
   }, [firestore, pagination.first, pagination.last]);
 
   useEffect(() => {
-    if (firestore) {
-        fetchUsers('initial');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore]);
+    fetchUsers('initial');
+  }, [fetchUsers]);
   
   const handleEditFinished = () => {
     setEditingUser(null);

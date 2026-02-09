@@ -68,6 +68,7 @@ export default function SignupPage() {
         customers: false,
         inbox: false,
         automations: false,
+        groups: false,
         zapconnect: false,
         settings: false,
         users: false,

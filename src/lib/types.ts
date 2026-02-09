@@ -5,6 +5,7 @@ export type UserPermissions = {
   customers: boolean;
   inbox: boolean;
   automations: boolean;
+  groups: boolean;
   zapconnect: boolean;
   settings: boolean;
   users: boolean;

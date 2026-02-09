@@ -9,24 +9,16 @@ import {
   UserCircle,
   LogOut,
   Zap,
-  WifiOff,
   Loader2,
   QrCode,
   Home,
   Users,
   Bot,
-  Flame,
   Send,
-  Tv,
-  FileText,
-  CheckSquare,
-  Megaphone,
-  Mail,
-  Webhook,
   CreditCard,
   ChevronRight,
-  Sparkles,
   Settings as SettingsIcon, // Renamed to avoid conflict
+  Contact,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -126,6 +118,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         customers: false,
         inbox: false,
         automations: false,
+        groups: false,
         zapconnect: false,
         settings: false,
         users: false,
@@ -481,7 +474,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Clientes'}}>
                               <div className="flex items-center gap-2">
-                                  <Users />
+                                  <Contact />
                                   <span>Clientes</span>
                               </div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
@@ -524,6 +517,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === '/automations'} tooltip={{ children: 'Automações' }}>
                         <Link href="/automations"><Bot /><span>Automações</span></Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.groups && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === '/groups'} tooltip={{ children: 'Grupos' }}>
+                        <Link href="/groups"><Users /><span>Grupos</span></Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
