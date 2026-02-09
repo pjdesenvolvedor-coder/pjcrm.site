@@ -19,7 +19,6 @@ import {
   ChevronRight,
   Settings as SettingsIcon, // Renamed to avoid conflict
   Contact,
-  Building,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -66,6 +65,7 @@ import type { UserProfile, Settings, Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -710,6 +710,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>{children}</SidebarInset>
+      <ScheduledMessageHandler />
     </SidebarProvider>
   );
 }

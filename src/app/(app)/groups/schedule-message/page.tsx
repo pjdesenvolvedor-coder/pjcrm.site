@@ -24,9 +24,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking, useDoc } from '@/firebase';
+import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, Timestamp, doc } from 'firebase/firestore';
-import type { ScheduledMessage, Settings } from '@/lib/types';
+import type { ScheduledMessage } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -57,13 +57,6 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
-
-    const settingsDocRef = useMemoFirebase(() => {
-        if (!user) return null;
-        return doc(firestore, 'users', user.uid, 'settings', 'config');
-    }, [firestore, user]);
-    const { data: settings } = useDoc<Settings>(settingsDocRef);
-
 
     const form = useForm<ScheduleFormData>({
         resolver: zodResolver(scheduleSchema),
@@ -107,15 +100,6 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
     const onSubmit = async (values: ScheduleFormData) => {
         if (!user) return;
 
-        if (!settings?.webhookToken) {
-            toast({
-                variant: "destructive",
-                title: "Token não configurado",
-                description: "Por favor, configure seu token de webhook na página de Configurações.",
-            });
-            return;
-        }
-
         setIsSending(true);
 
         const [day, month, year] = values.sendDate.split('/');
@@ -130,9 +114,7 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
         date.setHours(parseInt(values.sendHour, 10), parseInt(values.sendMinute, 10));
 
         const now = new Date();
-        const timeDifferenceInMs = date.getTime() - now.getTime();
-
-        if (timeDifferenceInMs < 0) {
+        if (date.getTime() < now.getTime()) {
             toast({
                 variant: "destructive",
                 title: "Data/Hora inválida",
@@ -142,7 +124,6 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
             return;
         }
         
-        const timeInMinutes = timeDifferenceInMs / (1000 * 60);
         const sendAtTimestamp = Timestamp.fromDate(date);
 
         let imageUrlDataUri: string | undefined = undefined;
@@ -168,44 +149,15 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
             message: values.message,
             sendAt: sendAtTimestamp,
             repeatDaily: values.repeatDaily,
-            status: 'Scheduled',
-            imageUrl: imagePreview || undefined
+            status: 'Scheduled' as const,
+            imageUrl: imageUrlDataUri || imagePreview || undefined,
         };
+        
         addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'scheduled_messages'), newScheduledMessageForFirestore);
 
-        const webhookPayload = {
-            token: settings.webhookToken,
-            jid: values.jid,
-            message: values.message,
-            waitTime: timeInMinutes.toFixed(2),
-            repeatDaily: values.repeatDaily,
-            imageUrl: imageUrlDataUri,
-        };
-
-        try {
-            const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/6b70ac73-9025-4ace-b7c9-24db23376c4c', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(webhookPayload)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Falha no webhook: ${errorText}`);
-            }
-
-            toast({ title: "Agendamento Enviado!", description: "Sua mensagem foi agendada com sucesso." });
-            onFinished();
-        } catch (error: any) {
-            console.error('Webhook error:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Erro no Envio',
-                description: error.message || 'Não foi possível se comunicar com o webhook.',
-            });
-        } finally {
-            setIsSending(false);
-        }
+        toast({ title: "Mensagem Agendada!", description: "Sua mensagem foi salva e será enviada no horário programado." });
+        onFinished();
+        setIsSending(false);
     };
 
     return (
@@ -336,7 +288,7 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
                         {isSending ? (
                             <>
                                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                                Enviando...
+                                Salvando...
                             </>
                         ) : (
                             'Salvar Agendamento'
@@ -426,7 +378,7 @@ export default function ScheduleMessagePage() {
                             <TableCell className="truncate max-w-xs">{msg.message}</TableCell>
                             <TableCell>{format(msg.sendAt.toDate(), 'dd/MM/yyyy HH:mm')}</TableCell>
                             <TableCell>
-                                <Badge variant={getStatusVariant(msg.status)} className={cn(msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30')}>{msg.status}</Badge>
+                                <Badge variant={getStatusVariant(msg.status)} className={cn(msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30', msg.status === 'Sent' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{msg.status}</Badge>
                             </TableCell>
                             <TableCell className="text-right">
                                 <AlertDialog>
