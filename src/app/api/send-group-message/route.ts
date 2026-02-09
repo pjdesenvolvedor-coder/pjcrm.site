@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'jid, message, and token are required' }, { status: 400 });
     }
 
-    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/6b70ac73-9025-4ace-b7c9-24db23376c4c';
+    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/6b70ac73-9025-4ace-b7c9-24db23376c4c';
 
     const webhookPayload: {
         jid: string;
