@@ -20,6 +20,7 @@ export type UserProfile = {
   role: 'Admin' | 'Agent';
   avatarUrl?: string;
   permissions?: Partial<UserPermissions>;
+  subscriptionPlan?: 'basic' | 'pro' | null;
 };
 
 export type Client = {

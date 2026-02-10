@@ -62,6 +62,14 @@
               "type": "boolean"
             }
           }
+        },
+        "subscriptionPlan": {
+          "type": "string",
+          "description": "The user's selected subscription plan.",
+          "enum": [
+            "basic",
+            "pro"
+          ]
         }
       },
       "required": [

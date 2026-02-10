@@ -214,7 +214,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, isUserLoading, router]);
 
-  if (isUserLoading || !user) {
+  useEffect(() => {
+    if (!isProfileLoading && userProfile && !userProfile.subscriptionPlan && userProfile.role !== 'Admin') {
+        router.push('/subscription');
+    }
+  }, [userProfile, isProfileLoading, router]);
+
+  if (isUserLoading || !user || isProfileLoading) {
     return (
         <div className="flex h-screen w-screen items-center justify-center">
             <div className="flex flex-col items-center gap-4">
