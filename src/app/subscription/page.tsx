@@ -140,7 +140,7 @@ export default function SubscriptionPage() {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
   
   const [isTrialDialogOpen, setIsTrialDialogOpen] = useState(false);
-  const [trialPlan, setTrialPlan] = useState<'pro'>('pro');
+  const [trialPlan, setTrialPlan] = useState<'basic' | 'pro'>('basic');
   const [isActivatingTrial, setIsActivatingTrial] = useState(false);
 
 
@@ -436,7 +436,7 @@ export default function SubscriptionPage() {
                 </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-                <Select onValueChange={(value: 'basic' | 'pro') => setTrialPlan(value as 'pro')} defaultValue={trialPlan}>
+                <Select onValueChange={(value: 'basic' | 'pro') => setTrialPlan(value)} defaultValue={trialPlan}>
                     <SelectTrigger className="h-11">
                         <SelectValue placeholder="Selecione um plano" />
                     </SelectTrigger>
@@ -446,7 +446,7 @@ export default function SubscriptionPage() {
                     </SelectContent>
                 </Select>
             </div>
-            <DialogFooter className="sm:justify-center">
+            <DialogFooter className="justify-center sm:justify-center">
                 <Button type="button" variant="ghost" onClick={() => setIsTrialDialogOpen(false)}>Cancelar</Button>
                 <Button onClick={handleActivateTrial} disabled={isActivatingTrial}>
                     {isActivatingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -464,7 +464,7 @@ export default function SubscriptionPage() {
           <Card className="flex flex-col rounded-xl shadow-lg">
             <CardHeader className="text-center">
               <CardTitle className="text-3xl font-bold">Básico</CardTitle>
-              <CardDescription className="px-6">Plano ideal para quem quer fazer disparos, extrair leads de grupos e programar mensagens para enviar em grupos!</CardDescription>
+              <CardDescription className="px-6">Ideal para quem quer fazer disparos, extrair leads de grupos e programar mensagens.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
               <div className="text-5xl font-bold text-center">R$ 69,90 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
