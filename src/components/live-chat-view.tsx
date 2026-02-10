@@ -91,7 +91,7 @@ function NewTicketDialog({ onFinished }: { onFinished: () => void }) {
 
 export function LiveChatView() {
     const { firestore } = useFirebase();
-    const { user } = useUser();
+    const { user, isUserLoading: isAuthLoading } = useUser();
     
     const userDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -101,23 +101,23 @@ export function LiveChatView() {
     
     const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
 
-    const isAdmin = !isProfileLoading && userProfile?.role === 'Admin';
+    const isAdmin = userProfile?.role === 'Admin';
     
     const ticketsQuery = useMemoFirebase(() => {
-        // Explicitly wait until the user profile has finished loading.
-        if (isProfileLoading || !user) {
+        // We must wait for both authentication and profile loading to complete.
+        if (isAuthLoading || isProfileLoading || !user) {
             return null;
         }
 
-        // Once loading is complete, userProfile will be populated or null (if doc doesn't exist).
-        // We can safely check the role.
-        if (userProfile?.role === 'Admin') {
+        // Once loading is complete, we can safely check the role.
+        if (isAdmin) {
+            // Admin gets all tickets.
             return query(collection(firestore, 'tickets'), orderBy('lastMessageAt', 'desc'));
         }
         
-        // For any non-admin user (or if profile somehow fails to load), construct the secure query.
+        // Non-admin user gets only their own tickets.
         return query(collection(firestore, 'tickets'), where('userId', '==', user.uid), orderBy('lastMessageAt', 'desc'));
-    }, [firestore, user, userProfile, isProfileLoading]); // Add isProfileLoading to dependencies.
+    }, [firestore, user, userProfile, isAuthLoading, isProfileLoading, isAdmin]);
 
 
     const { data: tickets, isLoading: isLoadingTickets } = useCollection<Ticket>(ticketsQuery);
@@ -153,6 +153,8 @@ export function LiveChatView() {
             default: return 'outline';
         }
     };
+    
+    const showLoadingSkeleton = isLoadingTickets || isProfileLoading || isAuthLoading;
 
     return (
         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 border-t h-[calc(100vh-4rem-1px)]">
@@ -177,7 +179,7 @@ export function LiveChatView() {
                     )}
                 </div>
                 <ScrollArea className="flex-1">
-                    {isLoadingTickets || isProfileLoading ? (
+                    {showLoadingSkeleton ? (
                         <div className="p-4 space-y-4">
                             {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
                         </div>
