@@ -427,8 +427,8 @@ export default function SubscriptionPage() {
       />
       <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
         <DialogContent className="sm:max-w-md">
-            <DialogHeader className="items-center text-center pt-4">
-                <DialogTitle className="text-2xl">Escolha o plano para seu teste</DialogTitle>
+            <DialogHeader className="pt-4">
+                <DialogTitle className="text-2xl text-center">Escolha o plano para seu teste</DialogTitle>
                 <DialogDescription className="text-center">
                     Você terá 3 dias de acesso gratuito a todas as funcionalidades
                     <br />
@@ -524,14 +524,6 @@ export default function SubscriptionPage() {
                 </CardFooter>
             </Card>
         </div>
-
-        <div className="mt-12 text-center">
-          <Link href="/login" className={cn(buttonVariants({ variant: "ghost" }), "text-muted-foreground")}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Voltar para o login
-          </Link>
-        </div>
-
       </div>
     </>
   );
