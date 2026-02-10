@@ -46,7 +46,7 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (!isUserLoading && user) {
-      router.push('/dashboard');
+      router.push('/subscription');
     }
   }, [user, isUserLoading, router]);
 
@@ -88,7 +88,7 @@ export default function SignupPage() {
 
       toast({
         title: "Conta criada com sucesso!",
-        description: "Redirecionando para o painel...",
+        description: "Redirecionando para a escolha de planos...",
       });
       // The useEffect will handle redirection
     } catch (error) {
