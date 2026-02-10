@@ -1,9 +1,9 @@
 'use client';
 
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, CalendarIcon } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -25,16 +25,22 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc } from 'firebase/firestore';
+import { useFirebase, useUser, setDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc, where, Timestamp } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/lib/types';
 import { useState, useCallback, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format, differenceInSeconds } from 'date-fns';
 
 const permissionsSchema = z.object({
   dashboard: z.boolean().default(false),
@@ -50,6 +56,7 @@ const permissionsSchema = z.object({
 const userFormSchema = z.object({
   role: z.enum(['Admin', 'Agent']),
   permissions: permissionsSchema,
+  subscriptionEndDate: z.date().optional().nullable(),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -64,6 +71,66 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'settings', label: 'Configurações (Token & Assinaturas)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
 ];
+
+function UserClientCount({ userId }: { userId: string }) {
+  const { firestore } = useFirebase();
+  
+  const clientsQuery = useMemoFirebase(() => {
+    if (!firestore || !userId) return null;
+    const clientsRef = collection(firestore, 'users', userId, 'clients');
+    return query(clientsRef, where('status', '==', 'Ativo'));
+  }, [firestore, userId]);
+
+  const { data: activeClients, isLoading } = useCollection(clientsQuery);
+
+  if (isLoading) {
+    return <Skeleton className="h-5 w-5" />;
+  }
+
+  return <span>{activeClients?.length ?? 0}</span>;
+}
+
+function formatDuration(seconds: number) {
+    if (seconds < 0) return "Expirado";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    if (days > 0) return `${days}d ${hours}h`;
+    
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+
+    return `${minutes}m`;
+}
+
+function SubscriptionCell({ endDate }: { endDate?: Timestamp }) {
+  const [remainingTime, setRemainingTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!endDate) {
+      setRemainingTime("-");
+      return;
+    }
+
+    const subscriptionEndDate = endDate.toDate();
+
+    const updateRemainingTime = () => {
+      const now = new Date();
+      const totalSeconds = differenceInSeconds(subscriptionEndDate, now);
+      setRemainingTime(formatDuration(totalSeconds));
+    };
+
+    updateRemainingTime();
+    const intervalId = setInterval(updateRemainingTime, 60000); // Update every minute
+
+    return () => clearInterval(intervalId);
+  }, [endDate]);
+
+  if (remainingTime === null) {
+      return <Skeleton className="h-4 w-20" />;
+  }
+
+  return <span>{remainingTime}</span>;
+}
 
 function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () => void }) {
     const { firestore, user: currentUser } = useFirebase();
@@ -83,6 +150,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
             },
+            subscriptionEndDate: user.subscriptionEndDate ? user.subscriptionEndDate.toDate() : null,
         },
     });
 
@@ -103,10 +171,13 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
         const finalPermissions = role === 'Admin' 
             ? permissionLabels.reduce((acc, p) => ({ ...acc, [p.key]: true }), {})
             : data.permissions;
+        
+        const newSubscriptionEndDate = data.subscriptionEndDate ? Timestamp.fromDate(data.subscriptionEndDate) : null;
 
         setDocumentNonBlocking(userDocRef, { 
             role: data.role,
             permissions: finalPermissions,
+            subscriptionEndDate: newSubscriptionEndDate
         }, { merge: true });
 
         toast({
@@ -173,6 +244,45 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                         ))}
                     </div>
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="subscriptionEndDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Expiração da Assinatura</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "dd/MM/yyyy")
+                              ) : (
+                                <span>Sem data</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value ?? undefined}
+                            onSelect={field.onChange}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <DialogFooter>
                     <Button type="button" variant="ghost" onClick={onFinished}>Cancelar</Button>
@@ -317,13 +427,15 @@ export default function UsersPage() {
                 <TableRow>
                   <TableHead>Usuário</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Clientes Ativos</TableHead>
+                  <TableHead>Assinatura</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center">Carregando...</TableCell>
+                    <TableCell colSpan={5} className="text-center">Carregando...</TableCell>
                   </TableRow>
                 )}
                 {!isLoading && users?.map((user) => (
@@ -354,6 +466,12 @@ export default function UsersPage() {
                             )}
                         </div>
                     </TableCell>
+                    <TableCell>
+                      <UserClientCount userId={user.id} />
+                    </TableCell>
+                    <TableCell>
+                      <SubscriptionCell endDate={user.subscriptionEndDate} />
+                    </TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
                        <Button 
@@ -370,7 +488,7 @@ export default function UsersPage() {
                 ))}
                  {!isLoading && users.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={3} className="text-center">Nenhum usuário encontrado.</TableCell>
+                        <TableCell colSpan={5} className="text-center">Nenhum usuário encontrado.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
