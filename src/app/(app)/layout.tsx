@@ -152,6 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         inbox: false,
         automations: false,
         groups: false,
+        shot: false,
         zapconnect: false,
         settings: false,
         users: false,
@@ -666,11 +667,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
 
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
-                  <Link href="/shot"><Send /><span>Disparo</span></Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {permissions.shot && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
+                    <Link href="/shot"><Send /><span>Disparo</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
 
               {permissions.zapconnect && (
                 <DialogTrigger asChild>

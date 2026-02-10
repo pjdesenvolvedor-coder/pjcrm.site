@@ -7,7 +7,7 @@ import { doc, Timestamp, collection, query, where, limit, getDocs, runTransactio
 import { addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Check, MessageSquare, Copy, Loader2, PartyPopper } from 'lucide-react';
+import { Check, MessageSquare, Copy, Loader2, PartyPopper, Users, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, UserPermissions, Token } from '@/lib/types';
 import Image from 'next/image';
@@ -184,14 +184,14 @@ export default function SubscriptionPage() {
   
       const allPermissionsFalse: UserPermissions = {
         dashboard: false, customers: false, inbox: false, automations: false,
-        groups: false, zapconnect: false, settings: false, users: false,
+        groups: false, shot: false, zapconnect: false, settings: false, users: false,
       };
   
       let newPermissions: UserPermissions;
       if (plan === 'basic') {
-        newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, zapconnect: true, settings: true };
+        newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, shot: true, zapconnect: true };
       } else { // pro
-        newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, zapconnect: true, settings: true, users: false };
+        newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, users: false };
       }
   
       const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 30));
@@ -359,15 +359,14 @@ export default function SubscriptionPage() {
           <Card className="flex flex-col">
             <CardHeader className="text-center">
               <CardTitle className="text-2xl">Básico</CardTitle>
-              <CardDescription>Acesso essencial para gerenciamento de grupos.</CardDescription>
+              <CardDescription>Plano ideal para quem quer fazer disparos, extrair leads e agendar mensagens em grupos.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
               <div className="text-4xl font-bold text-center">R$ 1,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
               <ul className="space-y-3 text-muted-foreground">
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Início</span></li>
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Menu de Grupos</span></li>
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>ZapConexão</span></li>
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Menu de Configurações</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><Users className="h-5 w-5 mr-1" /><span>Menu de Grupos</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><Send className="h-5 w-5 mr-1" /><span>Disparo em Massa</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><Check className="h-5 w-5 text-green-500" /><span>ZapConexão</span></li>
               </ul>
             </CardContent>
             <CardFooter>
@@ -383,14 +382,15 @@ export default function SubscriptionPage() {
             </div>
             <CardHeader className="text-center">
               <CardTitle className="text-2xl">Pro</CardTitle>
-              <CardDescription>Acesso total a todas as funcionalidades do CRM.</CardDescription>
+              <CardDescription>Todas as vantagens do plano Básico, mais o sistema completo de CRM.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
               <div className="text-4xl font-bold text-center">R$ 2,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
               <ul className="space-y-3 text-muted-foreground">
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Todos os menus do site</span></li>
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Acesso completo ao CRM</span></li>
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Automações avançadas</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Todos os recursos do plano **Básico**</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Gestão de Clientes e Cobrança</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Automações e Remarketing</span></li>
+                 <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Caixa de Entrada (Inbox)</span></li>
               </ul>
             </CardContent>
             <CardFooter>
