@@ -106,7 +106,10 @@ function PaymentDialog({
     
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-md p-0">
+            <DialogContent 
+                className="sm:max-w-md p-0"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 <DialogHeader className="p-6 pb-4">
                     <DialogTitle>Pagamento PIX - Plano {planDetails[plan!]?.name}</DialogTitle>
                     <DialogDescription>
