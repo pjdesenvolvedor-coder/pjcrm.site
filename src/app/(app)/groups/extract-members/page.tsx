@@ -69,23 +69,28 @@ export default function ExtractMembersPage() {
       const data = await response.json();
 
       const count = data.quantidadedeparticipantes || data.ParticipantCount;
-      const participantData = data.dadosparticipantes || data.Participants;
+      const phonesAsString = data.telefones;
+      const phonesAsArray = data.dadosparticipantes || data.Participants;
+      
+      let participantNumbers: string[] = [];
 
-      if (count && participantData) {
-          const participantNumbers = Array.isArray(participantData)
-            ? participantData.map(p => (typeof p === 'object' && p.jid ? p.jid : p))
-            : [];
-          
-          setParticipantCount(Number(count));
-          setParticipants(participantNumbers);
-          
-          toast({
-              title: 'Extração Concluída!',
-              description: `Encontrados ${count} participantes.`,
-          });
-          setJid('');
+      if (phonesAsString && typeof phonesAsString === 'string') {
+        participantNumbers = phonesAsString.split(',').map(p => p.trim());
+      } else if (phonesAsArray && Array.isArray(phonesAsArray)) {
+        participantNumbers = phonesAsArray.map(p => (typeof p === 'object' && p.jid ? p.jid : p));
+      }
+
+      if (count && participantNumbers.length > 0) {
+        setParticipantCount(Number(count));
+        setParticipants(participantNumbers);
+        
+        toast({
+            title: 'Extração Concluída!',
+            description: `Encontrados ${count} participantes.`,
+        });
+        setJid('');
       } else {
-          throw new Error('A resposta do webhook não continha os dados esperados.');
+        throw new Error('A resposta do webhook não continha os dados esperados.');
       }
 
     } catch (error: any) {
