@@ -56,7 +56,7 @@ export default function ShotPage() {
     const delayValue = delay[0] * 10;
 
     try {
-      const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/eaad39ed-3dd9-4b20-a061-c45530b71e87';
+      const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/eaad39ed-3dd9-4b20-a061-c45530b71e87';
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
