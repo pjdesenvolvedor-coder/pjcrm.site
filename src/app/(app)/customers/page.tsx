@@ -193,12 +193,30 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 
     if (isEditing && initialData?.id) {
         const docRef = doc(firestore, 'users', user.uid, 'clients', initialData.id);
-        const currentStatus = (initialData as Client)?.status || 'Ativo';
+        
+        let newStatus = (initialData as Client)?.status || 'Ativo';
+
+        // Only change status based on date if it's not 'Inativo'
+        if (newStatus !== 'Inativo') {
+            if (dueDateTimestamp && dueDateTimestamp.toDate() > new Date()) {
+                newStatus = 'Ativo'; // If new due date is in the future, it's 'Ativo'
+            } else if (dueDateTimestamp) { // If new due date is in the past or now
+                newStatus = 'Vencido';
+            } else {
+                // No due date. It can't be vencido. So it should be Ativo.
+                newStatus = 'Ativo';
+            }
+        }
+        
         const currentSupportStatus = (initialData as Client)?.needsSupport || false;
-        setDocumentNonBlocking(docRef, { ...clientData, status: currentStatus, needsSupport: currentSupportStatus }, { merge: true });
+        setDocumentNonBlocking(docRef, { ...clientData, status: newStatus, needsSupport: currentSupportStatus }, { merge: true });
         toast({ title: "Cliente atualizado!", description: `${values.name} foi atualizado com sucesso.` });
     } else {
-        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: 'Ativo', needsSupport: false });
+        let newStatus: Client['status'] = 'Ativo';
+        if (dueDateTimestamp && dueDateTimestamp.toDate() <= new Date()) {
+            newStatus = 'Vencido';
+        }
+        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: newStatus, needsSupport: false });
         toast({ title: "Cliente adicionado!", description: `${values.name} foi adicionado com sucesso.` });
     }
 
