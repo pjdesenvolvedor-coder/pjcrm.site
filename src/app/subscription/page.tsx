@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 
 // A new component for the payment modal to keep the main component clean
@@ -404,7 +405,7 @@ export default function SubscriptionPage() {
 
   if (isUserLoading || !user) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-white">
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <MessageSquare className="h-12 w-12 animate-pulse text-primary" />
           <p className="text-muted-foreground">Carregando...</p>
@@ -449,51 +450,55 @@ export default function SubscriptionPage() {
             </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div className="flex min-h-screen flex-col items-center justify-center bg-white p-8">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-background p-4 sm:p-8">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold tracking-tight">Escolha seu Plano</h1>
           <p className="text-lg text-muted-foreground mt-2">Selecione o plano que melhor se adapta às suas necessidades.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-          <Card className="flex flex-col">
+          <Card className="flex flex-col rounded-xl shadow-lg">
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Básico</CardTitle>
-              <CardDescription>Plano ideal para quem quer fazer disparos, extrair leads de grupos e programar mesangens parar enviar em grupos!</CardDescription>
+              <CardTitle className="text-3xl font-bold">Básico</CardTitle>
+              <CardDescription className="px-6">Plano ideal para quem quer fazer disparos, extrair leads de grupos e programar mensagens para enviar em grupos!</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-              <div className="text-4xl font-bold text-center">R$ 69,90 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
-              <ul className="space-y-3 text-muted-foreground">
-                <li className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /><span>Menu de Grupos</span></li>
-                <li className="flex items-center gap-2"><Send className="h-5 w-5 text-primary" /><span>Disparo em Massa</span></li>
-                <li className="flex items-center gap-2"><Zap className="h-5 w-5 text-primary" /><span>ZapConexão</span></li>
+              <div className="text-5xl font-bold text-center">R$ 69,90 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
+              <ul className="space-y-3 pt-4 text-foreground/80">
+                <li className="flex items-center gap-3"><Users className="h-5 w-5 text-primary" /><span>Menu de Grupos</span></li>
+                <li className="flex items-center gap-3"><Send className="h-5 w-5 text-primary" /><span>Disparo em Massa</span></li>
+                <li className="flex items-center gap-3"><Zap className="h-5 w-5 text-primary" /><span>ZapConexão</span></li>
               </ul>
             </CardContent>
-            <CardFooter>
-              <Button className="w-full" onClick={() => handleGeneratePix('basic', 6990)} disabled={isGeneratingPix && selectedPlan === 'basic'}>
+            <CardFooter className="p-6">
+              <Button className="w-full" size="lg" onClick={() => handleGeneratePix('basic', 6990)} disabled={isGeneratingPix && selectedPlan === 'basic'}>
                 {isGeneratingPix && selectedPlan === 'basic' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                 Selecionar Plano
               </Button>
             </CardFooter>
           </Card>
-          <Card className="border-primary border-2 flex flex-col relative">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-semibold">
+          <Card className="bg-primary text-primary-foreground flex flex-col rounded-xl shadow-2xl relative">
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-primary px-4 py-1 rounded-full text-sm font-bold shadow-md">
               Mais Popular
             </div>
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Pro</CardTitle>
-              <CardDescription>Todas as vantagens do plano Básico, mais o sistema completo de CRM.</CardDescription>
+              <CardTitle className="text-3xl font-bold">Pro</CardTitle>
+              <CardDescription className="text-primary-foreground/80 px-6">Todas as vantagens do plano Básico, mais o sistema completo de CRM.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-              <div className="text-4xl font-bold text-center">R$ 119,90 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
-              <ul className="space-y-3 text-muted-foreground">
-                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-primary" /><span>Todos os recursos do plano **Básico**</span></li>
-                <li className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-primary" /><span>Gestão de Clientes e Cobrança</span></li>
-                <li className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /><span>Automações e Remarketing</span></li>
-                 <li className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span>API Email Temporario</span></li>
+              <div className="text-5xl font-bold text-center">R$ 119,90 <span className="text-lg font-normal text-primary-foreground/80">/mês</span></div>
+              <ul className="space-y-3 pt-4 text-primary-foreground/90">
+                <li className="flex items-center gap-3"><Check className="h-5 w-5" /><span>Todos os recursos do plano "Básico"</span></li>
+                <li className="flex items-center gap-3"><CreditCard className="h-5 w-5" /><span>Gestão de Clientes e Cobrança</span></li>
+                <li className="flex items-center gap-3"><Bot className="h-5 w-5" /><span>Automações e Remarketing</span></li>
+                 <li className="flex items-center gap-3"><Mail className="h-5 w-5" /><span>API Email Temporario</span></li>
               </ul>
             </CardContent>
-            <CardFooter>
-              <Button className="w-full" onClick={() => handleGeneratePix('pro', 11990)} disabled={isGeneratingPix && selectedPlan === 'pro'}>
+            <CardFooter className="p-6">
+              <Button 
+                className="w-full bg-primary-foreground text-primary hover:bg-primary-foreground/90" 
+                size="lg" 
+                onClick={() => handleGeneratePix('pro', 11990)} 
+                disabled={isGeneratingPix && selectedPlan === 'pro'}>
                  {isGeneratingPix && selectedPlan === 'pro' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                 Selecionar Plano
               </Button>
@@ -502,13 +507,13 @@ export default function SubscriptionPage() {
         </div>
 
         <div className="mt-8 w-full max-w-4xl">
-            <Card>
+            <Card className="shadow-lg">
                 <CardHeader className="text-center">
-                    <CardTitle>Não tem certeza?</CardTitle>
-                    <CardDescription>Experimente qualquer um dos nossos planos gratuitamente por 3 dias.</CardDescription>
+                    <CardTitle className="font-bold text-2xl">Ainda não tem certeza?</CardTitle>
+                    <CardDescription>Teste qualquer um dos nossos planos gratuitamente por 3 dias.</CardDescription>
                 </CardHeader>
-                <CardFooter>
-                    <Button variant="outline" className="w-full" onClick={() => setIsTrialDialogOpen(true)}>
+                <CardFooter className="p-6">
+                    <Button variant="outline" className="w-full" size="lg" onClick={() => setIsTrialDialogOpen(true)}>
                         Iniciar Teste Grátis
                     </Button>
                 </CardFooter>
