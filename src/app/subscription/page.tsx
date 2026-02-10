@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
 import { doc, Timestamp } from 'firebase/firestore';
-import { addMonths } from 'date-fns';
+import { addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Check, MessageSquare, Copy, Loader2, PartyPopper } from 'lucide-react';
@@ -149,7 +149,7 @@ export default function SubscriptionPage() {
       newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, zapconnect: true, settings: true, users: false };
     }
 
-    const subscriptionEndDate = Timestamp.fromDate(addMonths(new Date(), 1));
+    const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 30));
 
     setDocumentNonBlocking(userDocRef, { 
         subscriptionPlan: plan, 
