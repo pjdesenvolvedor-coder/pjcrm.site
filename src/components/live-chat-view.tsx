@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-import { useCollection, useFirebase, useUser, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirebase, useUser, useMemoFirebase, useDoc } from '@/firebase';
 import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { collection, query, orderBy, serverTimestamp, Timestamp, where, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, serverTimestamp, Timestamp, where, doc } from 'firebase/firestore';
 import type { Ticket, TicketMessage, UserProfile } from '@/lib/types';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { useForm } from 'react-hook-form';
@@ -92,29 +92,24 @@ function NewTicketDialog({ onFinished }: { onFinished: () => void }) {
 export function LiveChatView() {
     const { firestore } = useFirebase();
     const { user } = useUser();
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    
+    const userDocRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [user, firestore]);
+    const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
     
     const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
-
-    useEffect(() => {
-        if (user) {
-            const userDocRef = doc(firestore, 'users', user.uid);
-            const unsub = onSnapshot(userDocRef, (doc) => {
-                setUserProfile(doc.data() as UserProfile);
-            });
-            return () => unsub();
-        }
-    }, [user, firestore]);
 
     const isAdmin = userProfile?.role === 'Admin';
     
     const ticketsQuery = useMemoFirebase(() => {
-        if (!user) return null;
+        if (isProfileLoading || !user) return null;
         if (isAdmin) {
             return query(collection(firestore, 'tickets'), orderBy('lastMessageAt', 'desc'));
         }
         return query(collection(firestore, 'tickets'), where('userId', '==', user.uid), orderBy('lastMessageAt', 'desc'));
-    }, [firestore, user, isAdmin]);
+    }, [firestore, user, isAdmin, isProfileLoading]);
 
     const { data: tickets, isLoading: isLoadingTickets } = useCollection<Ticket>(ticketsQuery);
 
@@ -173,7 +168,7 @@ export function LiveChatView() {
                     )}
                 </div>
                 <ScrollArea className="flex-1">
-                    {isLoadingTickets ? (
+                    {isLoadingTickets || isProfileLoading ? (
                         <div className="p-4 space-y-4">
                             {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
                         </div>
