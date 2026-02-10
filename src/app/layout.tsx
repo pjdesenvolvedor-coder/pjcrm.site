@@ -7,9 +7,6 @@ import { FirebaseClientProvider } from '@/firebase';
 export const metadata: Metadata = {
   title: 'EMPREENDIMENTOS - CRM',
   description: 'CRM para gestão de clientes e empreendimentos.',
-  icons: {
-    icon: 'https://i.imgur.com/sgoiuiz.png',
-  },
 };
 
 export default function RootLayout({
@@ -20,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="https://i.imgur.com/sgoiuiz.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
