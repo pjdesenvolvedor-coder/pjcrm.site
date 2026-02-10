@@ -9,6 +9,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'jid, message, and token are required' }, { status: 400 });
     }
 
+    // To ensure compatibility with some webhooks that might not correctly interpret
+    // standard newline characters in JSON, we explicitly escape them.
+    const formattedMessage = message.replace(/\n/g, '\\n');
+
     const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/6b70ac73-9025-4ace-b7c9-24db23376c4c';
 
     const webhookPayload: {
@@ -18,7 +22,7 @@ export async function POST(request: Request) {
         imageUrl?: string;
     } = {
         jid,
-        message,
+        message: formattedMessage,
         token,
     };
 
