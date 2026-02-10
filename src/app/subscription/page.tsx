@@ -50,6 +50,7 @@ export default function SubscriptionPage() {
         ...allPermissionsFalse,
         dashboard: true,
         groups: true,
+        zapconnect: true,
         settings: true,
       };
     } else { // pro
@@ -110,6 +111,10 @@ export default function SubscriptionPage() {
               <li className="flex items-center gap-2">
                 <Check className="h-5 w-5 text-green-500" />
                 <span>Menu de Grupos</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="h-5 w-5 text-green-500" />
+                <span>ZapConexão</span>
               </li>
               <li className="flex items-center gap-2">
                 <Check className="h-5 w-5 text-green-500" />
