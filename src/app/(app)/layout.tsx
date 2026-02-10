@@ -534,6 +534,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                         <Link href="/automations/due-date">Vencimento</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/remarketing')}>
+                                        <Link href="/automations/remarketing">Remarketing</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>

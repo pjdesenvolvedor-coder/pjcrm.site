@@ -97,6 +97,14 @@ export type Settings = {
   usePresetTime?: boolean;
   isDueDateMessageActive?: boolean;
   dueDateMessage?: string;
+  // Remarketing Pós-Vencimento
+  isPostDueDateRemarketingActive?: boolean;
+  postDueDateRemarketingDays?: number;
+  postDueDateRemarketingMessage?: string;
+  // Remarketing Pós-Cadastro
+  isPostSignupRemarketingActive?: boolean;
+  postSignupRemarketingDays?: number;
+  postSignupRemarketingMessage?: string;
 };
 
 export type Subscription = {
