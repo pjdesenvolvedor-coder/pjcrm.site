@@ -809,7 +809,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             </div>
                         ) : (
                             <>
-                                <p className="font-semibold text-sm truncate text-sidebar-foreground">{userProfile?.firstName} {userProfile?.lastName}</p>
+                                <p className="font-semibold text-sm truncate text-sidebar-foreground">
+                                    {userProfile?.firstName} {userProfile?.lastName}
+                                    {liveStatus?.status === 'connected' && liveStatus.profileName && ` - ${liveStatus.profileName}`}
+                                </p>
                                 <p className="text-xs truncate text-sidebar-foreground/70">{userProfile?.email}</p>
                             </>
                         )}
