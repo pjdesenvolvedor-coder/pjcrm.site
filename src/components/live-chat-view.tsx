@@ -104,12 +104,14 @@ export function LiveChatView() {
     const isAdmin = userProfile?.role === 'Admin';
     
     const ticketsQuery = useMemoFirebase(() => {
-        if (isProfileLoading || !user) return null;
-        if (isAdmin) {
+        if (!user || !userProfile) return null; // Wait for both user and profile to be loaded.
+
+        if (userProfile.role === 'Admin') {
             return query(collection(firestore, 'tickets'), orderBy('lastMessageAt', 'desc'));
         }
+        
         return query(collection(firestore, 'tickets'), where('userId', '==', user.uid), orderBy('lastMessageAt', 'desc'));
-    }, [firestore, user, isAdmin, isProfileLoading]);
+    }, [firestore, user, userProfile]); // Depend directly on user and userProfile objects
 
     const { data: tickets, isLoading: isLoadingTickets } = useCollection<Ticket>(ticketsQuery);
 
