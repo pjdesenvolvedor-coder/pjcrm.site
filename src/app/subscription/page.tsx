@@ -39,8 +39,8 @@ function PaymentDialog({
     onCopy: (text: string) => void;
 }) {
     const planDetails = {
-        basic: { name: "Básico", price: "R$ 1,00" },
-        pro: { name: "Pro", price: "R$ 2,00" },
+        basic: { name: "Básico", price: "R$ 69,90" },
+        pro: { name: "Pro", price: "R$ 119,90" },
     };
     
     const renderContent = () => {
@@ -345,7 +345,7 @@ export default function SubscriptionPage() {
               <CardDescription>Plano ideal para quem quer fazer disparos, extrair leads de grupos e programar mesangens parar enviar em grupos!</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-              <div className="text-4xl font-bold text-center">R$ 1,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
+              <div className="text-4xl font-bold text-center">R$ 69,90 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
               <ul className="space-y-3 text-muted-foreground">
                 <li className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /><span>Menu de Grupos</span></li>
                 <li className="flex items-center gap-2"><Send className="h-5 w-5 text-primary" /><span>Disparo em Massa</span></li>
@@ -353,7 +353,7 @@ export default function SubscriptionPage() {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button className="w-full" onClick={() => handleGeneratePix('basic', 100)} disabled={isGeneratingPix && selectedPlan === 'basic'}>
+              <Button className="w-full" onClick={() => handleGeneratePix('basic', 6990)} disabled={isGeneratingPix && selectedPlan === 'basic'}>
                 {isGeneratingPix && selectedPlan === 'basic' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                 Selecionar Plano
               </Button>
@@ -368,7 +368,7 @@ export default function SubscriptionPage() {
               <CardDescription>Todas as vantagens do plano Básico, mais o sistema completo de CRM.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-              <div className="text-4xl font-bold text-center">R$ 2,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
+              <div className="text-4xl font-bold text-center">R$ 119,90 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
               <ul className="space-y-3 text-muted-foreground">
                 <li className="flex items-center gap-2"><Check className="h-5 w-5 text-primary" /><span>Todos os recursos do plano **Básico**</span></li>
                 <li className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-primary" /><span>Gestão de Clientes e Cobrança</span></li>
@@ -377,7 +377,7 @@ export default function SubscriptionPage() {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button className="w-full" onClick={() => handleGeneratePix('pro', 200)} disabled={isGeneratingPix && selectedPlan === 'pro'}>
+              <Button className="w-full" onClick={() => handleGeneratePix('pro', 11990)} disabled={isGeneratingPix && selectedPlan === 'pro'}>
                  {isGeneratingPix && selectedPlan === 'pro' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                 Selecionar Plano
               </Button>
