@@ -1,86 +1,239 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Check, MessageSquare } from 'lucide-react';
+import { Check, MessageSquare, Copy, Loader2, PartyPopper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { UserPermissions } from '@/lib/types';
+import Image from 'next/image';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 
+
+// A new component for the payment modal to keep the main component clean
+function PaymentDialog({
+    isOpen,
+    onClose,
+    plan,
+    paymentInfo,
+    paymentStatus,
+    onCopy,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    plan: 'basic' | 'pro' | null;
+    paymentInfo: { id: string; qr_code: string; qr_code_base64: string } | null;
+    paymentStatus: 'pending' | 'paid' | 'error' | null;
+    onCopy: (text: string) => void;
+}) {
+    const planDetails = {
+        basic: { name: "Básico", price: "R$ 1,00" },
+        pro: { name: "Pro", price: "R$ 2,00" },
+    };
+    
+    const renderContent = () => {
+        if (paymentStatus === 'paid') {
+            return (
+                <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+                    <PartyPopper className="h-16 w-16 text-green-500" />
+                    <h3 className="text-xl font-bold">Pagamento Aprovado!</h3>
+                    <p className="text-muted-foreground">
+                        Seu acesso foi liberado. Você será redirecionado em breve.
+                    </p>
+                </div>
+            );
+        }
+
+        if (paymentStatus === 'error' || !paymentInfo) {
+             return (
+                <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+                    <div className="h-16 w-16 bg-destructive/10 rounded-full flex items-center justify-center">
+                        <MessageSquare className="h-8 w-8 text-destructive" />
+                    </div>
+                    <h3 className="text-xl font-bold">Ocorreu um Erro</h3>
+                    <p className="text-muted-foreground">
+                        Não foi possível gerar o PIX ou o pagamento expirou. Por favor, tente novamente.
+                    </p>
+                </div>
+            );
+        }
+
+        // Pending status
+        return (
+            <div className="flex flex-col items-center justify-center text-center p-4 gap-4">
+                <Badge variant="outline" className="py-1 px-3 border-yellow-400 bg-yellow-50 text-yellow-800">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Aguardando Pagamento...
+                </Badge>
+                <p className="text-sm text-muted-foreground px-4">
+                    Escaneie o QR Code com o app do seu banco ou use o código Copia e Cola.
+                </p>
+                <div className="w-48 h-48 bg-white rounded-lg flex items-center justify-center my-2 p-2 shadow-lg">
+                    <Image src={paymentInfo.qr_code_base64} alt="PIX QR Code" width={180} height={180} data-ai-hint="qr code"/>
+                </div>
+                <div className="w-full px-4">
+                    <label htmlFor="pix-code" className="text-sm font-medium text-left w-full block mb-1">PIX Copia e Cola</label>
+                    <div className="relative">
+                        <Input id="pix-code" readOnly value={paymentInfo.qr_code} className="pr-10 bg-muted" />
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                            onClick={() => onCopy(paymentInfo.qr_code)}
+                        >
+                            <Copy className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+                 <p className="text-xs text-muted-foreground mt-2 px-4">
+                    Após o pagamento, seu acesso será liberado automaticamente nesta tela.
+                </p>
+            </div>
+        );
+    }
+    
+    return (
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="sm:max-w-md p-0">
+                <DialogHeader className="p-6 pb-4">
+                    <DialogTitle>Pagamento PIX - Plano {planDetails[plan!]?.name}</DialogTitle>
+                    <DialogDescription>
+                       Valor total: {planDetails[plan!]?.price}
+                    </DialogDescription>
+                </DialogHeader>
+                {renderContent()}
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 export default function SubscriptionPage() {
   const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
-  const [isSubscribing, setIsSubscribing] = useState<string | null>(null);
 
-  const handleSelectPlan = (plan: 'basic' | 'pro') => {
-    if (!user || !firestore) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Usuário não autenticado.',
-      });
-      return;
-    }
+  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | null>(null);
+  const [isGeneratingPix, setIsGeneratingPix] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
 
-    setIsSubscribing(plan);
+  const grantPlanAccess = useCallback(async (plan: 'basic' | 'pro') => {
+    if (!user || !firestore) return;
 
     const userDocRef = doc(firestore, 'users', user.uid);
-    
     const allPermissionsFalse: UserPermissions = {
-      dashboard: false,
-      customers: false,
-      inbox: false,
-      automations: false,
-      groups: false,
-      zapconnect: false,
-      settings: false,
-      users: false,
+      dashboard: false, customers: false, inbox: false, automations: false,
+      groups: false, zapconnect: false, settings: false, users: false,
     };
 
     let newPermissions: UserPermissions;
-
     if (plan === 'basic') {
-      newPermissions = {
-        ...allPermissionsFalse,
-        dashboard: true,
-        groups: true,
-        zapconnect: true,
-        settings: true,
-      };
+      newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, zapconnect: true, settings: true };
     } else { // pro
-      newPermissions = {
-        dashboard: true,
-        customers: true,
-        inbox: true,
-        automations: true,
-        groups: true,
-        zapconnect: true,
-        settings: true,
-        users: false, // Keep users for admins only
-      };
+      newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, zapconnect: true, settings: true, users: false };
     }
 
-    setDocumentNonBlocking(userDocRef, {
-      subscriptionPlan: plan,
-      permissions: newPermissions,
-    }, { merge: true });
+    setDocumentNonBlocking(userDocRef, { subscriptionPlan: plan, permissions: newPermissions }, { merge: true });
 
-    toast({
-      title: 'Plano Selecionado!',
-      description: `Você agora está no plano ${plan === 'basic' ? 'Básico' : 'Pro'}.`,
-    });
+    // The redirect will happen in the useEffect that watches for paymentStatus === 'paid'
+  }, [firestore, user]);
 
-    // Give a moment for the user doc to update before redirecting
-    setTimeout(() => {
-      router.push('/dashboard');
-    }, 1000);
+
+  const handleGeneratePix = async (plan: 'basic' | 'pro', valueInCents: number) => {
+    if (isGeneratingPix) return;
+    setIsGeneratingPix(true);
+    setSelectedPlan(plan);
+    setPaymentInfo(null);
+    setPaymentStatus(null);
+
+    try {
+      const response = await fetch('/api/generate-pix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: valueInCents }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao gerar o PIX. Tente novamente.');
+      }
+
+      const data = await response.json();
+      setPaymentInfo(data);
+      setPaymentStatus('pending');
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: error.message });
+      setPaymentStatus('error');
+    } finally {
+      setIsGeneratingPix(false);
+    }
   };
+  
+  useEffect(() => {
+    if (paymentStatus !== 'pending' || !paymentInfo?.id) {
+        return;
+    }
+
+    const interval = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/check-pix-status?id=${paymentInfo.id}`);
+            if (!response.ok) return; // silent fail to avoid user noise
+            
+            const data = await response.json();
+
+            if (data.status === 'paid') {
+                setPaymentStatus('paid');
+                clearInterval(interval);
+            }
+            
+            if (data.status === 'expired' || data.status === 'error' ) {
+                 clearInterval(interval);
+                 setPaymentStatus('error');
+            }
+
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [paymentStatus, paymentInfo?.id]);
+  
+  useEffect(() => {
+      if (paymentStatus === 'paid' && selectedPlan) {
+          grantPlanAccess(selectedPlan).then(() => {
+              toast({
+                  title: "Pagamento Aprovado!",
+                  description: `Seu acesso ao plano ${selectedPlan === 'basic' ? 'Básico' : 'Pro'} foi liberado.`,
+              });
+              setTimeout(() => {
+                  router.push('/dashboard');
+              }, 2000);
+          });
+      }
+  }, [paymentStatus, selectedPlan, grantPlanAccess, router, toast]);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: 'Copiado!', description: 'Código PIX copiado para a área de transferência.' });
+  };
+  
+  const resetPaymentState = () => {
+      setPaymentInfo(null);
+      setPaymentStatus(null);
+      setSelectedPlan(null);
+  }
 
   if (isUserLoading || !user) {
     return (
@@ -94,80 +247,67 @@ export default function SubscriptionPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-white p-8">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold tracking-tight">Escolha seu Plano</h1>
-        <p className="text-lg text-muted-foreground mt-2">Selecione o plano que melhor se adapta às suas necessidades.</p>
+    <>
+      <PaymentDialog 
+        isOpen={!!paymentInfo}
+        onClose={resetPaymentState}
+        plan={selectedPlan}
+        paymentInfo={paymentInfo}
+        paymentStatus={paymentStatus}
+        onCopy={handleCopy}
+      />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-white p-8">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold tracking-tight">Escolha seu Plano</h1>
+          <p className="text-lg text-muted-foreground mt-2">Selecione o plano que melhor se adapta às suas necessidades.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+          <Card className="flex flex-col">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">Básico</CardTitle>
+              <CardDescription>Acesso essencial para gerenciamento de grupos.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow space-y-4">
+              <div className="text-4xl font-bold text-center">R$ 1,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
+              <ul className="space-y-3 text-muted-foreground">
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Início</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Menu de Grupos</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>ZapConexão</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Menu de Configurações</span></li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button className="w-full" onClick={() => handleGeneratePix('basic', 100)} disabled={isGeneratingPix && selectedPlan === 'basic'}>
+                {isGeneratingPix && selectedPlan === 'basic' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                Selecionar Plano
+              </Button>
+            </CardFooter>
+          </Card>
+          <Card className="border-primary border-2 flex flex-col relative">
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-semibold">
+              Mais Popular
+            </div>
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">Pro</CardTitle>
+              <CardDescription>Acesso total a todas as funcionalidades do CRM.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow space-y-4">
+              <div className="text-4xl font-bold text-center">R$ 2,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
+              <ul className="space-y-3 text-muted-foreground">
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Todos os menus do site</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Acesso completo ao CRM</span></li>
+                <li className="flex items-center gap-2"><Check className="h-5 w-5 text-green-500" /><span>Automações avançadas</span></li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button className="w-full" onClick={() => handleGeneratePix('pro', 200)} disabled={isGeneratingPix && selectedPlan === 'pro'}>
+                 {isGeneratingPix && selectedPlan === 'pro' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                Selecionar Plano
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-        <Card className="flex flex-col">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Básico</CardTitle>
-            <CardDescription>Acesso essencial para gerenciamento de grupos.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex-grow space-y-4">
-            <div className="text-4xl font-bold text-center">Grátis</div>
-            <ul className="space-y-3 text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span>Menu de Grupos</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span>ZapConexão</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span>Menu de Configurações</span>
-              </li>
-            </ul>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              className="w-full" 
-              onClick={() => handleSelectPlan('basic')}
-              disabled={!!isSubscribing}
-            >
-              {isSubscribing === 'basic' ? 'Selecionando...' : 'Selecionar Plano'}
-            </Button>
-          </CardFooter>
-        </Card>
-        <Card className="border-primary border-2 flex flex-col relative">
-          <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-semibold">
-            Mais Popular
-          </div>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Pro</CardTitle>
-            <CardDescription>Acesso total a todas as funcionalidades do CRM.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex-grow space-y-4">
-            <div className="text-4xl font-bold text-center">R$ 99/mês</div>
-            <ul className="space-y-3 text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span>Todos os menus do site</span>
-              </li>
-               <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span>Acesso completo ao CRM</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span>Automações avançadas</span>
-              </li>
-            </ul>
-          </CardContent>
-          <CardFooter>
-             <Button 
-              className="w-full" 
-              onClick={() => handleSelectPlan('pro')}
-              disabled={!!isSubscribing}
-            >
-              {isSubscribing === 'pro' ? 'Selecionando...' : 'Selecionar Plano'}
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    </div>
+    </>
   );
 }
