@@ -73,7 +73,7 @@ export function SubscriptionTimer() {
     return (
         <div className="fixed bottom-4 right-4 z-50">
             <div className="flex items-center gap-2 rounded-full bg-background border shadow-lg px-4 py-2 text-sm font-medium">
-                <Clock className="h-4 w-4" />
+                <Clock className="h-4 w-4 animate-spin" />
                 <span>Assinatura: {remainingTime}</span>
             </div>
         </div>
