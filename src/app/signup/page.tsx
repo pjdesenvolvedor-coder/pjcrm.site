@@ -82,7 +82,8 @@ export default function SignupPage() {
         createdAt: serverTimestamp(),
         role: "Agent", 
         permissions: defaultPermissions,
-        avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`
+        avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`,
+        status: 'active',
       }, { merge: true });
 
       toast({

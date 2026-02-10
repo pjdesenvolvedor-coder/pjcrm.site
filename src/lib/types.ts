@@ -22,6 +22,7 @@ export type UserProfile = {
   permissions?: Partial<UserPermissions>;
   subscriptionPlan?: 'basic' | 'pro' | null;
   subscriptionEndDate?: Timestamp;
+  status?: 'active' | 'blocked';
 };
 
 export type Client = {

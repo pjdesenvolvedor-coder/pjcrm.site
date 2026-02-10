@@ -1,6 +1,6 @@
 'use client';
 
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { Lock, Unlock } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -21,12 +21,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/lib/types';
 import { useState, useCallback, useEffect } from 'react';
@@ -36,8 +35,6 @@ import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-
 
 const permissionsSchema = z.object({
   dashboard: z.boolean().default(false),
@@ -261,28 +258,32 @@ export default function UsersPage() {
     fetchUsers('initial'); // Re-fetch to show updated data
   }
 
-  const handleDeleteUser = (userToDelete: UserProfile) => {
-    if (!firestore) return;
+  const handleToggleBlockUser = (userToToggle: UserProfile) => {
+    if (!firestore || !currentUser) return;
 
-    if (userToDelete.id === currentUser?.uid) {
-      toast({
-        variant: "destructive",
-        title: "Ação não permitida",
-        description: "Você não pode remover seu próprio usuário.",
-      });
-      return;
+    if (userToToggle.id === currentUser?.uid) {
+        toast({
+            variant: "destructive",
+            title: "Ação não permitida",
+            description: "Você não pode bloquear seu próprio usuário.",
+        });
+        return;
     }
 
-    const userDocRef = doc(firestore, "users", userToDelete.id);
-    deleteDocumentNonBlocking(userDocRef);
+    const newStatus = userToToggle.status === 'blocked' ? 'active' : 'blocked';
+    const userDocRef = doc(firestore, "users", userToToggle.id);
+    
+    setDocumentNonBlocking(userDocRef, { status: newStatus }, { merge: true });
 
     toast({
-      title: "Usuário Removido",
-      description: `O usuário ${userToDelete.firstName} ${userToDelete.lastName} foi removido do CRM.`,
+        title: `Usuário ${newStatus === 'blocked' ? 'Bloqueado' : 'Desbloqueado'}`,
+        description: `O acesso de ${userToToggle.firstName} foi ${newStatus === 'blocked' ? 'bloqueado' : 'restaurado'}.`,
     });
     
     // Optimistic UI update
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete.id));
+    setUsers(prevUsers => prevUsers.map(u => 
+        u.id === userToToggle.id ? { ...u, status: newStatus } : u
+    ));
   };
 
 
@@ -290,7 +291,7 @@ export default function UsersPage() {
     <div className="flex flex-col h-full">
       <PageHeader
         title="Gerenciamento de Usuários"
-        description="Adicione, remova e edite os usuários da sua equipe."
+        description="Gerencie os usuários da sua equipe e suas permissões de acesso."
       >
         <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => fetchUsers('prev')} disabled={!hasPrevPage || isLoading}>
@@ -344,37 +345,26 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.role === 'Admin' ? 'destructive' : 'outline'}>{user.role}</Badge>
+                        <div className="flex items-center gap-2">
+                            <Badge variant={user.role === 'Admin' ? 'destructive' : 'outline'}>{user.role}</Badge>
+                            {user.status === 'blocked' && (
+                                <Badge variant="secondary" className="border-yellow-400 bg-yellow-50 text-yellow-800">
+                                    Bloqueado
+                                </Badge>
+                            )}
+                        </div>
                     </TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
-                       <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" disabled={user.id === currentUser?.uid}>Remover</Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Remover {user.firstName} do CRM?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                <p className="mb-4">
-                                  Isso removerá o acesso de <strong>{user.firstName} {user.lastName}</strong> ao CRM, mas <strong>não excluirá sua conta de login</strong>.
-                                </p>
-                                <p>
-                                  O e-mail <strong>{user.email}</strong> continuará registrado no sistema de autenticação e não poderá ser usado para um novo cadastro.
-                                </p>
-                                <p className="mt-4 text-xs bg-muted p-2 rounded-md">
-                                  <strong>Nota técnica:</strong> Para liberar o e-mail, você deve excluir o usuário na seção &quot;Authentication&quot; do seu painel Firebase.
-                                </p>
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteUser(user)} className={buttonVariants({ variant: "destructive" })}>
-                                  Confirmar Remoção
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                       <Button 
+                            variant={user.status === 'blocked' ? 'secondary' : 'ghost'} 
+                            size="sm" 
+                            onClick={() => handleToggleBlockUser(user)}
+                            disabled={user.id === currentUser?.uid}
+                        >
+                            {user.status === 'blocked' ? <Unlock className="mr-2" /> : <Lock className="mr-2" />}
+                            {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+                        </Button>
                     </TableCell>
                   </TableRow>
                 ))}

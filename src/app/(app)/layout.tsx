@@ -41,7 +41,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +58,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, collection, query, where } from 'firebase/firestore';
@@ -74,6 +75,33 @@ type LiveStatus = {
   profileName?: string;
   profilePicUrl?: string;
 };
+
+function BlockedOverlay() {
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <Card className="w-full max-w-md m-4 text-center shadow-2xl animate-in fade-in-0 zoom-in-95">
+                <CardHeader>
+                    <CardTitle className="text-2xl text-destructive">Acesso Bloqueado</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">
+                        Sua conta foi bloqueada pelo administrador. Por favor, entre em contato com o suporte para mais informações.
+                    </p>
+                </CardContent>
+                <CardFooter className="justify-center">
+                     <a
+                        href="https://wa.link/siil2n"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={cn(buttonVariants({ variant: 'default' }), 'w-full')}
+                    >
+                        Contatar Suporte
+                    </a>
+                </CardFooter>
+            </Card>
+        </div>
+    );
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -458,6 +486,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
+      {userProfile?.status === 'blocked' && <BlockedOverlay />}
       <Sidebar
         variant="sidebar"
         collapsible="icon"
