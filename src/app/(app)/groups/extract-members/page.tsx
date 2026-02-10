@@ -224,11 +224,17 @@ export default function ExtractMembersPage() {
                                     <AccordionContent>
                                         <div className="grid md:grid-cols-2 gap-4 pt-2">
                                             <div>
-                                                <h3 className="font-semibold mb-2">Administradores ({group.adminPhones.length})</h3>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h3 className="font-semibold">Administradores ({group.adminPhones.length})</h3>
+                                                    <Button variant="ghost" size="sm" onClick={() => handleCopyAll(group.adminPhones)}><Copy className="mr-2 h-4 w-4" />Copiar</Button>
+                                                </div>
                                                 <ScrollArea className="h-40 w-full rounded-md border"><div className="p-4 text-sm font-mono">{group.adminPhones.map((p, i) => <p key={i} className="p-1">{p.replace('@s.whatsapp.net', '')}</p>)}</div></ScrollArea>
                                             </div>
                                             <div>
-                                                <h3 className="font-semibold mb-2">Membros ({group.memberPhones.length})</h3>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h3 className="font-semibold">Membros ({group.memberPhones.length})</h3>
+                                                    <Button variant="ghost" size="sm" onClick={() => handleCopyAll(group.memberPhones)}><Copy className="mr-2 h-4 w-4" />Copiar</Button>
+                                                </div>
                                                 <ScrollArea className="h-40 w-full rounded-md border"><div className="p-4 text-sm font-mono">{group.memberPhones.map((p, i) => <p key={i} className="p-1">{p.replace('@s.whatsapp.net', '')}</p>)}</div></ScrollArea>
                                             </div>
                                         </div>
