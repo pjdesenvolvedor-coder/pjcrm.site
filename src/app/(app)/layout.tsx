@@ -697,7 +697,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                              {permissions.settings && (
+                              {userProfile?.role === 'Admin' && (
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}>
                                         <Link href="/settings/tokens"><Package />Estoque de Tokens</Link>
