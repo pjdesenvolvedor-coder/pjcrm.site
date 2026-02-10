@@ -226,23 +226,6 @@ export default function SubscriptionPage() {
     }
   }, [firestore, user, toast]);
 
-  const handleTestBypass = async () => {
-    if (isGeneratingPix) return;
-    setIsGeneratingPix(true);
-    try {
-        await grantPlanAccess('pro');
-        toast({
-            title: "Acesso de Teste Ativado!",
-            description: `Seu acesso ao Plano Pro foi liberado. Redirecionando...`,
-        });
-        window.location.assign('/dashboard');
-    } catch (e) {
-        // Error toast is already shown in grantPlanAccess
-    } finally {
-        setIsGeneratingPix(false);
-    }
-  };
-
   const handleGeneratePix = async (plan: 'basic' | 'pro', valueInCents: number) => {
     if (isGeneratingPix) return;
     setIsGeneratingPix(true);
@@ -359,7 +342,7 @@ export default function SubscriptionPage() {
           <Card className="flex flex-col">
             <CardHeader className="text-center">
               <CardTitle className="text-2xl">Básico</CardTitle>
-              <CardDescription>Plano ideal para quem quer fazer disparos, extrair leads e agendar mensagens em grupos.</CardDescription>
+              <CardDescription>Plano ideal para quem quer fazer disparos, extrair leads de grupos e programar mesangens parar enviar em grupos!</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
               <div className="text-4xl font-bold text-center">R$ 1,00 <span className="text-lg font-normal text-muted-foreground">/mês</span></div>
@@ -400,11 +383,6 @@ export default function SubscriptionPage() {
               </Button>
             </CardFooter>
           </Card>
-        </div>
-        <div className="mt-8">
-            <Button variant="link" onClick={handleTestBypass} disabled={isGeneratingPix}>
-                Teste para pular o pagamento
-            </Button>
         </div>
       </div>
     </>
