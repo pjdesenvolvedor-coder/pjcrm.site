@@ -516,31 +516,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               
               {permissions.automations && (
                 <SidebarMenuItem>
-                  <Collapsible>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Automações'}}>
-                              <div className="flex items-center gap-2">
-                                  <Bot />
-                                  <span>Automações</span>
-                              </div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/workflows')}>
-                                        <Link href="/automations/workflows">Fluxos</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/due-date')}>
-                                        <Link href="/automations/due-date">Vencimento</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
+                    <SidebarMenuButton asChild isActive={pathname.startsWith('/automations')} tooltip={{ children: 'Automações' }}>
+                        <Link href="/automations/due-date"><Bot /><span>Automações</span></Link>
+                    </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
 
