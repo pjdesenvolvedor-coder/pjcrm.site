@@ -7,6 +7,9 @@ import { FirebaseClientProvider } from '@/firebase';
 export const metadata: Metadata = {
   title: 'EMPREENDIMENTOS - CRM',
   description: 'CRM para gestão de clientes e empreendimentos.',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
