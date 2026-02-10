@@ -21,6 +21,7 @@ export type UserProfile = {
   avatarUrl?: string;
   permissions?: Partial<UserPermissions>;
   subscriptionPlan?: 'basic' | 'pro' | null;
+  subscriptionEndDate?: Timestamp;
 };
 
 export type Client = {

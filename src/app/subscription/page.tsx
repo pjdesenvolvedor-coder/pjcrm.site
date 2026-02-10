@@ -3,7 +3,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { doc, Timestamp } from 'firebase/firestore';
+import { addMonths } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Check, MessageSquare, Copy, Loader2, PartyPopper } from 'lucide-react';
@@ -145,7 +146,13 @@ export default function SubscriptionPage() {
       newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, zapconnect: true, settings: true, users: false };
     }
 
-    setDocumentNonBlocking(userDocRef, { subscriptionPlan: plan, permissions: newPermissions }, { merge: true });
+    const subscriptionEndDate = Timestamp.fromDate(addMonths(new Date(), 1));
+
+    setDocumentNonBlocking(userDocRef, { 
+        subscriptionPlan: plan, 
+        permissions: newPermissions,
+        subscriptionEndDate: subscriptionEndDate
+    }, { merge: true });
 
     // The redirect will happen in the useEffect that watches for paymentStatus === 'paid'
   }, [firestore, user]);

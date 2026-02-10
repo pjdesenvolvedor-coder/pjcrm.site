@@ -70,6 +70,11 @@
             "basic",
             "pro"
           ]
+        },
+        "subscriptionEndDate": {
+          "type": "string",
+          "description": "Timestamp indicating when the user's subscription ends.",
+          "format": "date-time"
         }
       },
       "required": [

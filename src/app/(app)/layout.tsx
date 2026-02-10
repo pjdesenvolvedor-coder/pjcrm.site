@@ -67,6 +67,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
 import { DueDateMessageHandler } from '@/components/due-date-message-handler';
+import { SubscriptionTimer } from '@/components/SubscriptionTimer';
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -748,6 +749,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarInset>{children}</SidebarInset>
       <ScheduledMessageHandler />
       <DueDateMessageHandler />
+      <SubscriptionTimer />
     </SidebarProvider>
   );
 }
