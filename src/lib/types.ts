@@ -28,15 +28,15 @@ export type Client = {
   name: string;
   email: string[];
   phone: string;
-  dueDate: Timestamp;
+  dueDate?: Timestamp | null;
   status: 'Ativo' | 'Inativo' | 'Vencido';
-  telegramUser?: string;
-  clientType?: 'PACOTE' | 'REVENDA';
-  notes?: string;
+  telegramUser?: string | null;
+  clientType?: 'PACOTE' | 'REVENDA' | null;
+  notes?: string | null;
   quantity?: number;
   subscription?: string;
-  paymentMethod?: 'PIX' | 'Cartão' | 'Boleto';
-  amountPaid?: string;
+  paymentMethod?: 'PIX' | 'Cartão' | 'Boleto' | null;
+  amountPaid?: string | null;
   needsSupport?: boolean;
 };
 

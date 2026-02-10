@@ -107,7 +107,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       name: initialData?.name || '',
       telegramUser: initialData?.telegramUser || '',
       phone: initialData?.phone || '',
-      clientType: initialData?.clientType,
+      clientType: initialData?.clientType || undefined,
       emails: defaultEmails,
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
@@ -115,7 +115,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       notes: initialData?.notes || '',
       quantity: defaultEmails.length.toString(),
       subscription: initialData?.subscription || '',
-      paymentMethod: initialData?.paymentMethod,
+      paymentMethod: initialData?.paymentMethod || undefined,
       amountPaid: initialData?.amountPaid || ''
     },
   });
@@ -181,14 +181,14 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       name: values.name,
       email: values.emails.map(email => email.value),
       phone: values.phone,
-      telegramUser: values.telegramUser,
-      clientType: values.clientType,
-      dueDate: dueDateTimestamp,
-      notes: values.notes,
+      telegramUser: values.telegramUser ?? null,
+      clientType: values.clientType ?? null,
+      dueDate: dueDateTimestamp ?? null,
+      notes: values.notes ?? null,
       quantity: values.emails.length,
       subscription: values.subscription,
-      paymentMethod: values.paymentMethod,
-      amountPaid: values.amountPaid,
+      paymentMethod: values.paymentMethod ?? null,
+      amountPaid: values.amountPaid ?? null,
     };
 
     if (isEditing && initialData?.id) {
