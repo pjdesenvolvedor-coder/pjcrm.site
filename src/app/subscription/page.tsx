@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
@@ -427,8 +428,8 @@ export default function SubscriptionPage() {
       <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
         <DialogContent className="sm:max-w-md">
             <DialogHeader className="items-center text-center pt-4">
-                <div className="w-24 h-24 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4">
-                    <Image src="https://i.imgur.com/SIDAI3I.png" alt="Foguete decolando" width={64} height={64} data-ai-hint="rocket illustration" />
+                <div className="w-36 h-36 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4">
+                    <Image src="https://i.imgur.com/SIDAI3I.png" alt="Foguete decolando" width={96} height={96} data-ai-hint="rocket illustration" />
                 </div>
                 <DialogTitle className="text-2xl">Escolha o plano para seu teste</DialogTitle>
                 <DialogDescription>
@@ -441,8 +442,8 @@ export default function SubscriptionPage() {
                         <SelectValue placeholder="Selecione um plano" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="pro">Pro</SelectItem>
                         <SelectItem value="basic">Básico</SelectItem>
+                        <SelectItem value="pro">Pro</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
