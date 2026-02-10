@@ -122,6 +122,7 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-primary': 'pulse-primary 2.5s infinite',
         'pulse-destructive': 'pulse-destructive 2.5s infinite',
+        'spin-slow': 'spin 5s linear infinite',
       },
     },
   },
