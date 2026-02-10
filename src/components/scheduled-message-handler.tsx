@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { collection, query, where, Timestamp, doc, runTransaction } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, setDocumentNonBlocking, useDoc } from '@/firebase';
-import type { ScheduledMessage, Settings } from '@/lib/types';
+import type { ScheduledMessage, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { add } from 'date-fns';
 
@@ -18,6 +18,12 @@ export function ScheduledMessageHandler() {
     }, [firestore, user]);
     const { data: settings } = useDoc<Settings>(settingsDocRef);
     
+    const userDocRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+    const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+    
     const scheduledMessagesQuery = useMemoFirebase(() => {
         if (!user) return null;
         const messagesRef = collection(firestore, 'users', user.uid, 'scheduled_messages');
@@ -29,6 +35,11 @@ export function ScheduledMessageHandler() {
 
     useEffect(() => {
         const checkScheduledMessages = () => {
+            // Check subscription status first
+            if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
+                return; // Subscription expired, do nothing.
+            }
+
             if (!scheduledMessages || scheduledMessages.length === 0 || !settings?.webhookToken || !user || !firestore) {
                 return;
             }
@@ -132,7 +143,7 @@ export function ScheduledMessageHandler() {
         // Cleanup on unmount
         return () => clearInterval(intervalId);
 
-    }, [scheduledMessages, settings, firestore, user, toast]);
+    }, [scheduledMessages, settings, firestore, user, toast, userProfile]);
 
     return null; // This component doesn't render anything
 }

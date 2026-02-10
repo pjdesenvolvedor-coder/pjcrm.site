@@ -221,6 +221,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [userProfile, isProfileLoading, router]);
 
+  useEffect(() => {
+    if (
+      !isProfileLoading &&
+      userProfile &&
+      userProfile.role !== 'Admin' &&
+      userProfile.subscriptionEndDate &&
+      userProfile.subscriptionEndDate.toDate() < new Date()
+    ) {
+      router.push('/subscription');
+    }
+  }, [userProfile, isProfileLoading, router]);
+
   if (isUserLoading || !user || isProfileLoading) {
     return (
         <div className="flex h-screen w-screen items-center justify-center">

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { collection, query, where, doc, runTransaction } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import type { Client, Settings } from '@/lib/types';
+import type { Client, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -17,8 +17,15 @@ export function DueDateMessageHandler() {
         return doc(firestore, 'users', user.uid, 'settings', 'config');
     }, [firestore, user]);
     const { data: settings } = useDoc<Settings>(settingsDocRef);
+    
+    // 2. Get user profile
+    const userDocRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+    const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-    // 2. Get all clients with 'Ativo' status
+    // 3. Get all clients with 'Ativo' status
     const activeClientsQuery = useMemoFirebase(() => {
         if (!user) return null;
         const clientsRef = collection(firestore, 'users', user.uid, 'clients');
@@ -28,7 +35,12 @@ export function DueDateMessageHandler() {
 
     useEffect(() => {
         const checkOverdueClients = () => {
-            // Check if all required data is available
+            // Check subscription status first
+            if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
+                return; // Subscription expired, do nothing.
+            }
+
+            // Check if all other required data is available
             if (!activeClients || activeClients.length === 0 || !settings?.isDueDateMessageActive || !settings.dueDateMessage || !settings.webhookToken || !user || !firestore) {
                 return;
             }
@@ -118,7 +130,7 @@ export function DueDateMessageHandler() {
         // Cleanup interval on component unmount.
         return () => clearInterval(intervalId);
 
-    }, [activeClients, settings, firestore, user, toast]);
+    }, [activeClients, settings, firestore, user, toast, userProfile]);
 
     return null; // This component is invisible and runs in the background.
 }
