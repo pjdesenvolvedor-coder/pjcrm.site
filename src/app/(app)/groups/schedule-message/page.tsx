@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw } from 'lucide-react';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +38,7 @@ import { format } from 'date-fns';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const scheduleSchema = z.object({
     jid: z.string().min(1, { message: "O JID do grupo é obrigatório." }),
@@ -170,6 +171,13 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
                             Preencha os detalhes para agendar uma nova mensagem para um grupo.
                         </DialogDescription>
                     </DialogHeader>
+                    <Alert className="border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle className="font-bold">Atenção</AlertTitle>
+                        <AlertDescription>
+                        ⚠️ Você precisa ser administrador do grupo para agendar uma mensagem. 🔐
+                        </AlertDescription>
+                    </Alert>
                     <FormField
                         control={form.control}
                         name="jid"
