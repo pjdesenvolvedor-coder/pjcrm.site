@@ -2,14 +2,14 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
-import { doc, Timestamp, collection, query, where, limit, getDocs, runTransaction } from 'firebase/firestore';
+import { useFirebase, useUser, setDocumentNonBlocking, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, Timestamp, collection, query, where, limit, getDocs, runTransaction, getDoc } from 'firebase/firestore';
 import { addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Check, MessageSquare, Copy, Loader2, PartyPopper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { UserPermissions, Token } from '@/lib/types';
+import type { UserProfile, UserPermissions, Token } from '@/lib/types';
 import Image from 'next/image';
 import {
   Dialog,
@@ -128,15 +128,46 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const { toast } = useToast();
 
+  const userDocRef = useMemoFirebase(() => (user ? doc(firestore, 'users', user.uid) : null), [firestore, user]);
+  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | null>(null);
   const [isGeneratingPix, setIsGeneratingPix] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
 
+  useEffect(() => {
+    if (userProfile && userProfile.subscriptionPlan && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() > new Date()) {
+      toast({
+        title: 'Você já tem uma assinatura ativa.',
+        description: 'Redirecionando para o painel...',
+      });
+      router.push('/dashboard');
+    }
+  }, [userProfile, router, toast]);
+
   const grantPlanAccess = useCallback(async (plan: 'basic' | 'pro') => {
     if (!user || !firestore) return;
   
     try {
+      const userSettingsDoc = await getDoc(doc(firestore, 'users', user.uid, 'settings', 'config'));
+      const userDocRef = doc(firestore, 'users', user.uid);
+      
+      if (userSettingsDoc.exists() && userSettingsDoc.data().webhookToken) {
+          const currentUserDoc = await getDoc(userDocRef);
+          const currentEndDate = currentUserDoc.exists() && currentUserDoc.data().subscriptionEndDate 
+              ? currentUserDoc.data().subscriptionEndDate.toDate() 
+              : new Date();
+          
+          const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), 30);
+          
+          await setDocumentNonBlocking(userDocRef, {
+            subscriptionEndDate: Timestamp.fromDate(newEndDate),
+            subscriptionPlan: plan,
+          }, { merge: true });
+          return;
+      }
+
       const tokensRef = collection(firestore, 'tokens');
       const q = query(tokensRef, where('status', '==', 'available'), limit(1));
       
@@ -149,7 +180,6 @@ export default function SubscriptionPage() {
       const tokenDoc = availableTokenSnap.docs[0];
       const tokenData = tokenDoc.data() as Token;
       
-      const userDocRef = doc(firestore, 'users', user.uid);
       const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
   
       const allPermissionsFalse: UserPermissions = {
@@ -166,23 +196,19 @@ export default function SubscriptionPage() {
   
       const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 30));
   
-      // Use a transaction to ensure atomicity
       await runTransaction(firestore, async (transaction) => {
-        // 1. Update the token stock
         transaction.update(tokenDoc.ref, {
           status: 'in_use',
           assignedTo: user.uid,
           assignedEmail: user.email,
         });
   
-        // 2. Update the user's document with subscription info
         transaction.set(userDocRef, { 
           subscriptionPlan: plan, 
           permissions: newPermissions,
           subscriptionEndDate: subscriptionEndDate
         }, { merge: true });
   
-        // 3. Update the user's settings with the assigned token
         transaction.set(userSettingsRef, {
           webhookToken: tokenData.value
         }, { merge: true });
@@ -196,7 +222,7 @@ export default function SubscriptionPage() {
         description: e.message || 'Não foi possível ativar sua assinatura. Por favor, contate o suporte.',
       });
       setPaymentStatus('error'); 
-      throw e; // re-throw to stop the calling function
+      throw e;
     }
   }, [firestore, user, toast]);
 
@@ -207,9 +233,9 @@ export default function SubscriptionPage() {
         await grantPlanAccess('pro');
         toast({
             title: "Acesso de Teste Ativado!",
-            description: `Seu acesso ao Plano Pro foi liberado para teste.`,
+            description: `Seu acesso ao Plano Pro foi liberado. Redirecionando...`,
         });
-        router.push('/dashboard');
+        window.location.assign('/dashboard');
     } catch (e) {
         // Error toast is already shown in grantPlanAccess
     } finally {
@@ -281,16 +307,16 @@ export default function SubscriptionPage() {
           grantPlanAccess(selectedPlan).then(() => {
               toast({
                   title: "Pagamento Aprovado!",
-                  description: `Seu acesso ao plano ${selectedPlan === 'basic' ? 'Básico' : 'Pro'} foi liberado.`,
+                  description: `Seu acesso ao plano ${selectedPlan === 'basic' ? 'Básico' : 'Pro'} foi liberado. Redirecionando...`,
               });
               setTimeout(() => {
-                  router.push('/dashboard');
+                  window.location.assign('/dashboard');
               }, 2000);
           }).catch(() => {
-            // Error is handled inside grantPlanAccess, just need to prevent unhandled promise rejection
+            // Error is handled inside grantPlanAccess
           });
       }
-  }, [paymentStatus, selectedPlan, grantPlanAccess, router, toast]);
+  }, [paymentStatus, selectedPlan, grantPlanAccess, toast]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
