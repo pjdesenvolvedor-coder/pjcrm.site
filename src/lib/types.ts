@@ -95,6 +95,8 @@ export type Settings = {
   presetHour?: string;
   presetMinute?: string;
   usePresetTime?: boolean;
+  isDueDateMessageActive?: boolean;
+  dueDateMessage?: string;
 };
 
 export type Subscription = {

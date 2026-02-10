@@ -409,6 +409,14 @@
         "usePresetTime": {
           "type": "boolean",
           "description": "Flag to determine if the preset time should be used."
+        },
+        "isDueDateMessageActive": {
+          "type": "boolean",
+          "description": "Flag to enable or disable the automatic due date message."
+        },
+        "dueDateMessage": {
+          "type": "string",
+          "description": "The message template to be sent when a subscription is due."
         }
       }
     },
