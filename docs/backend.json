@@ -576,6 +576,41 @@
         "value",
         "status"
       ]
+    },
+    "ExtractedGroup": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExtractedGroup",
+      "type": "object",
+      "description": "Represents a group whose members have been extracted.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the extracted group record."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who extracted this group."
+        },
+        "groupName": {
+          "type": "string",
+          "description": "The name of the WhatsApp group."
+        },
+        "participantCount": {
+          "type": "string",
+          "description": "The total number of participants."
+        },
+        "adminPhones": {
+          "type": "array",
+          "description": "List of phone numbers of the group admins.",
+          "items": { "type": "string" }
+        },
+        "memberPhones": {
+          "type": "array",
+          "description": "List of phone numbers of the group members.",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "userId", "groupName", "participantCount", "adminPhones", "memberPhones"]
     }
   },
   "auth": {
@@ -810,6 +845,26 @@
             {
               "name": "tokenId",
               "description": "The unique identifier for the token."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/extracted_groups/{groupId}",
+        "definition": {
+          "entityName": "ExtractedGroup",
+          "schema": {
+            "$ref": "#/backend/entities/ExtractedGroup"
+          },
+          "description": "Stores lists of extracted group members for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "groupId",
+              "description": "The unique identifier for the extracted group record."
             }
           ]
         }

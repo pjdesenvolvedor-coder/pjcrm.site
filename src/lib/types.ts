@@ -135,3 +135,12 @@ export type Token = {
   assignedTo?: string;
   assignedEmail?: string;
 };
+
+export type ExtractedGroup = {
+  id: string;
+  userId: string;
+  groupName: string;
+  participantCount: string;
+  adminPhones: string[];
+  memberPhones: string[];
+};
