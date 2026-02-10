@@ -50,7 +50,7 @@ export default function ExtractMembersPage() {
     setIsSending(true);
 
     try {
-      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/2cf1d5c0-d83a-4374-9205-d3259cf6cc10', {
+      const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/2cf1d5c0-d83a-4374-9205-d3259cf6cc10', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
