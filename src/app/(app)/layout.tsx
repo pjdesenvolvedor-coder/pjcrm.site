@@ -20,6 +20,7 @@ import {
   Settings as SettingsIcon, // Renamed to avoid conflict
   Contact,
   Package,
+  LifeBuoy,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -154,6 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         zapconnect: false,
         settings: false,
         users: false,
+        liveChat: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -729,6 +731,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       </CollapsibleContent>
                   </Collapsible>
                 </SidebarMenuItem>
+              )}
+
+              {permissions.liveChat && (
+                  <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/live-chat'} tooltip={{ children: 'Chat Ao Vivo' }}>
+                          <Link href="/live-chat"><LifeBuoy /><span>Chat Ao Vivo</span></Link>
+                      </SidebarMenuButton>
+                  </SidebarMenuItem>
               )}
 
             </SidebarMenu>

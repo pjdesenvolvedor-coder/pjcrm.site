@@ -576,6 +576,106 @@
         "value",
         "status"
       ]
+    },
+    "Ticket": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Ticket",
+      "type": "object",
+      "description": "Represents a support ticket opened by a user.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who created the ticket."
+        },
+        "userName": {
+          "type": "string",
+          "description": "The name of the user who created the ticket."
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "The email of the user who created the ticket."
+        },
+        "subject": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Aberto",
+            "Em Andamento",
+            "Fechado"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastMessage": {
+          "type": "string"
+        },
+        "lastMessageAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "unreadByAdmin": {
+          "type": "boolean"
+        },
+        "unreadByUser": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "userName",
+        "userEmail",
+        "subject",
+        "status",
+        "createdAt",
+        "lastMessageAt"
+      ]
+    },
+    "TicketMessage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TicketMessage",
+      "type": "object",
+      "description": "Represents a message within a support ticket.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "ticketId": {
+          "type": "string"
+        },
+        "senderId": {
+          "type": "string"
+        },
+        "senderName": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "isAgent": {
+          "type": "boolean",
+          "description": "True if the sender is an agent/user, false if it's an admin."
+        }
+      },
+      "required": [
+        "id",
+        "ticketId",
+        "senderId",
+        "senderName",
+        "content",
+        "timestamp"
+      ]
     }
   },
   "auth": {
@@ -810,6 +910,42 @@
             {
               "name": "tokenId",
               "description": "The unique identifier for the token."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tickets/{ticketId}",
+        "definition": {
+          "entityName": "Ticket",
+          "schema": {
+            "$ref": "#/backend/entities/Ticket"
+          },
+          "description": "Stores support tickets. Admins can read all, users can read their own.",
+          "params": [
+            {
+              "name": "ticketId",
+              "description": "The unique identifier for the ticket."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tickets/{ticketId}/messages/{messageId}",
+        "definition": {
+          "entityName": "TicketMessage",
+          "schema": {
+            "$ref": "#/backend/entities/TicketMessage"
+          },
+          "description": "Stores messages for a specific support ticket.",
+          "params": [
+            {
+              "name": "ticketId",
+              "description": "The unique identifier for the ticket."
+            },
+            {
+              "name": "messageId",
+              "description": "The unique identifier for the message."
             }
           ]
         }

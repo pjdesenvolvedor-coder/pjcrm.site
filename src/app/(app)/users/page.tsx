@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock, Unlock, Package, LifeBuoyIcon, Trash2 } from 'lucide-react';
+import { Lock, Unlock, Package, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,7 @@ const permissionsSchema = z.object({
   zapconnect: z.boolean().default(false),
   settings: z.boolean().default(false),
   users: z.boolean().default(false),
+  liveChat: z.boolean().default(false),
 });
 
 const userFormSchema = z.object({
@@ -67,6 +68,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'zapconnect', label: 'ZapConexão' },
     { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
+    { key: 'liveChat', label: 'Chat Ao Vivo' },
 ];
 
 function UserClientCount({ userId }: { userId: string }) {
@@ -146,6 +148,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 zapconnect: user.permissions?.zapconnect ?? false,
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
+                liveChat: user.permissions?.liveChat ?? false,
             },
         },
     });
@@ -587,7 +590,7 @@ export default function UsersPage() {
                                 <AlertDialogHeader>
                                 <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Essa ação não pode ser desfeita. Isso excluirá permanentemente os dados do usuário do CRM, desconectará sua sessão e liberará seu token. O usuário NÃO poderá se cadastrar novamente com o mesmo e-mail, a menos que você o exclua manualmente do console de autenticação do Firebase.
+                                    Essa ação não pode ser desfeita. Isso excluirá permanentemente os dados do usuário do CRM, desconectará sua sessão e liberará seu token. O usuário NÃO poderá se cadastrar novamente com o mesmo e-mail, a menos que você o exclua manually do console de autenticação do Firebase.
                                 </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
