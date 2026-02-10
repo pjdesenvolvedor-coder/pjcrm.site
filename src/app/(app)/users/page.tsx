@@ -56,7 +56,6 @@ const permissionsSchema = z.object({
 const userFormSchema = z.object({
   role: z.enum(['Admin', 'Agent']),
   permissions: permissionsSchema,
-  subscriptionEndDate: z.date().optional().nullable(),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -150,7 +149,6 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
             },
-            subscriptionEndDate: user.subscriptionEndDate ? user.subscriptionEndDate.toDate() : null,
         },
     });
 
@@ -172,12 +170,9 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
             ? permissionLabels.reduce((acc, p) => ({ ...acc, [p.key]: true }), {})
             : data.permissions;
         
-        const newSubscriptionEndDate = data.subscriptionEndDate ? Timestamp.fromDate(data.subscriptionEndDate) : null;
-
         setDocumentNonBlocking(userDocRef, { 
             role: data.role,
             permissions: finalPermissions,
-            subscriptionEndDate: newSubscriptionEndDate
         }, { merge: true });
 
         toast({
@@ -244,45 +239,6 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                         ))}
                     </div>
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="subscriptionEndDate"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Expiração da Assinatura</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "dd/MM/yyyy")
-                              ) : (
-                                <span>Sem data</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value ?? undefined}
-                            onSelect={field.onChange}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 <DialogFooter>
                     <Button type="button" variant="ghost" onClick={onFinished}>Cancelar</Button>
