@@ -203,6 +203,7 @@ export default function ProfilePage() {
     const [isRenewing, setIsRenewing] = useState(false);
     const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
     const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
+    const [isProcessingRenewal, setIsProcessingRenewal] = useState(false);
 
     const handleRenewSubscription = async () => {
         if (isRenewing || !userProfile?.subscriptionPlan) return;
@@ -210,6 +211,7 @@ export default function ProfilePage() {
         setIsRenewing(true);
         setPaymentInfo(null);
         setPaymentStatus(null);
+        setIsProcessingRenewal(false);
         
         const planPrices = { basic: 100, pro: 200 };
         const valueInCents = planPrices[userProfile.subscriptionPlan];
@@ -253,32 +255,42 @@ export default function ProfilePage() {
 
     useEffect(() => {
         const grantRenewalAccess = async () => {
-            if (paymentStatus === 'paid' && userProfile && userDocRef) {
-                try {
-                    const currentEndDate = userProfile.subscriptionEndDate ? userProfile.subscriptionEndDate.toDate() : new Date();
-                    const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), 30);
-                    
-                    await setDocumentNonBlocking(userDocRef, {
-                        subscriptionEndDate: Timestamp.fromDate(newEndDate),
-                    }, { merge: true });
+             if (paymentStatus !== 'paid' || !userProfile || !userDocRef || isProcessingRenewal) {
+                return;
+            }
+            setIsProcessingRenewal(true);
+            try {
+                const currentEndDate = userProfile.subscriptionEndDate ? userProfile.subscriptionEndDate.toDate() : new Date();
+                const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), 30);
+                
+                await setDocumentNonBlocking(userDocRef, {
+                    subscriptionEndDate: Timestamp.fromDate(newEndDate),
+                    trialActivated: false, // Remove trial tag on renewal
+                }, { merge: true });
 
-                    toast({ title: "Assinatura Renovada!", description: `Seu acesso foi estendido.` });
-                    setTimeout(() => {
-                        setPaymentInfo(null);
-                        setPaymentStatus(null);
-                    }, 3000);
-                } catch(e) {
-                    toast({ variant: 'destructive', title: 'Falha na Renovação', description: 'Não foi possível atualizar sua assinatura.' });
-                }
+                toast({ title: "Assinatura Renovada!", description: `Seu acesso foi estendido.` });
+                setTimeout(() => {
+                    setPaymentInfo(null);
+                    setPaymentStatus(null);
+                }, 3000);
+            } catch(e) {
+                toast({ variant: 'destructive', title: 'Falha na Renovação', description: 'Não foi possível atualizar sua assinatura.' });
+                setIsProcessingRenewal(false); // Allow retry on error
             }
         };
         grantRenewalAccess();
-    }, [paymentStatus, userProfile, userDocRef, toast]);
+    }, [paymentStatus, userProfile, userDocRef, toast, isProcessingRenewal]);
     
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
         toast({ title: 'Copiado!', description: 'Código PIX copiado.' });
     };
+
+    const resetDialog = () => {
+        setPaymentInfo(null);
+        setPaymentStatus(null);
+        setIsProcessingRenewal(false);
+    }
 
     if (isProfileLoading) {
         return (
@@ -296,7 +308,7 @@ export default function ProfilePage() {
         <>
         <PaymentDialog 
             isOpen={!!paymentInfo}
-            onClose={() => { setPaymentInfo(null); setPaymentStatus(null); }}
+            onClose={resetDialog}
             plan={userProfile?.subscriptionPlan || null}
             paymentInfo={paymentInfo}
             paymentStatus={paymentStatus}
