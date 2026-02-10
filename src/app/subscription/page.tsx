@@ -427,8 +427,8 @@ export default function SubscriptionPage() {
       <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
         <DialogContent className="sm:max-w-md">
             <DialogHeader className="items-center text-center pt-4">
-                 <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-2">
-                    <Image src="https://i.imgur.com/T0bC0a.png" alt="Foguete decolando" width={48} height={48} data-ai-hint="rocket illustration" />
+                <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-2">
+                    <Image src="https://i.imgur.com/SIDAI3I.png" alt="Foguete decolando" width={48} height={48} data-ai-hint="rocket illustration" />
                 </div>
                 <DialogTitle className="text-2xl">Escolha o plano para seu teste</DialogTitle>
                 <DialogDescription>
