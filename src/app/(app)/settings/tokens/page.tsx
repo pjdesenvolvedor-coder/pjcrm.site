@@ -1,6 +1,6 @@
 'use client';
 
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +44,7 @@ export default function TokenStockPage() {
   const { firestore } = useFirebase();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const tokensQuery = useMemoFirebase(() => {
     return query(collection(firestore, 'tokens'), orderBy('status'));
@@ -58,14 +59,36 @@ export default function TokenStockPage() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof tokenSchema>) => {
+  const onSubmit = async (values: z.infer<typeof tokenSchema>) => {
+    setIsSubmitting(true);
     addDocumentNonBlocking(collection(firestore, 'tokens'), {
         value: values.value,
         status: 'available',
     });
     toast({ title: 'Token Adicionado!', description: `O novo token foi adicionado ao estoque.` });
-    form.reset();
-    setOpen(false);
+    
+    try {
+        await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: values.value }),
+        });
+        toast({
+            title: 'Verificação Concluída',
+            description: 'Sessão anterior (se existente) foi desconectada para garantir que o token esteja limpo.',
+        });
+    } catch (error: any) {
+        console.error('Falha ao tentar desconectar novo token:', error);
+        toast({
+            variant: 'destructive',
+            title: 'Falha na Verificação',
+            description: 'Não foi possível verificar o status do novo token.',
+        });
+    } finally {
+        form.reset();
+        setOpen(false);
+        setIsSubmitting(false);
+    }
   };
 
   const handleDelete = (token: Token) => {
@@ -104,7 +127,7 @@ export default function TokenStockPage() {
                     Adicione um novo token de conexão ao estoque.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <fieldset disabled={isSubmitting} className="grid gap-4 py-4">
                   <FormField
                     control={form.control}
                     name="value"
@@ -118,9 +141,18 @@ export default function TokenStockPage() {
                       </FormItem>
                     )}
                   />
-                </div>
+                </fieldset>
                 <DialogFooter>
-                  <Button type="submit">Salvar Token</Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                     {isSubmitting ? (
+                        <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Salvando...
+                        </>
+                    ) : (
+                        'Salvar Token'
+                    )}
+                  </Button>
                 </DialogFooter>
               </form>
             </Form>
