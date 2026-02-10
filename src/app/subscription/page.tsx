@@ -17,9 +17,11 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 // A new component for the payment modal to keep the main component clean
@@ -135,6 +137,11 @@ export default function SubscriptionPage() {
   const [isGeneratingPix, setIsGeneratingPix] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
+  
+  const [isTrialDialogOpen, setIsTrialDialogOpen] = useState(false);
+  const [trialPlan, setTrialPlan] = useState<'basic' | 'pro'>('pro');
+  const [isActivatingTrial, setIsActivatingTrial] = useState(false);
+
 
   useEffect(() => {
     if (userProfile && userProfile.subscriptionPlan && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() > new Date()) {
@@ -312,6 +319,89 @@ export default function SubscriptionPage() {
       setSelectedPlan(null);
   }
 
+  const handleActivateTrial = async () => {
+    if (!trialPlan || !user || !firestore || !userDocRef) return;
+    setIsActivatingTrial(true);
+
+    try {
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists() && userDoc.data().trialActivated) {
+            toast({
+                variant: 'destructive',
+                title: 'Teste já utilizado',
+                description: 'Você já ativou um período de teste.',
+            });
+            setIsActivatingTrial(false);
+            setIsTrialDialogOpen(false);
+            return;
+        }
+
+        const tokensRef = collection(firestore, 'tokens');
+        const q = query(tokensRef, where('status', '==', 'available'), limit(1));
+        const availableTokenSnap = await getDocs(q);
+
+        if (availableTokenSnap.empty) {
+            throw new Error('Nenhum token de conexão disponível para o teste. Contate o suporte.');
+        }
+        
+        const tokenDoc = availableTokenSnap.docs[0];
+        const tokenData = tokenDoc.data() as Token;
+        const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+        
+        const allPermissionsFalse: UserPermissions = {
+            dashboard: false, customers: false, inbox: false, automations: false,
+            groups: false, shot: false, zapconnect: false, settings: false, users: false,
+        };
+  
+        let newPermissions: UserPermissions;
+        if (trialPlan === 'basic') {
+            newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, shot: true, zapconnect: true };
+        } else { // pro
+            newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, users: false };
+        }
+
+        const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 3));
+
+        await runTransaction(firestore, async (transaction) => {
+            transaction.update(tokenDoc.ref, {
+                status: 'in_use',
+                assignedTo: user.uid,
+                assignedEmail: user.email,
+            });
+            transaction.set(userDocRef!, { 
+                subscriptionPlan: trialPlan, 
+                permissions: newPermissions,
+                subscriptionEndDate: subscriptionEndDate,
+                trialActivated: true
+            }, { merge: true });
+            transaction.set(userSettingsRef, {
+                webhookToken: tokenData.value
+            }, { merge: true });
+        });
+
+        toast({
+            title: 'Teste Ativado!',
+            description: `Você tem 3 dias de acesso ao plano ${trialPlan === 'basic' ? 'Básico' : 'Pro'}. Redirecionando...`,
+        });
+
+        setTimeout(() => {
+            router.push('/dashboard');
+        }, 1500);
+
+    } catch (e: any) {
+        console.error("Trial activation failed:", e);
+        toast({
+            variant: 'destructive',
+            title: 'Falha na Ativação do Teste',
+            description: e.message || 'Não foi possível ativar seu teste. Por favor, contate o suporte.',
+        });
+    } finally {
+        setIsActivatingTrial(false);
+        setIsTrialDialogOpen(false);
+    }
+  };
+
+
   if (isUserLoading || !user) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-white">
@@ -333,6 +423,32 @@ export default function SubscriptionPage() {
         paymentStatus={paymentStatus}
         onCopy={handleCopy}
       />
+      <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Escolha o plano para o seu teste</DialogTitle>
+                <DialogDescription>Você terá 3 dias de acesso gratuito a todas as funcionalidades do plano escolhido.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <Select onValueChange={(value: 'basic' | 'pro') => setTrialPlan(value)} defaultValue={trialPlan}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Selecione um plano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="pro">Pro</SelectItem>
+                        <SelectItem value="basic">Básico</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            <DialogFooter>
+                <Button variant="ghost" onClick={() => setIsTrialDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleActivateTrial} disabled={isActivatingTrial}>
+                    {isActivatingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Ativar Teste
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex min-h-screen flex-col items-center justify-center bg-white p-8">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold tracking-tight">Escolha seu Plano</h1>
@@ -384,6 +500,21 @@ export default function SubscriptionPage() {
             </CardFooter>
           </Card>
         </div>
+
+        <div className="mt-8 w-full max-w-4xl">
+            <Card>
+                <CardHeader className="text-center">
+                    <CardTitle>Não tem certeza?</CardTitle>
+                    <CardDescription>Experimente qualquer um dos nossos planos gratuitamente por 3 dias.</CardDescription>
+                </CardHeader>
+                <CardFooter>
+                    <Button variant="outline" className="w-full" onClick={() => setIsTrialDialogOpen(true)}>
+                        Iniciar Teste Grátis
+                    </Button>
+                </CardFooter>
+            </Card>
+        </div>
+
       </div>
     </>
   );

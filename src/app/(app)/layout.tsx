@@ -78,6 +78,29 @@ type LiveStatus = {
   profilePicUrl?: string;
 };
 
+function ExpirationOverlay() {
+    const router = useRouter();
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <Card className="w-full max-w-md m-4 text-center shadow-2xl animate-in fade-in-0 zoom-in-95">
+                <CardHeader>
+                    <CardTitle className="text-2xl text-destructive">Assinatura Expirada</CardTitle>
+                    <CardDescription>Sua assinatura (ou teste grátis) terminou.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">
+                        Para continuar usando o sistema, por favor, renove ou escolha um plano.
+                    </p>
+                </CardContent>
+                <CardFooter className="flex-col sm:flex-row gap-2">
+                     <Button variant="outline" className="w-full" onClick={() => router.push('/profile')}>Renovar Plano Atual</Button>
+                     <Button className="w-full" onClick={() => window.location.assign('/subscription')}>Ver Outros Planos</Button>
+                </CardFooter>
+            </Card>
+        </div>
+    );
+}
+
 function BlockedOverlay() {
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -121,6 +144,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  const [showExpiredOverlay, setShowExpiredOverlay] = useState(false);
+  const [isReleasingToken, setIsReleasingToken] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -262,24 +288,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         userProfile.subscriptionEndDate &&
         userProfile.subscriptionEndDate.toDate() < new Date()
       ) {
-        if (settings?.webhookToken && user) {
-          const tokenValue = settings.webhookToken;
-  
-          // Disconnect session
-          fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+        setShowExpiredOverlay(true);
+        
+        if (isReleasingToken || !settings?.webhookToken || !user) return; 
+
+        setIsReleasingToken(true);
+        const tokenValue = settings.webhookToken;
+        
+        fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: tokenValue }),
-          });
-  
-          // Find token and release it
-          try {
+        });
+
+        try {
             const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
             const tokenSnapshot = await getDocs(tokenQuery);
             
             if (!tokenSnapshot.empty) {
               const tokenDocRef = tokenSnapshot.docs[0].ref;
               const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+              const userDocRef = doc(firestore, 'users', user.uid);
               
               const batch = writeBatch(firestore);
               batch.update(tokenDocRef, {
@@ -288,17 +317,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 assignedEmail: null,
               });
               batch.update(userSettingsRef, { webhookToken: null });
+              batch.update(userDocRef, { subscriptionPlan: null });
               await batch.commit();
             }
-          } catch (e) {
-            console.error("Failed to release token on expiration:", e);
-          }
+        } catch (e) {
+          console.error("Failed to release token on expiration:", e);
+        } finally {
+            setIsReleasingToken(false);
         }
-        window.location.assign('/subscription');
       }
     };
     handleExpiration();
-  }, [userProfile, isProfileLoading, router, settings, firestore, user]);
+}, [userProfile, isProfileLoading, settings, firestore, user, isReleasingToken]);
+
 
   if (isUserLoading || !user || isProfileLoading) {
     return (
@@ -526,6 +557,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
       {userProfile?.status === 'blocked' && <BlockedOverlay />}
+      {showExpiredOverlay && <ExpirationOverlay />}
       <Sidebar
         variant="sidebar"
         collapsible="icon"

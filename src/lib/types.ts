@@ -24,6 +24,7 @@ export type UserProfile = {
   subscriptionPlan?: 'basic' | 'pro' | null;
   subscriptionEndDate?: Timestamp;
   status?: 'active' | 'blocked';
+  trialActivated?: boolean;
 };
 
 export type Client = {
