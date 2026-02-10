@@ -2,48 +2,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isAdmin() {
-      // Check if the user document exists and has the role 'Admin'.
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
-    }
-
-    // Rules for the 'users' collection and all its subcollections
-    // Admins can manage everything. Users can only manage their own data.
-    match /users/{userId}/{documents=**} {
-      allow read, write: if request.auth.uid == userId || isAdmin();
-    }
-
-    // Rules for 'tokens' collection - Admin only
-    match /tokens/{tokenId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Rules for 'tickets' collection
-    match /tickets/{ticketId} {
-      // Admins can perform any action on any ticket.
-      allow read, write: if isAdmin();
-
-      // Authenticated users can create tickets for themselves.
-      allow create: if request.auth.uid != null && request.auth.uid == request.resource.data.userId;
-      
-      // Authenticated users are allowed to try and list tickets.
-      // The security is enforced by the `get` rule below, which checks each document.
-      allow list: if request.auth.uid != null;
-      
-      // Users can get and update their own tickets. They cannot delete tickets.
-      allow get, update: if request.auth.uid != null && resource.data.userId == request.auth.uid;
-    }
-
-    // Rules for 'messages' subcollection within 'tickets'
-    match /tickets/{ticketId}/messages/{messageId} {
-      // The ticket owner is fetched from the parent ticket document.
-      let ticketOwnerUid = get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId;
-      
-      // Admins can read/write all messages.
-      // The user who created the ticket can read/write messages in it.
-      allow read, write: if isAdmin() || (request.auth.uid == ticketOwnerUid);
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }

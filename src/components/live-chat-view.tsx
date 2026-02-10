@@ -101,17 +101,24 @@ export function LiveChatView() {
     
     const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
 
-    const isAdmin = userProfile?.role === 'Admin';
+    const isAdmin = !isProfileLoading && userProfile?.role === 'Admin';
     
     const ticketsQuery = useMemoFirebase(() => {
-        if (!user || !userProfile) return null; // Wait for both user and profile to be loaded.
+        // Explicitly wait until the user profile has finished loading.
+        if (isProfileLoading || !user) {
+            return null;
+        }
 
-        if (userProfile.role === 'Admin') {
+        // Once loading is complete, userProfile will be populated or null (if doc doesn't exist).
+        // We can safely check the role.
+        if (userProfile?.role === 'Admin') {
             return query(collection(firestore, 'tickets'), orderBy('lastMessageAt', 'desc'));
         }
         
+        // For any non-admin user (or if profile somehow fails to load), construct the secure query.
         return query(collection(firestore, 'tickets'), where('userId', '==', user.uid), orderBy('lastMessageAt', 'desc'));
-    }, [firestore, user, userProfile]); // Depend directly on user and userProfile objects
+    }, [firestore, user, userProfile, isProfileLoading]); // Add isProfileLoading to dependencies.
+
 
     const { data: tickets, isLoading: isLoadingTickets } = useCollection<Ticket>(ticketsQuery);
 
