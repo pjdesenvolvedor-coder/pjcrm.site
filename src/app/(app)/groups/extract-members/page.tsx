@@ -5,18 +5,21 @@ import { doc } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, RefreshCw } from 'lucide-react';
+import { Users, RefreshCw, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function ExtractMembersPage() {
   const { toast } = useToast();
   const { firestore, user } = useFirebase();
   const [jid, setJid] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [participantCount, setParticipantCount] = useState<number | null>(null);
+  const [participants, setParticipants] = useState<string[] | null>(null);
 
   const settingsDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -62,12 +65,28 @@ export default function ExtractMembersPage() {
         const errorText = await response.text();
         throw new Error(`Falha no webhook: ${errorText}`);
       }
+      
+      const data = await response.json();
 
-      toast({
-        title: 'Requisição Enviada!',
-        description: 'A extração de membros foi iniciada. Você receberá o arquivo em seu WhatsApp.',
-      });
-      setJid('');
+      const count = data.quantidadedeparticipantes || data.ParticipantCount;
+      const participantData = data.dadosparticipantes || data.Participants;
+
+      if (count && participantData) {
+          const participantNumbers = Array.isArray(participantData)
+            ? participantData.map(p => (typeof p === 'object' && p.jid ? p.jid : p))
+            : [];
+          
+          setParticipantCount(Number(count));
+          setParticipants(participantNumbers);
+          
+          toast({
+              title: 'Extração Concluída!',
+              description: `Encontrados ${count} participantes.`,
+          });
+          setJid('');
+      } else {
+          throw new Error('A resposta do webhook não continha os dados esperados.');
+      }
 
     } catch (error: any) {
       console.error('Webhook error:', error);
@@ -81,6 +100,19 @@ export default function ExtractMembersPage() {
     }
   };
 
+  const handleCopyAll = () => {
+    if (!participants) return;
+    const textToCopy = participants.map(p => p.replace('@s.whatsapp.net', '')).join('\n');
+    navigator.clipboard.writeText(textToCopy);
+    toast({ title: 'Copiado!', description: 'Todos os números foram copiados para a área de transferência.' });
+  };
+
+  const handleReset = () => {
+    setParticipants(null);
+    setParticipantCount(null);
+    setJid('');
+  };
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
@@ -89,39 +121,69 @@ export default function ExtractMembersPage() {
       />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="w-full max-w-2xl mx-auto">
-            <Card>
-              <CardHeader>
-                <CardTitle>Extrair Membros</CardTitle>
-                <CardDescription>
-                  Insira o JID do grupo para iniciar a extração. O resultado será enviado para o seu número de WhatsApp conectado.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="group-jid">JID do Grupo</Label>
-                  <Input
-                    id="group-jid"
-                    placeholder="Cole o JID do grupo aqui..."
-                    value={jid}
-                    onChange={(e) => setJid(e.target.value)}
-                    disabled={isSending}
-                  />
-                </div>
-                <Button onClick={handleExtractMembers} className="w-full" disabled={isSending}>
-                   {isSending ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Extraindo...
-                    </>
-                  ) : (
-                    <>
-                      <Users className="mr-2 h-4 w-4" />
-                      Extrair Membros
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+            {participants === null ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Extrair Membros</CardTitle>
+                    <CardDescription>
+                      Insira o JID do grupo para iniciar a extração. O resultado será exibido abaixo.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="group-jid">JID do Grupo</Label>
+                      <Input
+                        id="group-jid"
+                        placeholder="Cole o JID do grupo aqui..."
+                        value={jid}
+                        onChange={(e) => setJid(e.target.value)}
+                        disabled={isSending}
+                      />
+                    </div>
+                    <Button onClick={handleExtractMembers} className="w-full" disabled={isSending}>
+                       {isSending ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Extraindo...
+                        </>
+                      ) : (
+                        <>
+                          <Users className="mr-2 h-4 w-4" />
+                          Extrair Membros
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+            ) : (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Resultados da Extração</CardTitle>
+                        <CardDescription>
+                        Total de {participantCount} participantes encontrados no grupo.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ScrollArea className="h-72 w-full rounded-md border">
+                            <div className="p-4 text-sm font-mono">
+                                {participants.map((p, index) => (
+                                    <p key={index} className="p-1">{p.replace('@s.whatsapp.net', '')}</p>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </CardContent>
+                    <CardFooter className="justify-between">
+                        <Button variant="outline" onClick={handleReset}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Nova Extração
+                        </Button>
+                        <Button onClick={handleCopyAll}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copiar Todos os Números
+                        </Button>
+                    </CardFooter>
+                </Card>
+            )}
         </div>
       </main>
     </div>
