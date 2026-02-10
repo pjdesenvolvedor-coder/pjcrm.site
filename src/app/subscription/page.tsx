@@ -140,7 +140,7 @@ export default function SubscriptionPage() {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
   
   const [isTrialDialogOpen, setIsTrialDialogOpen] = useState(false);
-  const [trialPlan, setTrialPlan] = useState<'basic' | 'pro'>('pro');
+  const [trialPlan, setTrialPlan] = useState<'pro'>('pro');
   const [isActivatingTrial, setIsActivatingTrial] = useState(false);
 
 
@@ -425,14 +425,19 @@ export default function SubscriptionPage() {
         onCopy={handleCopy}
       />
       <Dialog open={isTrialDialogOpen} onOpenChange={setIsTrialDialogOpen}>
-        <DialogContent>
-            <DialogHeader>
-                <DialogTitle>Escolha o plano para o seu teste</DialogTitle>
-                <DialogDescription>Você terá 3 dias de acesso gratuito a todas as funcionalidades do plano escolhido.</DialogDescription>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader className="items-center text-center pt-4">
+                 <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-2">
+                    <Image src="https://i.imgur.com/T0bC0a.png" alt="Foguete decolando" width={48} height={48} data-ai-hint="rocket illustration" />
+                </div>
+                <DialogTitle className="text-2xl">Escolha o plano para seu teste</DialogTitle>
+                <DialogDescription>
+                    Você terá 3 dias de acesso gratuito a todas as funcionalidades do plano escolhido.
+                </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-                <Select onValueChange={(value: 'basic' | 'pro') => setTrialPlan(value)} defaultValue={trialPlan}>
-                    <SelectTrigger>
+                <Select onValueChange={(value: 'basic' | 'pro') => setTrialPlan(value as 'pro')} defaultValue={trialPlan}>
+                    <SelectTrigger className="h-11">
                         <SelectValue placeholder="Selecione um plano" />
                     </SelectTrigger>
                     <SelectContent>
@@ -441,8 +446,8 @@ export default function SubscriptionPage() {
                     </SelectContent>
                 </Select>
             </div>
-            <DialogFooter>
-                <Button variant="ghost" onClick={() => setIsTrialDialogOpen(false)}>Cancelar</Button>
+            <DialogFooter className="sm:justify-center">
+                <Button type="button" variant="ghost" onClick={() => setIsTrialDialogOpen(false)}>Cancelar</Button>
                 <Button onClick={handleActivateTrial} disabled={isActivatingTrial}>
                     {isActivatingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Ativar Teste
