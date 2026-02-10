@@ -87,6 +87,13 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   }, [firestore, user]);
   const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
+  const settingsDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid, 'settings', 'config');
+  }, [firestore, user]);
+  const { data: settings } = useDoc<Settings>(settingsDocRef);
+
+
   const defaultEmails = useMemo(() => {
     if (initialData?.email) {
       return Array.isArray(initialData.email) ? initialData.email.map(e => ({ value: e })) : [{ value: initialData.email }];
@@ -121,13 +128,18 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const clientType = form.watch('clientType');
 
   useEffect(() => {
-    if (!isEditing) {
-      const now = new Date();
-      form.setValue('dueTimeHour', now.getHours().toString().padStart(2, '0'));
-      form.setValue('dueTimeMinute', now.getMinutes().toString().padStart(2, '0'));
+    if (!isEditing && settings !== undefined) { // Wait for settings to be loaded (even if null)
+      if (settings?.usePresetTime && settings.presetHour && settings.presetMinute) {
+          form.setValue('dueTimeHour', settings.presetHour);
+          form.setValue('dueTimeMinute', settings.presetMinute);
+      } else {
+          const now = new Date();
+          form.setValue('dueTimeHour', now.getHours().toString().padStart(2, '0'));
+          form.setValue('dueTimeMinute', now.getMinutes().toString().padStart(2, '0'));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing]);
+  }, [isEditing, settings]);
   
   useEffect(() => {
     form.setValue('quantity', fields.length.toString());

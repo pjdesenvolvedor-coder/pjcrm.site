@@ -92,6 +92,9 @@ export type Message = {
 
 export type Settings = {
   webhookToken?: string;
+  presetHour?: string;
+  presetMinute?: string;
+  usePresetTime?: boolean;
 };
 
 export type Subscription = {

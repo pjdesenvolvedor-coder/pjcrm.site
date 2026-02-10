@@ -604,6 +604,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               )}
+                               {permissions.settings && (
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/presets')}>
+                                        <Link href="/settings/presets">Predefinição</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
                               {permissions.users && (
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname.startsWith('/users')}>

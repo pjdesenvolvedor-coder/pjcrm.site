@@ -397,6 +397,18 @@
         "webhookToken": {
           "type": "string",
           "description": "Authentication token for webhook requests."
+        },
+        "presetHour": {
+          "type": "string",
+          "description": "The preset hour for new client due dates."
+        },
+        "presetMinute": {
+          "type": "string",
+          "description": "The preset minute for new client due dates."
+        },
+        "usePresetTime": {
+          "type": "boolean",
+          "description": "Flag to determine if the preset time should be used."
         }
       }
     },
