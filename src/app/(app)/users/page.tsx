@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock, Unlock, Package, LifeBuoyIcon } from 'lucide-react';
+import { Lock, Unlock, Package, LifeBuoyIcon, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFirebase, useUser, setDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc, where, Timestamp, getDoc, writeBatch, runTransaction } from 'firebase/firestore';
+import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc, where, Timestamp, getDoc, writeBatch, runTransaction, deleteDoc } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/lib/types';
 import { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -429,17 +429,66 @@ export default function UsersPage() {
     ));
   };
 
-  const handleDeleteUser = (user: UserProfile) => {
-    // This function will just show the dialog now. The underlying auth account is not deleted.
-    const userDocRef = doc(firestore, "users", user.id);
-    setDocumentNonBlocking(userDocRef, { 
-        status: 'blocked',
-        subscriptionPlan: null,
-        subscriptionEndDate: null,
-    }, { merge: true });
-    
-    fetchUsers('initial'); // Re-fetch to show updated data
-  }
+  const handleDeleteUser = async (userToDelete: UserProfile) => {
+    if (!firestore || !currentUser) return;
+
+    if (userToDelete.id === currentUser?.uid) {
+        toast({
+            variant: "destructive",
+            title: "Ação não permitida",
+            description: "Você não pode excluir seu próprio usuário.",
+        });
+        return;
+    }
+
+    try {
+        const userSettingsRef = doc(firestore, 'users', userToDelete.id, 'settings', 'config');
+        const settingsSnap = await getDoc(userSettingsRef);
+
+        if (settingsSnap.exists() && settingsSnap.data().webhookToken) {
+            const tokenValue = settingsSnap.data().webhookToken;
+
+            // Disconnect session
+            await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: tokenValue }),
+            });
+
+            // Find and release token
+            const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
+            const tokenSnapshot = await getDocs(tokenQuery);
+            if (!tokenSnapshot.empty) {
+                const tokenDocRef = tokenSnapshot.docs[0].ref;
+                await runTransaction(firestore, async (transaction) => {
+                    transaction.update(tokenDocRef, {
+                        status: 'available',
+                        assignedTo: null,
+                        assignedEmail: null,
+                    });
+                });
+            }
+        }
+        
+        // Delete the user's document
+        const userDocRef = doc(firestore, "users", userToDelete.id);
+        await deleteDoc(userDocRef);
+
+        toast({
+            title: "Usuário Excluído",
+            description: `Os dados de ${userToDelete.firstName} foram removidos do CRM.`,
+        });
+
+        fetchUsers('initial');
+    } catch (e: any) {
+        console.error("Failed to delete user:", e);
+        toast({
+            variant: "destructive",
+            title: "Erro ao Excluir",
+            description: "Não foi possível excluir o usuário. Verifique o console.",
+        });
+    }
+  };
 
 
   return (
@@ -518,8 +567,8 @@ export default function UsersPage() {
                       <SubscriptionCell endDate={user.subscriptionEndDate} />
                     </TableCell>
                     <TableCell className="text-right space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
-                       <Button 
+                        <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
+                        <Button 
                             variant={user.status === 'blocked' ? 'secondary' : 'ghost'} 
                             size="sm" 
                             onClick={() => handleToggleBlockUser(user)}
@@ -528,6 +577,25 @@ export default function UsersPage() {
                             {user.status === 'blocked' ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
                             {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
                         </Button>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm" disabled={user.id === currentUser?.uid}>
+                                    Excluir
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Essa ação não pode ser desfeita. Isso excluirá permanentemente os dados do usuário do CRM, desconectará sua sessão e liberará seu token. O usuário NÃO poderá se cadastrar novamente com o mesmo e-mail, a menos que você o exclua manualmente do console de autenticação do Firebase.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDeleteUser(user)}>Sim, Excluir</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}
