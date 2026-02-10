@@ -7,7 +7,7 @@ import { doc, Timestamp, collection, query, where, limit, getDocs, runTransactio
 import { addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Check, MessageSquare, Copy, Loader2, PartyPopper, Users, Send, Zap, CreditCard, Bot } from 'lucide-react';
+import { Check, Mail, Copy, Loader2, PartyPopper, Users, Send, Zap, CreditCard, Bot, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, UserPermissions, Token } from '@/lib/types';
 import Image from 'next/image';
@@ -373,7 +373,7 @@ export default function SubscriptionPage() {
                 <li className="flex items-center gap-2"><Check className="h-5 w-5 text-primary" /><span>Todos os recursos do plano **Básico**</span></li>
                 <li className="flex items-center gap-2"><CreditCard className="h-5 w-5 text-primary" /><span>Gestão de Clientes e Cobrança</span></li>
                 <li className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /><span>Automações e Remarketing</span></li>
-                 <li className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-primary" /><span>Caixa de Entrada (Inbox)</span></li>
+                 <li className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><span>API Email Temporario</span></li>
               </ul>
             </CardContent>
             <CardFooter>
