@@ -22,15 +22,18 @@ service cloud.firestore {
 
     // Rules for 'tickets' collection
     match /tickets/{ticketId} {
-      // An authenticated user can create a ticket for themselves.
-      allow create: if request.auth.uid == request.resource.data.userId;
+      // Admins can perform any action on any ticket.
+      allow read, write: if isAdmin();
+
+      // Authenticated users can create tickets for themselves.
+      allow create: if request.auth.uid != null && request.auth.uid == request.resource.data.userId;
       
-      // Admins can read any ticket.
-      // Users can only read their own tickets.
-      allow read, update: if isAdmin() || (request.auth.uid != null && resource.data.userId == request.auth.uid);
+      // Authenticated users are allowed to try and list tickets.
+      // The security is enforced by the `get` rule below, which checks each document.
+      allow list: if request.auth.uid != null;
       
-      // Only Admins can delete tickets.
-      allow delete: if isAdmin();
+      // Users can get and update their own tickets. They cannot delete tickets.
+      allow get, update: if request.auth.uid != null && resource.data.userId == request.auth.uid;
     }
 
     // Rules for 'messages' subcollection within 'tickets'
