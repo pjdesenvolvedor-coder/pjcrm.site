@@ -66,6 +66,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
+import { DueDateMessageHandler } from '@/components/due-date-message-handler';
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -735,6 +736,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </Sidebar>
       <SidebarInset>{children}</SidebarInset>
       <ScheduledMessageHandler />
+      <DueDateMessageHandler />
     </SidebarProvider>
   );
 }
