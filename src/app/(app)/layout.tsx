@@ -63,7 +63,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where, getDocs, limit, writeBatch } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs, limit, writeBatch, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
 import type { UserProfile, Settings, Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -155,6 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         zapconnect: false,
         settings: false,
         users: false,
+        liveChat: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -292,7 +293,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             console.error("Failed to release token on expiration:", e);
           }
         }
-        router.push('/subscription');
+        window.location.assign('/subscription');
       }
     };
     handleExpiration();
@@ -647,6 +648,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/get-jid')}>
                                         <Link href="/groups/get-jid">Obter JID Grupo</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/extract-members')}>
+                                        <Link href="/groups/extract-members">Extrair Membros</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>
