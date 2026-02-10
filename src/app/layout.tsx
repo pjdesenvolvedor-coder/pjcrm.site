@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'EMPREENDIMENTOS - CRM',
   description: 'CRM para gestão de clientes e empreendimentos.',
   icons: {
-    icon: '/favicon.ico',
+    icon: 'https://i.imgur.com/sgoiuiz.png',
   },
 };
 
