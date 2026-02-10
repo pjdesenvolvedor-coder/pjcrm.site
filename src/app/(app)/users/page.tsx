@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/lib/types';
 import { useState, useCallback, useEffect } from 'react';
@@ -191,6 +191,7 @@ const PAGE_SIZE = 15;
 export default function UsersPage() {
   const { firestore, user: currentUser } = useFirebase();
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const { toast } = useToast();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -260,10 +261,30 @@ export default function UsersPage() {
     fetchUsers('initial'); // Re-fetch to show updated data
   }
 
-  // TODO: Implement user deletion logic (e.g., via Firebase Functions)
-  const handleDeleteUser = (user: UserProfile) => {
-      console.log("Deleting user (not implemented):", user.id);
-  }
+  const handleDeleteUser = (userToDelete: UserProfile) => {
+    if (!firestore) return;
+
+    if (userToDelete.id === currentUser?.uid) {
+      toast({
+        variant: "destructive",
+        title: "Ação não permitida",
+        description: "Você não pode remover seu próprio usuário.",
+      });
+      return;
+    }
+
+    const userDocRef = doc(firestore, "users", userToDelete.id);
+    deleteDocumentNonBlocking(userDocRef);
+
+    toast({
+      title: "Usuário Removido",
+      description: `O usuário ${userToDelete.firstName} ${userToDelete.lastName} foi removido.`,
+    });
+    
+    // Optimistic UI update
+    setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete.id));
+  };
+
 
   return (
     <div className="flex flex-col h-full">
@@ -335,12 +356,12 @@ export default function UsersPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Essa ação não pode ser desfeita. A exclusão de usuários precisa ser implementada com segurança no backend.
+                                Essa ação não pode ser desfeita. Isso removerá o registro do usuário do CRM, mas não excluirá sua conta de login.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteUser(user)}>Continuar</AlertDialogAction>
+                              <AlertDialogAction onClick={() => handleDeleteUser(user)}>Remover</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
