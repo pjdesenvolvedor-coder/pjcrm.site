@@ -6,7 +6,7 @@ import { doc, Timestamp } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Image from 'next/image';
 import { Copy, Loader2, PartyPopper, MessageSquare, KeyRound, ShieldCheck, CalendarClock, Repeat } from 'lucide-react';
+import Link from 'next/link';
 
 
 // --------- Helper functions & Components from other files (SubscriptionTimer, SubscriptionPage) ----------
@@ -316,6 +317,11 @@ export default function ProfilePage() {
                                     <Label>Plano Atual</Label>
                                     <p className="font-semibold text-lg capitalize flex items-center gap-2">
                                         {userProfile.subscriptionPlan}
+                                        {userProfile.trialActivated && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() > new Date() && (
+                                            <Badge variant="outline" className="border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300">
+                                                Teste Grátis
+                                            </Badge>
+                                        )}
                                         <Badge>{userProfile.role}</Badge>
                                     </p>
                                 </div>
@@ -330,13 +336,18 @@ export default function ProfilePage() {
                              <p className="text-muted-foreground">Você não possui uma assinatura ativa.</p>
                          </CardContent>
                     )}
-                    <CardFooter>
+                    <CardFooter className="flex-wrap gap-2">
                        {userProfile?.subscriptionPlan && (
-                            <Button onClick={handleRenewSubscription} disabled={isRenewing}>
-                                {isRenewing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                                <Repeat className="mr-2 h-4 w-4" />
-                                Renovar Assinatura
-                            </Button>
+                            <>
+                                <Button onClick={handleRenewSubscription} disabled={isRenewing}>
+                                    {isRenewing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    <Repeat className="mr-2 h-4 w-4" />
+                                    Renovar Assinatura
+                                </Button>
+                                <Link href="/subscription" className={buttonVariants({ variant: "outline" })}>
+                                    Alterar Plano
+                                </Link>
+                            </>
                        )}
                     </CardFooter>
                 </Card>

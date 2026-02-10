@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useFirebase, useUser, setDocumentNonBlocking, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, Timestamp, collection, query, where, limit, getDocs, runTransaction, getDoc } from 'firebase/firestore';
 import { addDays } from 'date-fns';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Check, Mail, Copy, Loader2, PartyPopper, Users, Send, Zap, CreditCard, Bot, MessageSquare } from 'lucide-react';
+import { Check, Mail, Copy, Loader2, PartyPopper, Users, Send, Zap, CreditCard, Bot, MessageSquare, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, UserPermissions, Token } from '@/lib/types';
 import Image from 'next/image';
@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 
 // A new component for the payment modal to keep the main component clean
@@ -522,6 +523,13 @@ export default function SubscriptionPage() {
                     </Button>
                 </CardFooter>
             </Card>
+        </div>
+
+        <div className="mt-12 text-center">
+          <Link href="/login" className={cn(buttonVariants({ variant: "ghost" }), "text-muted-foreground")}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Voltar para o login
+          </Link>
         </div>
 
       </div>
