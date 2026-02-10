@@ -52,8 +52,7 @@ export default function ShotPage() {
         .join(',');
 
     try {
-      // NOTE: The user did not provide a webhook URL. Using a placeholder.
-      const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/mass-message-placeholder';
+      const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/eaad39ed-3dd9-4b20-a061-c45530b71e87';
       
       const response = await fetch(webhookUrl, {
         method: 'POST',
