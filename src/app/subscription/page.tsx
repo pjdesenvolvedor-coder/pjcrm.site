@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
@@ -433,7 +432,9 @@ export default function SubscriptionPage() {
                 </div>
                 <DialogTitle className="text-2xl">Escolha o plano para seu teste</DialogTitle>
                 <DialogDescription>
-                    Você terá 3 dias de acesso gratuito a todas as funcionalidades do plano escolhido.
+                    Você terá 3 dias de acesso gratuito a todas as funcionalidades
+                    <br />
+                    do plano escolhido.
                 </DialogDescription>
             </DialogHeader>
             <div className="py-4">
