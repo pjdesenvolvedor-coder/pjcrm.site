@@ -666,6 +666,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
 
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
+                  <Link href="/shot"><Send /><span>Disparo</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
