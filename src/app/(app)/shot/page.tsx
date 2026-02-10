@@ -48,8 +48,7 @@ export default function ShotPage() {
         .split('\n')
         .map(n => n.trim().replace(/\D/g, ''))
         .filter(n => n)
-        .map(n => `${n}@s.whatsapp.net`)
-        .join(',');
+        .map(n => `${n}@s.whatsapp.net`);
 
     try {
       const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/eaad39ed-3dd9-4b20-a061-c45530b71e87';
