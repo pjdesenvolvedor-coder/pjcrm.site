@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, orderBy, doc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, writeBatch } from 'firebase/firestore';
 import type { Token } from '@/lib/types';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -45,6 +45,7 @@ export default function TokenStockPage() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const tokensQuery = useMemoFirebase(() => {
     return query(collection(firestore, 'tokens'), orderBy('status'));
@@ -91,15 +92,57 @@ export default function TokenStockPage() {
     }
   };
 
-  const handleDelete = (token: Token) => {
-    if (token.status === 'in_use') {
-        toast({ variant: 'destructive', title: 'Ação não permitida!', description: 'Não é possível remover um token que está em uso.' });
-        return;
+  const handleDelete = async (token: Token) => {
+    setIsDeleting(true);
+    try {
+        if (token.status === 'in_use' && token.assignedTo) {
+            // 1. Disconnect session for the token.
+            await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: token.value }),
+            });
+
+            // 2. Update the user's documents to reflect the change.
+            const userDocRef = doc(firestore, 'users', token.assignedTo);
+            const userSettingsRef = doc(firestore, 'users', token.assignedTo, 'settings', 'config');
+            
+            const batch = writeBatch(firestore);
+            batch.update(userDocRef, {
+                subscriptionPlan: null,
+                subscriptionEndDate: null,
+                status: 'blocked' // Blocking user as their connection is now severed.
+            });
+            batch.update(userSettingsRef, {
+                webhookToken: null
+            });
+            await batch.commit();
+
+            toast({
+                title: 'Usuário Desvinculado',
+                description: `O usuário ${token.assignedEmail} foi desconectado e bloqueado.`
+            });
+        }
+        
+        // 3. Delete the token from the 'tokens' collection.
+        const tokenDocRef = doc(firestore, 'tokens', token.id);
+        deleteDocumentNonBlocking(tokenDocRef); // UI will update via listener.
+
+        toast({
+            title: 'Token Removido!',
+            description: `O token foi removido do estoque.`
+        });
+    } catch (error) {
+        console.error("Erro ao remover token:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Erro ao Remover Token',
+            description: 'Não foi possível concluir a operação. Verifique o console para mais detalhes.'
+        });
+    } finally {
+        setIsDeleting(false);
     }
-    const docRef = doc(firestore, 'tokens', token.id);
-    deleteDocumentNonBlocking(docRef);
-    toast({ title: 'Token Removido!', description: `O token foi removido do estoque.` });
-  }
+};
 
   const getStatusVariant = (status: 'available' | 'in_use') => {
     return status === 'available' ? 'default' : 'secondary';
@@ -193,7 +236,7 @@ export default function TokenStockPage() {
                     <TableCell className="text-right">
                        <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" disabled={token.status === 'in_use'}>
+                            <Button variant="ghost" size="icon">
                                 <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </AlertDialogTrigger>
@@ -201,12 +244,18 @@ export default function TokenStockPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Essa ação não pode ser desfeita. Isso removerá permanentemente o token do estoque.
+                                {token.status === 'in_use'
+                                    ? "Este token está em uso. Removê-lo desconectará e bloqueará o usuário associado. Esta ação não pode ser desfeita."
+                                    : "Esta ação não pode ser desfeita. Isso removerá permanentemente o token do estoque."
+                                }
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(token)}>Continuar</AlertDialogAction>
+                              <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction disabled={isDeleting} onClick={() => handleDelete(token)}>
+                                {isDeleting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                {isDeleting ? 'Removendo...' : 'Continuar'}
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
