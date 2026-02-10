@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, User, Mail, Lock } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -61,18 +61,9 @@ export default function SignupPage() {
 
       const userDocRef = doc(firestore, "users", firebaseUser.uid);
       
-      // By default, new users are Agents with only dashboard access.
-      // The first user should go to the Firebase Console to change their role to 'Admin'.
       const defaultPermissions: UserPermissions = {
-        dashboard: true,
-        customers: false,
-        inbox: false,
-        automations: false,
-        groups: false,
-        shot: false,
-        zapconnect: false,
-        settings: false,
-        users: false,
+        dashboard: true, customers: false, inbox: false, automations: false,
+        groups: false, shot: false, zapconnect: false, settings: false, users: false,
       };
 
       setDocumentNonBlocking(userDocRef, {
@@ -112,7 +103,7 @@ export default function SignupPage() {
   
   if (isUserLoading || user) {
     return (
-        <div className="flex h-screen w-screen items-center justify-center">
+        <div className="flex h-screen w-screen items-center justify-center bg-background">
             <div className="flex flex-col items-center gap-4">
                 <MessageSquare className="h-12 w-12 animate-pulse text-primary" />
                 <p className="text-muted-foreground">Carregando...</p>
@@ -122,54 +113,64 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="mx-auto w-full max-w-sm">
-        <CardHeader className="text-center">
-          <div className="mb-4 flex items-center justify-center gap-2">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+      <Card className="mx-auto w-full max-w-md shadow-lg">
+        <CardHeader className="text-center space-y-4">
+           <div className="flex items-center justify-center gap-2">
             <Image
               src="https://i.imgur.com/sgoiuiz.png"
               alt="EMPREENDIMENTOS Logo"
-              width={32}
-              height={32}
-              className="h-8 w-8"
+              width={40}
+              height={40}
+              className="h-10 w-10"
               data-ai-hint="logo"
             />
-            <h1 className="text-2xl font-bold">EMPREENDIMENTOS</h1>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">EMPREENDIMENTOS</h1>
           </div>
-          <CardTitle className="text-2xl">Criar uma conta</CardTitle>
-          <CardDescription>
-            Insira seus dados para criar seu acesso ao CRM.
-          </CardDescription>
+          <div>
+            <CardTitle className="text-2xl font-semibold">Criar uma conta</CardTitle>
+            <CardDescription className="text-gray-500 dark:text-gray-400 pt-1">
+              Insira seus dados para criar seu acesso ao CRM.
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
-              <FormField
-                control={form.control}
-                name="firstName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Seu nome" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="lastName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sobrenome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Seu sobrenome" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                 <FormField
+                    control={form.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome</FormLabel>
+                        <FormControl>
+                           <div className="relative">
+                             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <Input placeholder="Seu nome" {...field} className="pl-10" />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sobrenome</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <Input placeholder="Seu sobrenome" {...field} className="pl-10" />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+               </div>
               <FormField
                 control={form.control}
                 name="email"
@@ -177,11 +178,15 @@ export default function SignupPage() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="m@example.com"
-                        {...field}
-                      />
+                       <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <Input
+                          type="email"
+                          placeholder="m@example.com"
+                          className="pl-10"
+                          {...field}
+                        />
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -194,7 +199,10 @@ export default function SignupPage() {
                   <FormItem>
                     <FormLabel>Senha</FormLabel>
                     <FormControl>
-                      <Input type="password" {...field} />
+                       <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <Input type="password" placeholder="••••••••" className="pl-10" {...field} />
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -205,9 +213,9 @@ export default function SignupPage() {
               </Button>
             </form>
           </Form>
-          <div className="mt-4 text-center text-sm">
+          <div className="mt-6 text-center text-sm">
             Já tem uma conta?{" "}
-            <Link href="/login" className="underline">
+            <Link href="/login" className="font-medium text-primary hover:underline">
               Fazer login
             </Link>
           </div>
