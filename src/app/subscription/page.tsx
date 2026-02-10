@@ -3,13 +3,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
-import { doc, Timestamp } from 'firebase/firestore';
+import { doc, Timestamp, collection, query, where, limit, getDocs, runTransaction } from 'firebase/firestore';
 import { addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Check, MessageSquare, Copy, Loader2, PartyPopper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { UserPermissions } from '@/lib/types';
+import type { UserPermissions, Token } from '@/lib/types';
 import Image from 'next/image';
 import {
   Dialog,
@@ -135,41 +135,86 @@ export default function SubscriptionPage() {
 
   const grantPlanAccess = useCallback(async (plan: 'basic' | 'pro') => {
     if (!user || !firestore) return;
-
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const allPermissionsFalse: UserPermissions = {
-      dashboard: false, customers: false, inbox: false, automations: false,
-      groups: false, zapconnect: false, settings: false, users: false,
-    };
-
-    let newPermissions: UserPermissions;
-    if (plan === 'basic') {
-      newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, zapconnect: true, settings: true };
-    } else { // pro
-      newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, zapconnect: true, settings: true, users: false };
+  
+    try {
+      const tokensRef = collection(firestore, 'tokens');
+      const q = query(tokensRef, where('status', '==', 'available'), limit(1));
+      
+      const availableTokenSnap = await getDocs(q);
+  
+      if (availableTokenSnap.empty) {
+        throw new Error('Nenhum token de conexão disponível no momento. Contate o suporte.');
+      }
+  
+      const tokenDoc = availableTokenSnap.docs[0];
+      const tokenData = tokenDoc.data() as Token;
+      
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+  
+      const allPermissionsFalse: UserPermissions = {
+        dashboard: false, customers: false, inbox: false, automations: false,
+        groups: false, zapconnect: false, settings: false, users: false,
+      };
+  
+      let newPermissions: UserPermissions;
+      if (plan === 'basic') {
+        newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, zapconnect: true, settings: true };
+      } else { // pro
+        newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, zapconnect: true, settings: true, users: false };
+      }
+  
+      const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 30));
+  
+      // Use a transaction to ensure atomicity
+      await runTransaction(firestore, async (transaction) => {
+        // 1. Update the token stock
+        transaction.update(tokenDoc.ref, {
+          status: 'in_use',
+          assignedTo: user.uid,
+          assignedEmail: user.email,
+        });
+  
+        // 2. Update the user's document with subscription info
+        transaction.set(userDocRef, { 
+          subscriptionPlan: plan, 
+          permissions: newPermissions,
+          subscriptionEndDate: subscriptionEndDate
+        }, { merge: true });
+  
+        // 3. Update the user's settings with the assigned token
+        transaction.set(userSettingsRef, {
+          webhookToken: tokenData.value
+        }, { merge: true });
+      });
+  
+    } catch(e: any) {
+      console.error("Token assignment or subscription update failed:", e);
+      toast({
+        variant: 'destructive',
+        title: 'Falha na Ativação',
+        description: e.message || 'Não foi possível ativar sua assinatura. Por favor, contate o suporte.',
+      });
+      setPaymentStatus('error'); 
+      throw e; // re-throw to stop the calling function
     }
-
-    const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 30));
-
-    setDocumentNonBlocking(userDocRef, { 
-        subscriptionPlan: plan, 
-        permissions: newPermissions,
-        subscriptionEndDate: subscriptionEndDate
-    }, { merge: true });
-
-    // The redirect will happen in the useEffect that watches for paymentStatus === 'paid'
-  }, [firestore, user]);
+  }, [firestore, user, toast]);
 
   const handleTestBypass = async () => {
     if (isGeneratingPix) return;
     setIsGeneratingPix(true);
-    await grantPlanAccess('pro');
-    toast({
-        title: "Acesso de Teste Ativado!",
-        description: `Seu acesso ao Plano Pro foi liberado para teste.`,
-    });
-    router.push('/dashboard');
-    setIsGeneratingPix(false);
+    try {
+        await grantPlanAccess('pro');
+        toast({
+            title: "Acesso de Teste Ativado!",
+            description: `Seu acesso ao Plano Pro foi liberado para teste.`,
+        });
+        router.push('/dashboard');
+    } catch (e) {
+        // Error toast is already shown in grantPlanAccess
+    } finally {
+        setIsGeneratingPix(false);
+    }
   };
 
   const handleGeneratePix = async (plan: 'basic' | 'pro', valueInCents: number) => {
@@ -241,6 +286,8 @@ export default function SubscriptionPage() {
               setTimeout(() => {
                   router.push('/dashboard');
               }, 2000);
+          }).catch(() => {
+            // Error is handled inside grantPlanAccess, just need to prevent unhandled promise rejection
           });
       }
   }, [paymentStatus, selectedPlan, grantPlanAccess, router, toast]);

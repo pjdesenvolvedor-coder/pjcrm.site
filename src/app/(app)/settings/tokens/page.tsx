@@ -1,0 +1,196 @@
+'use client';
+
+import { PlusCircle, Trash2 } from 'lucide-react';
+import { PageHeader } from '@/components/page-header';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
+import type { Token } from '@/lib/types';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
+
+const tokenSchema = z.object({
+  value: z.string().min(10, 'O token parece ser muito curto.'),
+});
+
+export default function TokenStockPage() {
+  const { firestore } = useFirebase();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+
+  const tokensQuery = useMemoFirebase(() => {
+    return query(collection(firestore, 'tokens'), orderBy('status'));
+  }, [firestore]);
+
+  const { data: tokens, isLoading } = useCollection<Token>(tokensQuery);
+
+  const form = useForm<z.infer<typeof tokenSchema>>({
+    resolver: zodResolver(tokenSchema),
+    defaultValues: {
+      value: '',
+    },
+  });
+
+  const onSubmit = (values: z.infer<typeof tokenSchema>) => {
+    addDocumentNonBlocking(collection(firestore, 'tokens'), {
+        value: values.value,
+        status: 'available',
+    });
+    toast({ title: 'Token Adicionado!', description: `O novo token foi adicionado ao estoque.` });
+    form.reset();
+    setOpen(false);
+  };
+
+  const handleDelete = (token: Token) => {
+    if (token.status === 'in_use') {
+        toast({ variant: 'destructive', title: 'Ação não permitida!', description: 'Não é possível remover um token que está em uso.' });
+        return;
+    }
+    const docRef = doc(firestore, 'tokens', token.id);
+    deleteDocumentNonBlocking(docRef);
+    toast({ title: 'Token Removido!', description: `O token foi removido do estoque.` });
+  }
+
+  const getStatusVariant = (status: 'available' | 'in_use') => {
+    return status === 'available' ? 'default' : 'secondary';
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <PageHeader
+        title="Estoque de Tokens"
+        description="Gerencie os tokens de conexão para os usuários."
+      >
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="gap-1">
+              <PlusCircle className="h-4 w-4" />
+              Adicionar Token
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)}>
+                <DialogHeader>
+                  <DialogTitle>Novo Token</DialogTitle>
+                  <DialogDescription>
+                    Adicione um novo token de conexão ao estoque.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <FormField
+                    control={form.control}
+                    name="value"
+                    render={({ field }) => (
+                      <FormItem className="grid grid-cols-4 items-center gap-4">
+                        <FormLabel className="text-right">Token</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Cole o token aqui" className="col-span-3" />
+                        </FormControl>
+                        <FormMessage className="col-start-2 col-span-3" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Salvar Token</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </PageHeader>
+      <main className="flex-1 overflow-auto p-4 md:p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tokens de Conexão</CardTitle>
+            <CardDescription>
+              Lista de todos os tokens disponíveis e em uso.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Token (parcial)</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Usuário Atribuído</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center">Carregando...</TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && tokens?.map((token) => (
+                  <TableRow key={token.id}>
+                    <TableCell className="font-medium font-mono">{`...${token.value.slice(-8)}`}</TableCell>
+                    <TableCell>
+                        <Badge variant={getStatusVariant(token.status)} className={cn(token.status === 'available' ? 'bg-green-500/20 text-green-700' : 'bg-blue-500/20 text-blue-700')}>{token.status === 'available' ? 'Disponível' : 'Em Uso'}</Badge>
+                    </TableCell>
+                    <TableCell>{token.assignedEmail || '-'}</TableCell>
+                    <TableCell className="text-right">
+                       <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" disabled={token.status === 'in_use'}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Essa ação não pode ser desfeita. Isso removerá permanentemente o token do estoque.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(token)}>Continuar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                 {!isLoading && tokens?.length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={4} className="text-center">Nenhum token encontrado.</TableCell>
+                    </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}

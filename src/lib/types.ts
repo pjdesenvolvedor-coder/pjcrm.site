@@ -127,3 +127,11 @@ export type ScheduledMessage = {
   repeatDaily: boolean;
   status: 'Scheduled' | 'Sent' | 'Error';
 };
+
+export type Token = {
+  id: string;
+  value: string;
+  status: 'available' | 'in_use';
+  assignedTo?: string;
+  assignedEmail?: string;
+};

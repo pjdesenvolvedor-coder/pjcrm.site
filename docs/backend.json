@@ -541,6 +541,41 @@
         "sendAt",
         "status"
       ]
+    },
+    "Token": {
+      "title": "Token",
+      "type": "object",
+      "description": "Represents a webhook token for WhatsApp connection.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "description": "The token string."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "available",
+            "in_use"
+          ],
+          "description": "The status of the token."
+        },
+        "assignedTo": {
+          "type": "string",
+          "description": "The UID of the user the token is assigned to."
+        },
+        "assignedEmail": {
+          "type": "string",
+          "description": "The email of the user for display purposes."
+        }
+      },
+      "required": [
+        "id",
+        "value",
+        "status"
+      ]
     }
   },
   "auth": {
@@ -759,6 +794,22 @@
             {
               "name": "messageId",
               "description": "The unique identifier for the scheduled message."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tokens/{tokenId}",
+        "definition": {
+          "entityName": "Token",
+          "schema": {
+            "$ref": "#/backend/entities/Token"
+          },
+          "description": "Stores a stock of webhook tokens to be assigned to users.",
+          "params": [
+            {
+              "name": "tokenId",
+              "description": "The unique identifier for the token."
             }
           ]
         }

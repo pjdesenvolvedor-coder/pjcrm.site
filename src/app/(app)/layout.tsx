@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Settings as SettingsIcon, // Renamed to avoid conflict
   Contact,
+  Package,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -61,7 +62,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs, limit, writeBatch } from 'firebase/firestore';
 import type { UserProfile, Settings, Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -250,16 +251,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [userProfile, isProfileLoading, router]);
 
   useEffect(() => {
-    if (
-      !isProfileLoading &&
-      userProfile &&
-      userProfile.role !== 'Admin' &&
-      userProfile.subscriptionEndDate &&
-      userProfile.subscriptionEndDate.toDate() < new Date()
-    ) {
-      router.push('/subscription');
-    }
-  }, [userProfile, isProfileLoading, router]);
+    const handleExpiration = async () => {
+      if (
+        !isProfileLoading &&
+        userProfile &&
+        userProfile.role !== 'Admin' &&
+        userProfile.subscriptionEndDate &&
+        userProfile.subscriptionEndDate.toDate() < new Date()
+      ) {
+        if (settings?.webhookToken && user) {
+          const tokenValue = settings.webhookToken;
+  
+          // Disconnect session
+          fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: tokenValue }),
+          });
+  
+          // Find token and release it
+          try {
+            const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
+            const tokenSnapshot = await getDocs(tokenQuery);
+            
+            if (!tokenSnapshot.empty) {
+              const tokenDocRef = tokenSnapshot.docs[0].ref;
+              const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+              
+              const batch = writeBatch(firestore);
+              batch.update(tokenDocRef, {
+                status: 'available',
+                assignedTo: null,
+                assignedEmail: null,
+              });
+              batch.update(userSettingsRef, { webhookToken: null });
+              await batch.commit();
+            }
+          } catch (e) {
+            console.error("Failed to release token on expiration:", e);
+          }
+        }
+        router.push('/subscription');
+      }
+    };
+    handleExpiration();
+  }, [userProfile, isProfileLoading, router, settings, firestore, user]);
 
   if (isUserLoading || !user || isProfileLoading) {
     return (
@@ -284,7 +320,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         toast({
             variant: 'destructive',
             title: 'Token não encontrado',
-            description: 'Por favor, configure seu token de autenticação na página de Configurações.',
+            description: 'Seu token de autenticação não foi configurado. Isso deve acontecer automaticamente após a assinatura.',
         });
         setConnectionStatus('error');
         return;
@@ -663,8 +699,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                               {permissions.settings && (
                                 <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings'}>
-                                        <Link href="/settings">Token</Link>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}>
+                                        <Link href="/settings/tokens"><Package />Estoque de Tokens</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               )}

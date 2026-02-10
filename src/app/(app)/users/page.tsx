@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock, Unlock, CalendarIcon } from 'lucide-react';
+import { Lock, Unlock, Package, LifeBuoyIcon } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFirebase, useUser, setDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc, where, Timestamp } from 'firebase/firestore';
+import { collection, query, getDocs, limit, orderBy, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot, doc, where, Timestamp, getDoc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/lib/types';
 import { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -38,9 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { format, differenceInSeconds } from 'date-fns';
+import { differenceInSeconds } from 'date-fns';
 
 const permissionsSchema = z.object({
   dashboard: z.boolean().default(false),
@@ -67,7 +65,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'automations', label: 'Automações' },
     { key: 'groups', label: 'Grupos' },
     { key: 'zapconnect', label: 'ZapConexão' },
-    { key: 'settings', label: 'Configurações (Token & Assinaturas)' },
+    { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
 ];
 
@@ -324,7 +322,7 @@ export default function UsersPage() {
     fetchUsers('initial'); // Re-fetch to show updated data
   }
 
-  const handleToggleBlockUser = (userToToggle: UserProfile) => {
+  const handleToggleBlockUser = async (userToToggle: UserProfile) => {
     if (!firestore || !currentUser) return;
 
     if (userToToggle.id === currentUser?.uid) {
@@ -337,6 +335,85 @@ export default function UsersPage() {
     }
 
     const newStatus = userToToggle.status === 'blocked' ? 'active' : 'blocked';
+    
+    if (newStatus === 'blocked') {
+        // Release token logic
+        try {
+            const userSettingsRef = doc(firestore, 'users', userToToggle.id, 'settings', 'config');
+            const settingsSnap = await getDoc(userSettingsRef);
+            
+            if (settingsSnap.exists() && settingsSnap.data().webhookToken) {
+                const tokenValue = settingsSnap.data().webhookToken;
+
+                // Disconnect session
+                await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: tokenValue }),
+                });
+
+                // Release token from stock
+                const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
+                const tokenSnapshot = await getDocs(tokenQuery);
+                
+                if (!tokenSnapshot.empty) {
+                    const tokenDocRef = tokenSnapshot.docs[0].ref;
+                    const batch = writeBatch(firestore);
+                    batch.update(tokenDocRef, {
+                        status: 'available',
+                        assignedTo: null,
+                        assignedEmail: null,
+                    });
+                    batch.update(userSettingsRef, { webhookToken: null });
+                    await batch.commit();
+                }
+            }
+        } catch(e) {
+            console.error("Failed to release token on block:", e);
+            toast({
+                variant: "destructive",
+                title: "Erro ao Liberar Token",
+                description: "Não foi possível retornar o token do usuário ao estoque.",
+            });
+        }
+    } else if (newStatus === 'active' && userToToggle.subscriptionPlan) {
+        // Re-assign token on unblock
+        try {
+            const tokensRef = collection(firestore, 'tokens');
+            const q = query(tokensRef, where('status', '==', 'available'), limit(1));
+            const availableTokenSnap = await getDocs(q);
+
+            if (availableTokenSnap.empty) {
+                throw new Error('Nenhum token disponível no estoque para reatribuir.');
+            }
+
+            const tokenDoc = availableTokenSnap.docs[0];
+            const userSettingsRef = doc(firestore, 'users', userToToggle.id, 'settings', 'config');
+            
+            await runTransaction(firestore, async (transaction) => {
+                transaction.update(tokenDoc.ref, {
+                    status: 'in_use',
+                    assignedTo: userToToggle.id,
+                    assignedEmail: userToToggle.email,
+                });
+                transaction.set(userSettingsRef, { webhookToken: tokenDoc.data().value }, { merge: true });
+            });
+             toast({
+                title: "Token Reatribuído!",
+                description: `Um novo token foi atribuído para ${userToToggle.firstName}.`,
+            });
+
+        } catch (e: any) {
+            console.error("Failed to assign token on unblock:", e);
+            toast({
+                variant: "destructive",
+                title: "Erro ao Atribuir Token",
+                description: e.message || "Não foi possível atribuir um novo token do estoque.",
+            });
+        }
+    }
+
+
     const userDocRef = doc(firestore, "users", userToToggle.id);
     
     setDocumentNonBlocking(userDocRef, { status: newStatus }, { merge: true });
@@ -351,6 +428,18 @@ export default function UsersPage() {
         u.id === userToToggle.id ? { ...u, status: newStatus } : u
     ));
   };
+
+  const handleDeleteUser = (user: UserProfile) => {
+    // This function will just show the dialog now. The underlying auth account is not deleted.
+    const userDocRef = doc(firestore, "users", user.id);
+    setDocumentNonBlocking(userDocRef, { 
+        status: 'blocked',
+        subscriptionPlan: null,
+        subscriptionEndDate: null,
+    }, { merge: true });
+    
+    fetchUsers('initial'); // Re-fetch to show updated data
+  }
 
 
   return (
@@ -436,7 +525,7 @@ export default function UsersPage() {
                             onClick={() => handleToggleBlockUser(user)}
                             disabled={user.id === currentUser?.uid}
                         >
-                            {user.status === 'blocked' ? <Unlock className="mr-2" /> : <Lock className="mr-2" />}
+                            {user.status === 'blocked' ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
                             {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
                         </Button>
                     </TableCell>
