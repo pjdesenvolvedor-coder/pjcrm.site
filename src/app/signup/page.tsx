@@ -72,7 +72,6 @@ export default function SignupPage() {
         zapconnect: false,
         settings: false,
         users: false,
-        liveChat: true,
       };
 
       setDocumentNonBlocking(userDocRef, {

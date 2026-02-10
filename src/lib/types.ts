@@ -9,7 +9,6 @@ export type UserPermissions = {
   zapconnect: boolean;
   settings: boolean;
   users: boolean;
-  liveChat: boolean;
 };
 
 export type UserProfile = {
@@ -135,28 +134,4 @@ export type Token = {
   status: 'available' | 'in_use';
   assignedTo?: string;
   assignedEmail?: string;
-};
-
-export type Ticket = {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  subject: string;
-  status: 'Aberto' | 'Em Andamento' | 'Fechado';
-  createdAt: Timestamp;
-  lastMessage: string;
-  lastMessageAt: Timestamp;
-  unreadByAdmin: boolean;
-  unreadByUser: boolean;
-};
-
-export type TicketMessage = {
-  id: string;
-  ticketId: string;
-  senderId: string;
-  senderName: string;
-  content: string;
-  timestamp: Timestamp;
-  isAgent: boolean; // True if sender is the user/agent, false if it's an Admin
 };

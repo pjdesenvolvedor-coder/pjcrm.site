@@ -49,7 +49,6 @@ const permissionsSchema = z.object({
   zapconnect: z.boolean().default(false),
   settings: z.boolean().default(false),
   users: z.boolean().default(false),
-  liveChat: z.boolean().default(false),
 });
 
 const userFormSchema = z.object({
@@ -68,7 +67,6 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'zapconnect', label: 'ZapConexão' },
     { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
-    { key: 'liveChat', label: 'Chat Ao Vivo' },
 ];
 
 function UserClientCount({ userId }: { userId: string }) {
@@ -148,7 +146,6 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 zapconnect: user.permissions?.zapconnect ?? false,
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
-                liveChat: user.permissions?.liveChat ?? false,
             },
         },
     });
