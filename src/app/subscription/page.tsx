@@ -160,6 +160,17 @@ export default function SubscriptionPage() {
     // The redirect will happen in the useEffect that watches for paymentStatus === 'paid'
   }, [firestore, user]);
 
+  const handleTestBypass = async () => {
+    if (isGeneratingPix) return;
+    setIsGeneratingPix(true);
+    await grantPlanAccess('pro');
+    toast({
+        title: "Acesso de Teste Ativado!",
+        description: `Seu acesso ao Plano Pro foi liberado para teste.`,
+    });
+    router.push('/dashboard');
+    setIsGeneratingPix(false);
+  };
 
   const handleGeneratePix = async (plan: 'basic' | 'pro', valueInCents: number) => {
     if (isGeneratingPix) return;
@@ -316,6 +327,11 @@ export default function SubscriptionPage() {
               </Button>
             </CardFooter>
           </Card>
+        </div>
+        <div className="mt-8">
+            <Button variant="link" onClick={handleTestBypass} disabled={isGeneratingPix}>
+                Teste para pular o pagamento
+            </Button>
         </div>
       </div>
     </>
