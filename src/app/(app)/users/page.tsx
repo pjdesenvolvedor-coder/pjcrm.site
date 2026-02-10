@@ -3,7 +3,7 @@
 import { PlusCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -278,7 +278,7 @@ export default function UsersPage() {
 
     toast({
       title: "Usuário Removido",
-      description: `O usuário ${userToDelete.firstName} ${userToDelete.lastName} foi removido.`,
+      description: `O usuário ${userToDelete.firstName} ${userToDelete.lastName} foi removido do CRM.`,
     });
     
     // Optimistic UI update
@@ -354,14 +354,24 @@ export default function UsersPage() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                              <AlertDialogTitle>Remover {user.firstName} do CRM?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Essa ação não pode ser desfeita. Isso removerá o registro do usuário do CRM, mas não excluirá sua conta de login.
+                                <p className="mb-4">
+                                  Isso removerá o acesso de <strong>{user.firstName} {user.lastName}</strong> ao CRM, mas <strong>não excluirá sua conta de login</strong>.
+                                </p>
+                                <p>
+                                  O e-mail <strong>{user.email}</strong> continuará registrado no sistema de autenticação e não poderá ser usado para um novo cadastro.
+                                </p>
+                                <p className="mt-4 text-xs bg-muted p-2 rounded-md">
+                                  <strong>Nota técnica:</strong> Para liberar o e-mail, você deve excluir o usuário na seção &quot;Authentication&quot; do seu painel Firebase.
+                                </p>
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteUser(user)}>Remover</AlertDialogAction>
+                              <AlertDialogAction onClick={() => handleDeleteUser(user)} className={buttonVariants({ variant: "destructive" })}>
+                                  Confirmar Remoção
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
