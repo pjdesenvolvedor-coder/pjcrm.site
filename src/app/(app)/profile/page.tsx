@@ -76,8 +76,8 @@ function PaymentDialog({
     onCopy: (text: string) => void;
 }) {
     const planDetails = {
-        basic: { name: "Básico", price: "R$ 1,00" },
-        pro: { name: "Pro", price: "R$ 2,00" },
+        basic: { name: "Básico", price: "R$ 69,90" },
+        pro: { name: "Pro", price: "R$ 119,90" },
     };
     
     const renderContent = () => {
@@ -279,7 +279,7 @@ export default function ProfilePage() {
         setPaymentStatus(null);
         setIsProcessingRenewal(false);
         
-        const planPrices = { basic: 100, pro: 200 };
+        const planPrices = { basic: 6990, pro: 11990 };
         const valueInCents = planPrices[userProfile.subscriptionPlan];
 
         try {
@@ -288,7 +288,10 @@ export default function ProfilePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ value: valueInCents }),
             });
-            if (!response.ok) throw new Error('Falha ao gerar o PIX.');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Falha ao gerar o PIX.' }));
+                throw new Error(errorData.error);
+            }
             const data = await response.json();
             setPaymentInfo(data);
             setPaymentStatus('pending');
@@ -423,9 +426,6 @@ export default function ProfilePage() {
                                     <Repeat className="mr-2 h-4 w-4" />
                                     Renovar Assinatura
                                 </Button>
-                                <Link href="/subscription" className={buttonVariants({ variant: "outline" })}>
-                                    Alterar Plano
-                                </Link>
                             </>
                        )}
                     </CardFooter>
