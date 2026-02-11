@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useMemo, type ReactNode, useEffect, useCallback } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, Timestamp, doc, query, orderBy, limit, getDocs, startAfter, endBefore, limitToLast, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, Timestamp, doc, query, orderBy } from 'firebase/firestore';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
-const PAGE_SIZE = 15;
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -455,15 +454,6 @@ export default function CustomersPage() {
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [pagination, setPagination] = useState<{
-    first: QueryDocumentSnapshot | null;
-    last: QueryDocumentSnapshot | null;
-  }>({ first: null, last: null });
-  const [hasPrevPage, setHasPrevPage] = useState(false);
-  const [hasNextPage, setHasNextPage] = useState(false);
-
   const [dialogState, setDialogState] = useState<DialogState>({ view: 'closed' });
   const [isSending, setIsSending] = useState(false);
   
@@ -474,63 +464,12 @@ export default function CustomersPage() {
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
-  const fetchClients = useCallback(async (dir: 'next' | 'prev' | 'initial') => {
-    setIsLoading(true);
-    if (!user) {
-      setIsLoading(false);
-      return;
-    }
-  
-    const clientsRef = collection(firestore, 'users', user.uid, 'clients');
-    let q;
-  
-    if (dir === 'next' && pagination.last) {
-      q = query(clientsRef, orderBy('name'), startAfter(pagination.last), limit(PAGE_SIZE));
-    } else if (dir === 'prev' && pagination.first) {
-      q = query(clientsRef, orderBy('name'), endBefore(pagination.first), limitToLast(PAGE_SIZE));
-    } else {
-      q = query(clientsRef, orderBy('name'), limit(PAGE_SIZE));
-    }
-  
-    try {
-      const querySnapshot = await getDocs(q);
-      const fetchedClients = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
-      
-      if (fetchedClients.length === 0) {
-          if (dir === 'next') setHasNextPage(false);
-          if (dir === 'prev') setHasPrevPage(false);
-          setIsLoading(false);
-          if(dir === 'initial') setClients([]);
-          return;
-      }
-  
-      setClients(fetchedClients);
-      const first = querySnapshot.docs[0];
-      const last = querySnapshot.docs[querySnapshot.docs.length - 1];
-      setPagination({ first, last });
-      
-      const prevCheck = query(clientsRef, orderBy('name'), endBefore(first), limitToLast(1));
-      const prevSnap = await getDocs(prevCheck);
-      setHasPrevPage(!prevSnap.empty);
-  
-      const nextCheck = query(clientsRef, orderBy('name'), startAfter(last), limit(1));
-      const nextSnap = await getDocs(nextCheck);
-      setHasNextPage(!nextSnap.empty);
-  
-    } catch (error) {
-      console.error("Error fetching clients:", error);
-      toast({ variant: 'destructive', title: 'Erro ao buscar clientes' });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user, firestore, pagination.first, pagination.last, toast]);
+  const clientsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'clients'), orderBy('name'));
+  }, [firestore, user]);
 
-  useEffect(() => {
-    if (user) {
-      fetchClients('initial');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
   const handleToggleSupport = (client: Client) => {
     if (!user) return;
@@ -541,9 +480,6 @@ export default function CustomersPage() {
         title: `Suporte ${newSupportStatus ? 'marcado' : 'desmarcado'}`,
         description: `O cliente ${client.name} foi atualizado.`,
     });
-    setClients(prevClients => 
-        prevClients.map(c => c.id === client.id ? { ...c, needsSupport: newSupportStatus } : c)
-    );
   };
 
 
@@ -563,7 +499,6 @@ export default function CustomersPage() {
 
   const onFormFinished = () => {
     closeDialogAndClear();
-    fetchClients('initial');
   };
   
   const handleDeleteClient = (client: Client) => {
@@ -574,7 +509,6 @@ export default function CustomersPage() {
       title: 'Cliente Excluído',
       description: `O cliente ${client.name} foi removido.`,
     });
-    fetchClients('initial');
   };
 
   const handleSendMessage = async (message: string) => {
@@ -684,12 +618,6 @@ export default function CustomersPage() {
         description="Gerencie seus clientes aqui."
       >
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchClients('prev')} disabled={!hasPrevPage || isLoading}>
-              Anterior
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => fetchClients('next')} disabled={!hasNextPage || isLoading}>
-              Próximo
-          </Button>
           <Button size="sm" className="gap-1" onClick={() => openDialog('add')}>
             <PlusCircle className="h-4 w-4" />
             Adicionar Cliente
