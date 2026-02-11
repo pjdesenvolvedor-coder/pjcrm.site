@@ -449,7 +449,7 @@ type DialogState =
   | { view: 'edit'; client: Client }
   | { view: 'sendMessage'; client: Client };
 
-type SortableKeys = 'name' | 'email' | 'status' | 'dueDate' | 'clientType';
+type SortableKeys = 'name' | 'email' | 'status' | 'dueDate' | 'subscription';
 
 export default function CustomersPage() {
   const { firestore, user } = useFirebase();
@@ -501,7 +501,7 @@ export default function CustomersPage() {
             break;
           case 'name':
           case 'status':
-          case 'clientType':
+          case 'subscription':
             comparison = String(aValue).localeCompare(String(bValue));
             break;
           default:
@@ -718,9 +718,9 @@ export default function CustomersPage() {
                     </Button>
                   </TableHead>
                   <TableHead>
-                     <Button variant="ghost" size="sm" onClick={() => requestSort('clientType')} className="-ml-3 h-8 data-[state=open]:bg-accent">
-                        Tipo
-                        {getSortIcon('clientType')}
+                     <Button variant="ghost" size="sm" onClick={() => requestSort('subscription')} className="-ml-3 h-8 data-[state=open]:bg-accent">
+                        Assinatura
+                        {getSortIcon('subscription')}
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -741,7 +741,7 @@ export default function CustomersPage() {
                       <TableCell>{Array.isArray(client.email) ? client.email.join(', ') : client.email}</TableCell>
                       <TableCell><Badge variant={getStatusVariant(client.status)} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{client.status}</Badge></TableCell>
                       <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
-                      <TableCell>{client.clientType}</TableCell>
+                      <TableCell>{client.subscription}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                             <Button variant="outline" size="sm" onClick={() => openDialog('edit', client)}>
