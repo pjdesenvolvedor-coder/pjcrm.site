@@ -1,15 +1,25 @@
 'use client';
 
 import { Users, AlertTriangle, Calendar, Clock, DollarSign } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
+import { collection, query } from 'firebase/firestore';
 import type { Client } from '@/lib/types';
 import { useState, useMemo } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PieChart, Pie, Cell } from "recharts";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+
 
 const parseCurrency = (value?: string): number => {
   if (!value) return 0;
@@ -34,21 +44,23 @@ export default function DashboardPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const dashboardData = useMemo(() => {
+  const { stats, subscriptionData, paymentMethodData } = useMemo(() => {
+    const baseStats = {
+      activeCount: 0,
+      activeTotal: 0,
+      overdueCount: 0,
+      overdueTotal: 0,
+      dueTodayCount: 0,
+      dueTodayTotal: 0,
+      dueIn3DaysCount: 0,
+      dueIn3DaysTotal: 0,
+      totalSales: 0,
+      activePercentage: 0,
+      overduePercentage: 0,
+    };
+
     if (!clients) {
-      return {
-        activeCount: 0,
-        activeTotal: 0,
-        overdueCount: 0,
-        overdueTotal: 0,
-        dueTodayCount: 0,
-        dueTodayTotal: 0,
-        dueIn3DaysCount: 0,
-        dueIn3DaysTotal: 0,
-        totalSales: 0,
-        activePercentage: 0,
-        overduePercentage: 0,
-      };
+      return { stats: baseStats, subscriptionData: [], paymentMethodData: [] };
     }
 
     const today = startOfToday();
@@ -62,6 +74,9 @@ export default function DashboardPage() {
     let dueTodayTotal = 0;
     let dueIn3DaysCount = 0;
     let dueIn3DaysTotal = 0;
+
+    const subscriptionCounts: Record<string, number> = {};
+    const paymentMethodCounts: Record<string, number> = {};
 
     clients.forEach(client => {
       const amount = parseCurrency(client.amountPaid);
@@ -84,6 +99,12 @@ export default function DashboardPage() {
           dueIn3DaysTotal += amount;
         }
       }
+
+      const sub = client.subscription || 'N/A';
+      subscriptionCounts[sub] = (subscriptionCounts[sub] || 0) + 1;
+
+      const method = client.paymentMethod || 'N/A';
+      paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
     });
 
     const totalClients = clients.length;
@@ -122,8 +143,7 @@ export default function DashboardPage() {
         })
         .reduce((sum, client) => sum + parseCurrency(client.amountPaid), 0);
         
-
-    return {
+    const finalStats = {
       activeCount,
       activeTotal,
       overdueCount,
@@ -137,8 +157,44 @@ export default function DashboardPage() {
       overduePercentage
     };
 
+    const subscriptionData = Object.entries(subscriptionCounts).map(([name, value], index) => ({
+      name: name === 'N/A' ? 'Não especificado' : name,
+      value,
+      fill: `hsl(var(--chart-${index + 1}))`
+    }));
+
+    const paymentMethodData = Object.entries(paymentMethodCounts).map(([name, value], index) => ({
+      name: name === 'N/A' ? 'Não especificado' : name,
+      value,
+      fill: `hsl(var(--chart-${index + 1}))`
+    }));
+
+    return { stats: finalStats, subscriptionData, paymentMethodData };
+
   }, [clients, period]);
   
+  const subscriptionChartConfig = useMemo(() => {
+    if (!subscriptionData) return {};
+    return subscriptionData.reduce((acc, item) => {
+        acc[item.name] = {
+            label: item.name,
+            color: item.fill,
+        };
+        return acc;
+    }, {} as ChartConfig);
+  }, [subscriptionData]);
+  
+  const paymentMethodChartConfig = useMemo(() => {
+    if (!paymentMethodData) return {};
+    return paymentMethodData.reduce((acc, item) => {
+        acc[item.name] = {
+            label: item.name,
+            color: item.fill,
+        };
+        return acc;
+    }, {} as ChartConfig);
+  }, [paymentMethodData]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
@@ -152,6 +208,10 @@ export default function DashboardPage() {
           </div>
           <div className="mt-6">
             <Skeleton className="h-40" />
+          </div>
+           <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <Skeleton className="h-96" />
+            <Skeleton className="h-96" />
           </div>
         </main>
       </div>
@@ -171,11 +231,11 @@ export default function DashboardPage() {
                 <Users className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Ativos</CardTitle>
               </div>
-              <span className="text-sm font-medium">{dashboardData.activePercentage.toFixed(1)}%</span>
+              <span className="text-sm font-medium">{stats.activePercentage.toFixed(1)}%</span>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
-              <div className="text-3xl font-bold">{dashboardData.activeCount}</div>
-              <div className="text-lg font-semibold">{formatCurrency(dashboardData.activeTotal)}</div>
+              <div className="text-3xl font-bold">{stats.activeCount}</div>
+              <div className="text-lg font-semibold">{formatCurrency(stats.activeTotal)}</div>
             </CardContent>
           </Card>
           <Card>
@@ -185,12 +245,12 @@ export default function DashboardPage() {
                 <CardTitle className="text-sm font-medium">Vencidos</CardTitle>
               </div>
               <div className="flex items-center gap-2 text-sm font-medium">
-                <span>{dashboardData.overduePercentage.toFixed(1)}%</span>
+                <span>{stats.overduePercentage.toFixed(1)}%</span>
               </div>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
-              <div className="text-3xl font-bold">{dashboardData.overdueCount}</div>
-              <div className="text-lg font-semibold">{formatCurrency(dashboardData.overdueTotal)}</div>
+              <div className="text-3xl font-bold">{stats.overdueCount}</div>
+              <div className="text-lg font-semibold">{formatCurrency(stats.overdueTotal)}</div>
             </CardContent>
           </Card>
           <Card>
@@ -201,8 +261,8 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
-              <div className="text-3xl font-bold">{dashboardData.dueTodayCount}</div>
-              <div className="text-lg font-semibold">{formatCurrency(dashboardData.dueTodayTotal)}</div>
+              <div className="text-3xl font-bold">{stats.dueTodayCount}</div>
+              <div className="text-lg font-semibold">{formatCurrency(stats.dueTodayTotal)}</div>
             </CardContent>
           </Card>
           <Card>
@@ -213,8 +273,8 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
-              <div className="text-3xl font-bold">{dashboardData.dueIn3DaysCount}</div>
-              <div className="text-lg font-semibold">{formatCurrency(dashboardData.dueIn3DaysTotal)}</div>
+              <div className="text-3xl font-bold">{stats.dueIn3DaysCount}</div>
+              <div className="text-lg font-semibold">{formatCurrency(stats.dueIn3DaysTotal)}</div>
             </CardContent>
           </Card>
         </div>
@@ -240,8 +300,62 @@ export default function DashboardPage() {
             <CardContent>
                 <div className="flex items-center gap-2">
                     <DollarSign className="h-10 w-10 text-green-500" />
-                    <p className="text-5xl font-bold">{formatCurrency(dashboardData.totalSales)}</p>
+                    <p className="text-5xl font-bold">{formatCurrency(stats.totalSales)}</p>
                 </div>
+            </CardContent>
+          </Card>
+        </div>
+
+         <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Assinaturas</CardTitle>
+              <CardDescription>Distribuição de clientes por plano</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+              {subscriptionData.length > 0 ? (
+                <ChartContainer config={subscriptionChartConfig} className="w-full h-full">
+                  <PieChart>
+                    <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                    <Pie data={subscriptionData} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
+                      {subscriptionData.map((entry) => (
+                        <Cell key={`cell-${entry.name}`} fill={entry.fill} className="stroke-background focus:outline-none" />
+                      ))}
+                    </Pie>
+                    <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                  </PieChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  Nenhum dado de assinatura para exibir.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Formas de Pagamento</CardTitle>
+              <CardDescription>Distribuição de clientes por forma de pagamento</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+               {paymentMethodData.length > 0 ? (
+                <ChartContainer config={paymentMethodChartConfig} className="w-full h-full">
+                  <PieChart>
+                    <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                    <Pie data={paymentMethodData} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
+                      {paymentMethodData.map((entry) => (
+                        <Cell key={`cell-${entry.name}`} fill={entry.fill} className="stroke-background focus:outline-none" />
+                      ))}
+                    </Pie>
+                    <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                  </PieChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  Nenhum dado de pagamento para exibir.
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
