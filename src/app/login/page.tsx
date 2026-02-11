@@ -159,7 +159,7 @@ export default function LoginPage() {
                     <div className="flex items-center justify-between">
                       <FormLabel>Senha</FormLabel>
                       <Link
-                        href="#"
+                        href="/forgot-password"
                         className="text-sm font-medium text-primary hover:underline"
                       >
                         Esqueceu sua senha?
