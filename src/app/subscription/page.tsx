@@ -250,7 +250,8 @@ export default function SubscriptionPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao gerar o PIX. Tente novamente.');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || 'Falha ao gerar o PIX. Tente novamente.');
       }
 
       const data = await response.json();
