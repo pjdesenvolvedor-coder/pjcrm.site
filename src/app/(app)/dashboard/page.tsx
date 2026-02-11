@@ -63,6 +63,7 @@ export default function DashboardPage() {
       return { stats: baseStats, subscriptionData: [], paymentMethodData: [] };
     }
 
+    const now = new Date();
     const today = startOfToday();
     const threeDaysFromNow = addDays(today, 3);
     
@@ -106,20 +107,31 @@ export default function DashboardPage() {
       const amount = parseCurrency(client.amountPaid);
       const dueDate = client.dueDate ? client.dueDate.toDate() : null;
 
-      // Stats independent of 'period'
-      if (client.status === 'Ativo') {
-        activeCount++;
-        activeTotal += amount;
-      } else if (client.status === 'Vencido') {
-        overdueCount++;
-        overdueTotal += amount;
+      // Main status categorization (Active vs Overdue)
+      let isOverdue = false;
+      if (client.status === 'Vencido') {
+          isOverdue = true;
+      } else if (client.status === 'Ativo' && dueDate && dueDate <= now) {
+          isOverdue = true;
+      }
+      
+      if (isOverdue) {
+          overdueCount++;
+          overdueTotal += amount;
+      } else if (client.status === 'Ativo') { // Not overdue, must be active
+          activeCount++;
+          activeTotal += amount;
       }
 
+      // Card-specific categorization
       if (dueDate) {
-        if (isToday(dueDate)) {
+        // "Vencem Hoje": due date is today, but time has not yet passed
+        if (isToday(dueDate) && dueDate > now) {
           dueTodayCount++;
           dueTodayTotal += amount;
-        } else if (isWithinInterval(dueDate, { start: addDays(today, 1), end: threeDaysFromNow })) {
+        } 
+        // "Vencem em 3 Dias": due date is in the next 3 days (but not today)
+        else if (isWithinInterval(dueDate, { start: addDays(today, 1), end: threeDaysFromNow })) {
           dueIn3DaysCount++;
           dueIn3DaysTotal += amount;
         }
