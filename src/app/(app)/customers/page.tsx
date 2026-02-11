@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, type ReactNode } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus } from 'lucide-react';
+import { useState, useMemo, type ReactNode, useEffect } from 'react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -449,6 +449,7 @@ type DialogState =
   | { view: 'edit'; client: Client }
   | { view: 'sendMessage'; client: Client };
 
+type SortableKeys = 'name' | 'email' | 'status' | 'dueDate' | 'clientType';
 
 export default function CustomersPage() {
   const { firestore, user } = useFirebase();
@@ -456,6 +457,7 @@ export default function CustomersPage() {
 
   const [dialogState, setDialogState] = useState<DialogState>({ view: 'closed' });
   const [isSending, setIsSending] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
   
   const settingsDocRef = useMemo(() => {
     if (!user) return null;
@@ -466,10 +468,71 @@ export default function CustomersPage() {
 
   const clientsQuery = useMemoFirebase(() => {
     if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'clients'), orderBy('name'));
+    // Remove order by from here to sort on client
+    return query(collection(firestore, 'users', user.uid, 'clients'));
   }, [firestore, user]);
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
+
+  const sortedClients = useMemo(() => {
+    if (!clients) return [];
+    let sortableItems = [...clients];
+    if (sortConfig) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[sortConfig.key as keyof Client];
+        const bValue = b[sortConfig.key as keyof Client];
+
+        // Handle null or undefined values to push them to the end
+        if (aValue === null || aValue === undefined) return 1;
+        if (bValue === null || bValue === undefined) return -1;
+        
+        let comparison = 0;
+
+        // Handle different data types
+        switch (sortConfig.key) {
+          case 'dueDate':
+            comparison = (aValue as Timestamp).toMillis() - (bValue as Timestamp).toMillis();
+            break;
+          case 'email':
+            // Sorting by the first email in the array
+            const aEmail = Array.isArray(aValue) ? aValue[0] || '' : String(aValue || '');
+            const bEmail = Array.isArray(bValue) ? bValue[0] || '' : String(bValue || '');
+            comparison = aEmail.localeCompare(bEmail);
+            break;
+          case 'name':
+          case 'status':
+          case 'clientType':
+            comparison = String(aValue).localeCompare(String(bValue));
+            break;
+          default:
+            // Fallback for any other keys
+            if (aValue < bValue) comparison = -1;
+            if (aValue > bValue) comparison = 1;
+        }
+        
+        return sortConfig.direction === 'ascending' ? comparison : -comparison;
+      });
+    }
+    return sortableItems;
+  }, [clients, sortConfig]);
+
+  const requestSort = (key: SortableKeys) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const getSortIcon = (key: SortableKeys) => {
+    if (sortConfig?.key !== key) {
+      return <ArrowUpDown className="ml-2 h-4 w-4" />;
+    }
+    if (sortConfig.direction === 'ascending') {
+      return <ArrowUp className="ml-2 h-4 w-4" />;
+    }
+    return <ArrowDown className="ml-2 h-4 w-4" />;
+  };
 
   const handleToggleSupport = (client: Client) => {
     if (!user) return;
@@ -630,19 +693,44 @@ export default function CustomersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead><Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">Nome<ArrowUpDown className="ml-2 h-4 w-4" /></Button></TableHead>
-                  <TableHead><Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">Email<ArrowUpDown className="ml-2 h-4 w-4" /></Button></TableHead>
-                  <TableHead><Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">Status<ArrowUpDown className="ml-2 h-4 w-4" /></Button></TableHead>
-                  <TableHead><Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">Vencimento<ArrowUpDown className="ml-2 h-4 w-4" /></Button></TableHead>
-                  <TableHead><Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">Tipo<ArrowUpDown className="ml-2 h-4 w-4" /></Button></TableHead>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('name')} className="-ml-3 h-8 data-[state=open]:bg-accent">
+                        Nome
+                        {getSortIcon('name')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('email')} className="-ml-3 h-8 data-[state=open]:bg-accent">
+                        Email
+                        {getSortIcon('email')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('status')} className="-ml-3 h-8 data-[state=open]:bg-accent">
+                        Status
+                        {getSortIcon('status')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                     <Button variant="ghost" size="sm" onClick={() => requestSort('dueDate')} className="-ml-3 h-8 data-[state=open]:bg-accent">
+                        Vencimento
+                        {getSortIcon('dueDate')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                     <Button variant="ghost" size="sm" onClick={() => requestSort('clientType')} className="-ml-3 h-8 data-[state=open]:bg-accent">
+                        Tipo
+                        {getSortIcon('clientType')}
+                    </Button>
+                  </TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
-                ) : clients && clients.length > 0 ? (
-                  clients.map((client) => (
+                ) : sortedClients && sortedClients.length > 0 ? (
+                  sortedClients.map((client) => (
                     <TableRow key={client.id} data-state={client.needsSupport ? 'selected' : ''}>
                       <TableCell className="font-medium">
                         <div className='flex items-center gap-2'>
