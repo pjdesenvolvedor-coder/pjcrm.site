@@ -21,6 +21,7 @@ import {
   Contact,
   Package,
   LifeBuoy,
+  Construction,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -628,8 +629,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               
               {permissions.inbox && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'Inbox' }}>
-                        <Link href="/inbox"><MessageSquare /><span>Inbox</span></Link>
+                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'Inbox (Em Breve)' }}>
+                        <Link href="/inbox">
+                            <MessageSquare />
+                            <span>Inbox</span>
+                            <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
+                                Em Breve
+                            </Badge>
+                        </Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
