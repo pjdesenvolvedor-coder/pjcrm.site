@@ -66,52 +66,6 @@ export default function DashboardPage() {
     const today = startOfToday();
     const threeDaysFromNow = addDays(today, 3);
     
-    let activeCount = 0;
-    let activeTotal = 0;
-    let overdueCount = 0;
-    let overdueTotal = 0;
-    let dueTodayCount = 0;
-    let dueTodayTotal = 0;
-    let dueIn3DaysCount = 0;
-    let dueIn3DaysTotal = 0;
-
-    const subscriptionCounts: Record<string, number> = {};
-    const paymentMethodCounts: Record<string, number> = {};
-
-    clients.forEach(client => {
-      const amount = parseCurrency(client.amountPaid);
-      const dueDate = client.dueDate ? client.dueDate.toDate() : null;
-
-      if (client.status === 'Ativo') {
-        activeCount++;
-        activeTotal += amount;
-      } else if (client.status === 'Vencido') {
-        overdueCount++;
-        overdueTotal += amount;
-      }
-
-      if (dueDate) {
-        if (isToday(dueDate)) {
-          dueTodayCount++;
-          dueTodayTotal += amount;
-        } else if (isWithinInterval(dueDate, { start: addDays(today, 1), end: threeDaysFromNow })) {
-          dueIn3DaysCount++;
-          dueIn3DaysTotal += amount;
-        }
-      }
-
-      const sub = client.subscription || 'N/A';
-      subscriptionCounts[sub] = (subscriptionCounts[sub] || 0) + 1;
-
-      const method = client.paymentMethod || 'N/A';
-      paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
-    });
-
-    const totalClients = clients.length;
-    const activePercentage = totalClients > 0 ? (activeCount / totalClients) * 100 : 0;
-    const overduePercentage = totalClients > 0 ? (overdueCount / totalClients) * 100 : 0;
-
-
     let periodStart: Date;
     let periodEnd: Date;
 
@@ -135,13 +89,58 @@ export default function DashboardPage() {
             break;
     }
 
-    const totalSales = clients
-        .filter(client => {
-            const dueDate = client.dueDate ? client.dueDate.toDate() : null;
-            // Assuming sales are counted based on due date. If another date field is more appropriate, it should be used.
-            return dueDate && isWithinInterval(dueDate, { start: periodStart, end: periodEnd });
-        })
-        .reduce((sum, client) => sum + parseCurrency(client.amountPaid), 0);
+    let activeCount = 0;
+    let activeTotal = 0;
+    let overdueCount = 0;
+    let overdueTotal = 0;
+    let dueTodayCount = 0;
+    let dueTodayTotal = 0;
+    let dueIn3DaysCount = 0;
+    let dueIn3DaysTotal = 0;
+    let totalSales = 0;
+
+    const subscriptionCounts: Record<string, number> = {};
+    const paymentMethodCounts: Record<string, number> = {};
+
+    clients.forEach(client => {
+      const amount = parseCurrency(client.amountPaid);
+      const dueDate = client.dueDate ? client.dueDate.toDate() : null;
+
+      // Stats independent of 'period'
+      if (client.status === 'Ativo') {
+        activeCount++;
+        activeTotal += amount;
+      } else if (client.status === 'Vencido') {
+        overdueCount++;
+        overdueTotal += amount;
+      }
+
+      if (dueDate) {
+        if (isToday(dueDate)) {
+          dueTodayCount++;
+          dueTodayTotal += amount;
+        } else if (isWithinInterval(dueDate, { start: addDays(today, 1), end: threeDaysFromNow })) {
+          dueIn3DaysCount++;
+          dueIn3DaysTotal += amount;
+        }
+      }
+      
+      // Stat dependent on 'period'
+      if (dueDate && isWithinInterval(dueDate, { start: periodStart, end: periodEnd })) {
+        totalSales += amount;
+      }
+
+      // Chart data
+      const sub = client.subscription || 'N/A';
+      subscriptionCounts[sub] = (subscriptionCounts[sub] || 0) + 1;
+
+      const method = client.paymentMethod || 'N/A';
+      paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
+    });
+
+    const totalClients = clients.length;
+    const activePercentage = totalClients > 0 ? (activeCount / totalClients) * 100 : 0;
+    const overduePercentage = totalClients > 0 ? (overdueCount / totalClients) * 100 : 0;
         
     const finalStats = {
       activeCount,
