@@ -1,6 +1,6 @@
 'use client';
 
-import { PlusCircle, Trash2, RefreshCw } from 'lucide-react';
+import { PlusCircle, Trash2, RefreshCw, Copy } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,6 +59,14 @@ export default function TokenStockPage() {
       value: '',
     },
   });
+
+  const handleCopyToken = (tokenValue: string) => {
+    navigator.clipboard.writeText(tokenValue);
+    toast({
+        title: 'Token Copiado!',
+        description: 'O valor completo do token foi copiado.',
+    });
+  };
 
   const onSubmit = async (values: z.infer<typeof tokenSchema>) => {
     setIsSubmitting(true);
@@ -214,7 +222,7 @@ export default function TokenStockPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Token (parcial)</TableHead>
+                  <TableHead>Token</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Usuário Atribuído</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -228,7 +236,14 @@ export default function TokenStockPage() {
                 )}
                 {!isLoading && tokens?.map((token) => (
                   <TableRow key={token.id}>
-                    <TableCell className="font-medium font-mono">{`...${token.value.slice(-8)}`}</TableCell>
+                    <TableCell className="font-medium font-mono">
+                      <div className="flex items-center gap-2 max-w-xs">
+                          <span className="truncate">{token.value}</span>
+                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => handleCopyToken(token.value)}>
+                              <Copy className="h-4 w-4" />
+                          </Button>
+                      </div>
+                    </TableCell>
                     <TableCell>
                         <Badge variant={getStatusVariant(token.status)} className={cn(token.status === 'available' ? 'bg-green-500/20 text-green-700' : 'bg-blue-500/20 text-blue-700')}>{token.status === 'available' ? 'Disponível' : 'Em Uso'}</Badge>
                     </TableCell>
