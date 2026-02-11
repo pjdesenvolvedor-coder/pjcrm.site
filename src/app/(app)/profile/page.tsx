@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/lib/types';
+import type { UserProfile, Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,7 +20,7 @@ import { differenceInSeconds, addDays } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Image from 'next/image';
-import { Copy, Loader2, PartyPopper, MessageSquare, KeyRound, ShieldCheck, CalendarClock, Repeat } from 'lucide-react';
+import { Copy, Loader2, PartyPopper, MessageSquare, KeyRound, ShieldCheck, CalendarClock, Repeat, Package } from 'lucide-react';
 import Link from 'next/link';
 
 
@@ -191,6 +191,72 @@ function PasswordChangeForm() {
     )
 }
 
+// --------- Admin Token Manager -----------
+function AdminTokenManager() {
+    const { firestore, user } = useFirebase();
+    const { toast } = useToast();
+    const [tokenInput, setTokenInput] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    const settingsDocRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid, 'settings', 'config');
+    }, [firestore, user]);
+
+    const { data: settings, isLoading } = useDoc<Settings>(settingsDocRef);
+
+    useEffect(() => {
+        if (settings?.webhookToken) {
+            setTokenInput(settings.webhookToken);
+        }
+    }, [settings]);
+
+    const handleSaveToken = () => {
+        if (!user || !tokenInput.trim()) {
+            toast({ variant: 'destructive', title: 'Token inválido', description: 'O token não pode estar vazio.' });
+            return;
+        }
+        setIsSaving(true);
+        const settingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+        
+        setDocumentNonBlocking(settingsRef, { webhookToken: tokenInput.trim() }, { merge: true });
+        
+        toast({ title: 'Token Salvo!', description: 'O token de webhook foi definido para sua conta.' });
+        setIsSaving(false);
+    };
+    
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Package/> Gerenciamento de Token (Admin)</CardTitle>
+                <CardDescription>Defina ou atualize o token de webhook para sua conta de administrador. Recomenda-se usar um token do estoque de tokens.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                <Label htmlFor="admin-token">Seu Token de Webhook</Label>
+                <div className="flex items-center gap-2">
+                    <Input
+                        id="admin-token"
+                        value={tokenInput}
+                        onChange={(e) => setTokenInput(e.target.value)}
+                        placeholder="Cole o token aqui..."
+                        disabled={isLoading || isSaving}
+                    />
+                    <Button variant="outline" size="icon" onClick={() => navigator.clipboard.writeText(tokenInput)} disabled={!tokenInput}>
+                        <Copy className="h-4 w-4" />
+                    </Button>
+                </div>
+            </CardContent>
+            <CardFooter>
+                <Button onClick={handleSaveToken} disabled={isSaving || isLoading}>
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                    {isLoading ? 'Carregando...' : isSaving ? 'Salvando...' : 'Salvar Meu Token'}
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+}
+
+
 // --------- Main Profile Page Component ----------
 
 export default function ProfilePage() {
@@ -317,6 +383,7 @@ export default function ProfilePage() {
         <div className="flex flex-col h-full">
             <PageHeader title="Meu Perfil" description="Gerencie sua conta e assinatura." />
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6 max-w-4xl mx-auto w-full">
+                {userProfile?.role === 'Admin' && <AdminTokenManager />}
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><ShieldCheck/> Plano e Assinatura</CardTitle>
