@@ -5,8 +5,8 @@ export default function InboxPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Caixa de Entrada"
-        description="Gerencie suas conversas com clientes."
+        title="E-Mail Temporário"
+        description="Esta funcionalidade está em desenvolvimento."
       />
       <main className="flex flex-1 items-center justify-center p-6">
         <div className="flex flex-col items-center gap-1 text-center">

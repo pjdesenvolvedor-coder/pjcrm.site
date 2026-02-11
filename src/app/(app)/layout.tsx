@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  MessageSquare,
+  Mail,
   LayoutDashboard,
   UserCircle,
   LogOut,
@@ -336,7 +336,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <div className="flex h-screen w-screen items-center justify-center">
             <div className="flex flex-col items-center gap-4">
-                <MessageSquare className="h-12 w-12 animate-pulse text-primary" />
+                <Mail className="h-12 w-12 animate-pulse text-primary" />
                 <p className="text-muted-foreground">Carregando...</p>
             </div>
         </div>
@@ -629,10 +629,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               
               {permissions.inbox && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'Inbox (Em Breve)' }}>
+                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'E-Mail Temporário (Em Breve)' }}>
                         <Link href="/inbox">
-                            <MessageSquare />
-                            <span>Inbox</span>
+                            <Mail />
+                            <span>E-Mail Temporário</span>
                             <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
                                 Em Breve
                             </Badge>
