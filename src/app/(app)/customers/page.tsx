@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -457,6 +457,7 @@ export default function CustomersPage() {
 
   const [dialogState, setDialogState] = useState<DialogState>({ view: 'closed' });
   const [isSending, setIsSending] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
   
   const settingsDocRef = useMemo(() => {
@@ -515,6 +516,27 @@ export default function CustomersPage() {
     }
     return sortableItems;
   }, [clients, sortConfig]);
+
+  const filteredClients = useMemo(() => {
+    if (!sortedClients) return [];
+    if (!searchTerm) return sortedClients;
+
+    const lowercasedFilter = searchTerm.toLowerCase();
+
+    return sortedClients.filter((client) => {
+      const emailString = Array.isArray(client.email) ? client.email.join(' ') : client.email;
+      const dueDateString = client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '';
+
+      return (
+        client.name.toLowerCase().includes(lowercasedFilter) ||
+        client.phone.includes(lowercasedFilter) ||
+        emailString.toLowerCase().includes(lowercasedFilter) ||
+        (client.subscription && client.subscription.toLowerCase().includes(lowercasedFilter)) ||
+        (client.status && client.status.toLowerCase().includes(lowercasedFilter)) ||
+        dueDateString.includes(lowercasedFilter)
+      );
+    });
+  }, [sortedClients, searchTerm]);
 
   const requestSort = (key: SortableKeys) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -680,12 +702,20 @@ export default function CustomersPage() {
         title="Todos os Clientes"
         description="Gerencie seus clientes aqui."
       >
-        <div className="flex items-center gap-2">
-          <Button size="sm" className="gap-1" onClick={() => openDialog('add')}>
-            <PlusCircle className="h-4 w-4" />
-            Adicionar Cliente
-          </Button>
+        <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Pesquisar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
+            />
         </div>
+        <Button size="sm" className="gap-1" onClick={() => openDialog('add')}>
+          <PlusCircle className="h-4 w-4" />
+          Adicionar Cliente
+        </Button>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <Card>
@@ -729,8 +759,8 @@ export default function CustomersPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
-                ) : sortedClients && sortedClients.length > 0 ? (
-                  sortedClients.map((client) => (
+                ) : filteredClients && filteredClients.length > 0 ? (
+                  filteredClients.map((client) => (
                     <TableRow key={client.id} data-state={client.needsSupport ? 'selected' : ''}>
                       <TableCell className="font-medium">
                         <div className='flex items-center gap-2'>
