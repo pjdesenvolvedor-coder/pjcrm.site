@@ -180,7 +180,6 @@ export default function SubscriptionPage() {
             await setDocumentNonBlocking(userDocRef, {
               subscriptionEndDate: Timestamp.fromDate(newEndDate),
               subscriptionPlan: plan,
-              trialActivated: false, // It's a paid plan now
             }, { merge: true });
             return;
         }
@@ -214,6 +213,16 @@ export default function SubscriptionPage() {
   
       const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), isTrial ? 3 : 30));
   
+      const dataForTransaction: any = {
+        subscriptionPlan: plan,
+        permissions: newPermissions,
+        subscriptionEndDate: subscriptionEndDate,
+      };
+
+      if (isTrial) {
+        dataForTransaction.trialActivated = true;
+      }
+  
       await runTransaction(firestore, async (transaction) => {
         transaction.update(tokenDoc.ref, {
           status: 'in_use',
@@ -221,12 +230,7 @@ export default function SubscriptionPage() {
           assignedEmail: user.email,
         });
   
-        transaction.set(userDocRef, { 
-          subscriptionPlan: plan, 
-          permissions: newPermissions,
-          subscriptionEndDate: subscriptionEndDate,
-          trialActivated: isTrial
-        }, { merge: true });
+        transaction.set(userDocRef, dataForTransaction, { merge: true });
   
         transaction.set(userSettingsRef, {
           webhookToken: tokenData.value
