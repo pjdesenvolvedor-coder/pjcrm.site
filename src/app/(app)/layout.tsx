@@ -81,6 +81,20 @@ type LiveStatus = {
 
 function ExpirationOverlay() {
     const router = useRouter();
+    const auth = useAuth();
+    const { toast } = useToast();
+
+    const handleLogout = async () => {
+        try {
+            await auth.signOut();
+            router.push('/login');
+            toast({ title: 'Você foi desconectado.' });
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro ao sair.' });
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
             <Card className="w-full max-w-md m-4 text-center shadow-2xl animate-in fade-in-0 zoom-in-95">
@@ -93,9 +107,13 @@ function ExpirationOverlay() {
                         Para continuar usando o sistema, por favor, renove ou escolha um plano.
                     </p>
                 </CardContent>
-                <CardFooter className="flex-col sm:flex-row gap-2">
-                     <Button variant="outline" className="w-full" onClick={() => router.push('/profile')}>Renovar Plano Atual</Button>
-                     <Button className="w-full" onClick={() => window.location.assign('/subscription')}>Ver Outros Planos</Button>
+                <CardFooter className="flex-col gap-2">
+                     <Button className="w-full" onClick={() => router.push('/profile')}>Renovar Assinatura</Button>
+                     <Button variant="outline" className="w-full" onClick={() => window.location.assign('/subscription')}>Ver Outros Planos</Button>
+                     <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleLogout}>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Sair
+                     </Button>
                 </CardFooter>
             </Card>
         </div>
@@ -147,7 +165,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const [showExpiredOverlay, setShowExpiredOverlay] = useState(false);
-  const [isReleasingToken, setIsReleasingToken] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -281,55 +298,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [userProfile, isProfileLoading, router]);
 
   useEffect(() => {
-    const handleExpiration = async () => {
-      if (
-        !isProfileLoading &&
-        userProfile &&
-        userProfile.role !== 'Admin' &&
-        userProfile.subscriptionEndDate &&
-        userProfile.subscriptionEndDate.toDate() < new Date()
-      ) {
-        setShowExpiredOverlay(true);
-        
-        if (isReleasingToken || !settings?.webhookToken || !user) return; 
-
-        setIsReleasingToken(true);
-        const tokenValue = settings.webhookToken;
-        
-        fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: tokenValue }),
-        });
-
-        try {
-            const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
-            const tokenSnapshot = await getDocs(tokenQuery);
-            
-            if (!tokenSnapshot.empty) {
-              const tokenDocRef = tokenSnapshot.docs[0].ref;
-              const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
-              const userDocRef = doc(firestore, 'users', user.uid);
-              
-              const batch = writeBatch(firestore);
-              batch.update(tokenDocRef, {
-                status: 'available',
-                assignedTo: null,
-                assignedEmail: null,
-              });
-              batch.update(userSettingsRef, { webhookToken: null });
-              batch.update(userDocRef, { subscriptionPlan: null });
-              await batch.commit();
-            }
-        } catch (e) {
-          console.error("Failed to release token on expiration:", e);
-        } finally {
-            setIsReleasingToken(false);
-        }
-      }
-    };
-    handleExpiration();
-}, [userProfile, isProfileLoading, settings, firestore, user, isReleasingToken]);
+    if (
+      !isProfileLoading &&
+      userProfile &&
+      userProfile.role !== 'Admin' &&
+      userProfile.subscriptionEndDate &&
+      userProfile.subscriptionEndDate.toDate() < new Date()
+    ) {
+      setShowExpiredOverlay(true);
+    } else {
+      setShowExpiredOverlay(false);
+    }
+  }, [userProfile, isProfileLoading]);
 
 
   if (isUserLoading || !user || isProfileLoading) {
