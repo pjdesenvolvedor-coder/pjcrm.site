@@ -7,7 +7,7 @@ import { doc, Timestamp, collection, query, where, limit, getDocs, runTransactio
 import { addDays } from 'date-fns';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Check, Mail, Copy, Loader2, PartyPopper, Users, Send, Zap, CreditCard, Bot, MessageSquare, LogOut } from 'lucide-react';
+import { Check, Mail, Copy, Loader2, PartyPopper, Users, Send, Zap, CreditCard, Bot, MessageSquare, LogOut, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, UserPermissions, Token } from '@/lib/types';
 import Image from 'next/image';
@@ -144,6 +144,10 @@ export default function SubscriptionPage() {
   const [trialPlan, setTrialPlan] = useState<'basic' | 'pro'>('basic');
   const [isActivatingTrial, setIsActivatingTrial] = useState(false);
 
+  const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [isTrialUnlocked, setIsTrialUnlocked] = useState(false);
+
 
   useEffect(() => {
     if (userProfile && userProfile.subscriptionPlan && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() > new Date()) {
@@ -155,31 +159,36 @@ export default function SubscriptionPage() {
     }
   }, [userProfile, router, toast]);
 
-  const grantPlanAccess = useCallback(async (plan: 'basic' | 'pro') => {
+  const grantPlanAccess = useCallback(async (plan: 'basic' | 'pro', isTrial = false) => {
     if (!user || !firestore) return;
   
     try {
-      const userSettingsDoc = await getDoc(doc(firestore, 'users', user.uid, 'settings', 'config'));
       const userDocRef = doc(firestore, 'users', user.uid);
-      
-      if (userSettingsDoc.exists() && userSettingsDoc.data().webhookToken) {
-          const currentUserDoc = await getDoc(userDocRef);
-          const currentEndDate = currentUserDoc.exists() && currentUserDoc.data().subscriptionEndDate 
-              ? currentUserDoc.data().subscriptionEndDate.toDate() 
-              : new Date();
-          
-          const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), 30);
-          
-          await setDocumentNonBlocking(userDocRef, {
-            subscriptionEndDate: Timestamp.fromDate(newEndDate),
-            subscriptionPlan: plan,
-          }, { merge: true });
-          return;
+
+      // If it's not a trial, we might need to find a token
+      if (!isTrial) {
+        const userSettingsDoc = await getDoc(doc(firestore, 'users', user.uid, 'settings', 'config'));
+        // If it's a regular subscription payment and the user already has a token, just extend the date.
+        if (userSettingsDoc.exists() && userSettingsDoc.data().webhookToken) {
+            const currentUserDoc = await getDoc(userDocRef);
+            const currentEndDate = currentUserDoc.exists() && currentUserDoc.data().subscriptionEndDate 
+                ? currentUserDoc.data().subscriptionEndDate.toDate() 
+                : new Date();
+            
+            const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), 30);
+            
+            await setDocumentNonBlocking(userDocRef, {
+              subscriptionEndDate: Timestamp.fromDate(newEndDate),
+              subscriptionPlan: plan,
+              trialActivated: false, // It's a paid plan now
+            }, { merge: true });
+            return;
+        }
       }
 
+      // Logic to assign a new token (for first-time trial or a user re-subscribing after token was revoked)
       const tokensRef = collection(firestore, 'tokens');
       const q = query(tokensRef, where('status', '==', 'available'), limit(1));
-      
       const availableTokenSnap = await getDocs(q);
   
       if (availableTokenSnap.empty) {
@@ -203,7 +212,7 @@ export default function SubscriptionPage() {
         newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, users: false };
       }
   
-      const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 30));
+      const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), isTrial ? 3 : 30));
   
       await runTransaction(firestore, async (transaction) => {
         transaction.update(tokenDoc.ref, {
@@ -215,7 +224,8 @@ export default function SubscriptionPage() {
         transaction.set(userDocRef, { 
           subscriptionPlan: plan, 
           permissions: newPermissions,
-          subscriptionEndDate: subscriptionEndDate
+          subscriptionEndDate: subscriptionEndDate,
+          trialActivated: isTrial
         }, { merge: true });
   
         transaction.set(userSettingsRef, {
@@ -297,7 +307,7 @@ export default function SubscriptionPage() {
   
   useEffect(() => {
       if (paymentStatus === 'paid' && selectedPlan) {
-          grantPlanAccess(selectedPlan).then(() => {
+          grantPlanAccess(selectedPlan, false).then(() => {
               toast({
                   title: "Pagamento Aprovado!",
                   description: `Seu acesso ao plano ${selectedPlan === 'basic' ? 'Básico' : 'Pro'} foi liberado. Redirecionando...`,
@@ -322,65 +332,50 @@ export default function SubscriptionPage() {
       setSelectedPlan(null);
   }
 
+  const handleTrialButtonClick = () => {
+      if (userProfile?.trialActivated && !isTrialUnlocked) {
+          setPasswordModalOpen(true);
+      } else {
+          setIsTrialDialogOpen(true);
+      }
+  };
+  
+  const handlePasswordSubmit = () => {
+    if (password === 'Ae@1234Br') {
+        setPassword('');
+        setPasswordModalOpen(false);
+        setIsTrialUnlocked(true);
+        setIsTrialDialogOpen(true);
+    } else {
+        toast({
+            variant: 'destructive',
+            title: 'Chave Incorreta',
+            description: 'A chave de acesso inserida está incorreta.',
+        });
+        setPassword('');
+    }
+  };
+
   const handleActivateTrial = async () => {
     if (!trialPlan || !user || !firestore || !userDocRef) return;
     setIsActivatingTrial(true);
 
     try {
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists() && userDoc.data().trialActivated) {
-            toast({
-                variant: 'destructive',
-                title: 'Teste já utilizado',
-                description: 'Você já ativou um período de teste.',
-            });
-            setIsActivatingTrial(false);
-            setIsTrialDialogOpen(false);
-            return;
+        if (!isTrialUnlocked) {
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists() && userDoc.data().trialActivated) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Teste já utilizado',
+                    description: 'Você já ativou um período de teste.',
+                });
+                setIsActivatingTrial(false);
+                setIsTrialDialogOpen(false);
+                return;
+            }
         }
 
-        const tokensRef = collection(firestore, 'tokens');
-        const q = query(tokensRef, where('status', '==', 'available'), limit(1));
-        const availableTokenSnap = await getDocs(q);
-
-        if (availableTokenSnap.empty) {
-            throw new Error('Nenhum token de conexão disponível para o teste. Contate o suporte.');
-        }
-        
-        const tokenDoc = availableTokenSnap.docs[0];
-        const tokenData = tokenDoc.data() as Token;
-        const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
-        
-        const allPermissionsFalse: UserPermissions = {
-            dashboard: false, customers: false, inbox: false, automations: false,
-            groups: false, shot: false, zapconnect: false, settings: false, users: false,
-        };
-  
-        let newPermissions: UserPermissions;
-        if (trialPlan === 'basic') {
-            newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, shot: true, zapconnect: true };
-        } else { // pro
-            newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, users: false };
-        }
-
-        const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), 3));
-
-        await runTransaction(firestore, async (transaction) => {
-            transaction.update(tokenDoc.ref, {
-                status: 'in_use',
-                assignedTo: user.uid,
-                assignedEmail: user.email,
-            });
-            transaction.set(userDocRef!, { 
-                subscriptionPlan: trialPlan, 
-                permissions: newPermissions,
-                subscriptionEndDate: subscriptionEndDate,
-                trialActivated: true
-            }, { merge: true });
-            transaction.set(userSettingsRef, {
-                webhookToken: tokenData.value
-            }, { merge: true });
-        });
+        await grantPlanAccess(trialPlan, true);
 
         toast({
             title: 'Teste Ativado!',
@@ -393,14 +388,11 @@ export default function SubscriptionPage() {
 
     } catch (e: any) {
         console.error("Trial activation failed:", e);
-        toast({
-            variant: 'destructive',
-            title: 'Falha na Ativação do Teste',
-            description: e.message || 'Não foi possível ativar seu teste. Por favor, contate o suporte.',
-        });
+        // Error toast is already shown in grantPlanAccess
     } finally {
         setIsActivatingTrial(false);
         setIsTrialDialogOpen(false);
+        setIsTrialUnlocked(false);
     }
   };
 
@@ -453,6 +445,34 @@ export default function SubscriptionPage() {
                     {isActivatingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Ativar Teste
                 </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isPasswordModalOpen} onOpenChange={setPasswordModalOpen}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Desbloquear Teste Adicional</DialogTitle>
+                <DialogDescription>
+                    Você já utilizou seu teste grátis. Para ativar outro, por favor, insira a chave de acesso.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-2">
+                <label htmlFor="password-input" className="text-sm font-medium">Chave de Acesso</label>
+                <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        id="password-input"
+                        type="password" 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="pl-9"
+                    />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="ghost" onClick={() => { setPasswordModalOpen(false); setPassword(''); }}>Cancelar</Button>
+                <Button onClick={handlePasswordSubmit}>Desbloquear</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -519,7 +539,7 @@ export default function SubscriptionPage() {
                     <CardDescription>Teste qualquer um dos nossos planos gratuitamente por 3 dias.</CardDescription>
                 </CardHeader>
                 <CardFooter className="p-6">
-                    <Button variant="outline" className="w-full" size="lg" onClick={() => setIsTrialDialogOpen(true)}>
+                    <Button variant="outline" className="w-full" size="lg" onClick={handleTrialButtonClick}>
                         Iniciar Teste Grátis
                     </Button>
                 </CardFooter>
