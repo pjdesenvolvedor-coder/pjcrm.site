@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock, Unlock, Package, Trash2, Gift } from 'lucide-react';
+import { Lock, Unlock, Package, Trash2, Gift, CalendarDays } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { differenceInSeconds, addDays } from 'date-fns';
+import { differenceInSeconds, addDays, format } from 'date-fns';
 
 const permissionsSchema = z.object({
   dashboard: z.boolean().default(false),
@@ -55,6 +55,7 @@ const permissionsSchema = z.object({
 const userFormSchema = z.object({
   role: z.enum(['Admin', 'Agent']),
   permissions: permissionsSchema,
+  subscriptionEndDate: z.string().optional(),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -150,6 +151,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
             },
+            subscriptionEndDate: user.subscriptionEndDate ? format(user.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
         },
     });
 
@@ -171,14 +173,31 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
             ? permissionLabels.reduce((acc, p) => ({ ...acc, [p.key]: true }), {})
             : data.permissions;
         
-        setDocumentNonBlocking(userDocRef, { 
+        const dataToUpdate: {
+            role: 'Admin' | 'Agent';
+            permissions: UserPermissions;
+            subscriptionEndDate?: Timestamp | null;
+        } = { 
             role: data.role,
-            permissions: finalPermissions,
-        }, { merge: true });
+            permissions: finalPermissions as UserPermissions,
+        };
+
+        if (data.subscriptionEndDate && data.subscriptionEndDate.length === 10) {
+            const [day, month, year] = data.subscriptionEndDate.split('/');
+            const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+            if (!isNaN(date.getTime())) {
+                date.setHours(23, 59, 59); // Set to end of day
+                dataToUpdate.subscriptionEndDate = Timestamp.fromDate(date);
+            }
+        } else if (data.subscriptionEndDate === '') {
+            dataToUpdate.subscriptionEndDate = null;
+        }
+
+        setDocumentNonBlocking(userDocRef, dataToUpdate, { merge: true });
 
         toast({
             title: "Usuário Atualizado!",
-            description: `As permissões para ${user.firstName} foram salvas.`
+            description: `As permissões e assinatura de ${user.firstName} foram salvas.`
         });
         onFinished();
     };
@@ -189,7 +208,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 <DialogHeader>
                     <DialogTitle>Editar Usuário: {user.firstName} {user.lastName}</DialogTitle>
                     <DialogDescription>
-                        Defina a função e as permissões de acesso para este usuário.
+                        Defina a função, permissões e data de vencimento para este usuário.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -238,6 +257,43 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                                 )}
                             />
                         ))}
+                    </div>
+                </div>
+                 <div>
+                    <Label>Assinatura</Label>
+                     <div className="space-y-2 rounded-md border p-4 mt-2">
+                        <FormField
+                            control={form.control}
+                            name="subscriptionEndDate"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className='flex items-center gap-2'><CalendarDays/>Data de Vencimento</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            placeholder="dd/mm/aaaa"
+                                            {...field}
+                                            value={field.value || ''}
+                                            onChange={(e) => {
+                                                let value = e.target.value.replace(/\D/g, '');
+                                                if (value.length > 8) value = value.slice(0, 8);
+                                                let formatted = value;
+                                                if (value.length > 2) {
+                                                    formatted = `${value.slice(0, 2)}/${value.slice(2)}`;
+                                                }
+                                                if (value.length > 4) {
+                                                    formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
+                                                }
+                                                field.onChange(formatted);
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <FormDescription>
+                                        Defina a data de expiração da assinatura. Deixe em branco para remover.
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                     </div>
                 </div>
 
@@ -338,19 +394,28 @@ export default function UsersPage() {
     );
 
     const userDocRef = doc(firestore, "users", userToGrant.id);
-    setDocumentNonBlocking(userDocRef, {
+    
+    const dataToUpdate: Partial<UserProfile> = {
         subscriptionEndDate: Timestamp.fromDate(newEndDate),
-    }, { merge: true });
+        status: 'active'
+    };
+
+    if (!userToGrant.subscriptionPlan) {
+        dataToUpdate.subscriptionPlan = 'basic';
+        dataToUpdate.trialActivated = true;
+    }
+
+    setDocumentNonBlocking(userDocRef, dataToUpdate, { merge: true });
 
     toast({
-        title: "Acesso Estendido!",
-        description: `A assinatura de ${userToGrant.firstName} foi estendida em 3 dias.`
+        title: "Teste Grátis Concedido!",
+        description: `O usuário ${userToGrant.firstName} recebeu 3 dias de teste.`
     });
 
     // Optimistic UI update
     setUsers(prevUsers => prevUsers.map(u =>
         u.id === userToGrant.id
-            ? { ...u, subscriptionEndDate: Timestamp.fromDate(newEndDate) }
+            ? { ...u, ...dataToUpdate }
             : u
     ));
   };
