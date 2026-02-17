@@ -127,7 +127,8 @@ export type ScheduledMessage = {
   imageUrl?: string;
   sendAt: Timestamp;
   repeatDaily: boolean;
-  status: 'Scheduled' | 'Sent' | 'Error';
+  status: 'Scheduled' | 'Sent' | 'Error' | 'Sending';
+  claimedAt?: Timestamp | null;
 };
 
 export type Token = {

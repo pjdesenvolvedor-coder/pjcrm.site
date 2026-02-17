@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock, Unlock, Package, Trash2 } from 'lucide-react';
+import { Lock, Unlock, Package, Trash2, Gift } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { differenceInSeconds } from 'date-fns';
+import { differenceInSeconds, addDays } from 'date-fns';
 
 const permissionsSchema = z.object({
   dashboard: z.boolean().default(false),
@@ -325,6 +325,37 @@ export default function UsersPage() {
     fetchUsers('initial'); // Re-fetch to show updated data
   }
 
+  const handleGrantTrial = (userToGrant: UserProfile) => {
+    if (!firestore) return;
+
+    const currentEndDate = userToGrant.subscriptionEndDate
+        ? userToGrant.subscriptionEndDate.toDate()
+        : new Date();
+
+    const newEndDate = addDays(
+        currentEndDate > new Date() ? currentEndDate : new Date(),
+        3
+    );
+
+    const userDocRef = doc(firestore, "users", userToGrant.id);
+    setDocumentNonBlocking(userDocRef, {
+        subscriptionEndDate: Timestamp.fromDate(newEndDate),
+    }, { merge: true });
+
+    toast({
+        title: "Acesso Estendido!",
+        description: `A assinatura de ${userToGrant.firstName} foi estendida em 3 dias.`
+    });
+
+    // Optimistic UI update
+    setUsers(prevUsers => prevUsers.map(u =>
+        u.id === userToGrant.id
+            ? { ...u, subscriptionEndDate: Timestamp.fromDate(newEndDate) }
+            : u
+    ));
+  };
+
+
   const handleToggleBlockUser = async (userToToggle: UserProfile) => {
     if (!firestore || !currentUser) return;
 
@@ -569,7 +600,11 @@ export default function UsersPage() {
                     <TableCell>
                       <SubscriptionCell endDate={user.subscriptionEndDate} />
                     </TableCell>
-                    <TableCell className="text-right space-x-2">
+                    <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="sm" onClick={() => handleGrantTrial(user)}>
+                            <Gift className="mr-2 h-4 w-4" />
+                            Teste (+3d)
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
                         <Button 
                             variant={user.status === 'blocked' ? 'secondary' : 'ghost'} 

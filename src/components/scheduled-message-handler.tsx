@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { collection, query, where, Timestamp, doc, runTransaction } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, setDocumentNonBlocking, useDoc } from '@/firebase';
 import type { ScheduledMessage, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { add } from 'date-fns';
+import { addDays } from 'date-fns';
 
 // This component is invisible and handles the logic for sending scheduled messages.
 export function ScheduledMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
+    const processingRef = useRef(new Set<string>()); // Keep track of processing messages
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -27,11 +28,11 @@ export function ScheduledMessageHandler() {
     const scheduledMessagesQuery = useMemoFirebase(() => {
         if (!user) return null;
         const messagesRef = collection(firestore, 'users', user.uid, 'scheduled_messages');
-        // Only fetch messages that are 'Scheduled'.
-        return query(messagesRef, where("status", "==", "Scheduled"));
+        // Fetch messages that are ready to be processed or potentially stuck.
+        return query(messagesRef, where("status", "in", ["Scheduled", "Sending"]));
     }, [user, firestore]);
 
-    const { data: scheduledMessages } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
+    const { data: messagesToCheck } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
 
     useEffect(() => {
         const checkScheduledMessages = () => {
@@ -40,34 +41,58 @@ export function ScheduledMessageHandler() {
                 return; // Subscription expired, do nothing.
             }
 
-            if (!scheduledMessages || scheduledMessages.length === 0 || !settings?.webhookToken || !user || !firestore) {
+            if (!messagesToCheck || messagesToCheck.length === 0 || !settings?.webhookToken || !user || !firestore) {
                 return;
             }
 
             const now = new Date();
             const token = settings.webhookToken;
+            const STALE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
             const processMessage = async (msg: ScheduledMessage) => {
+                if (processingRef.current.has(msg.id)) {
+                    return; // Already processing this message in this client
+                }
+                
                 const messageDocRef = doc(firestore, 'users', user.uid, 'scheduled_messages', msg.id);
                 
                 try {
+                    processingRef.current.add(msg.id); // Mark as processing locally
+
                     // This transaction will atomically claim the message for sending.
                     await runTransaction(firestore, async (transaction) => {
                         const messageDoc = await transaction.get(messageDocRef);
 
-                        if (!messageDoc.exists()) {
-                            // The document was deleted, do nothing.
-                            throw new Error("Document deleted."); 
+                        if (!messageDoc.exists()) throw new Error("deleted");
+                        
+                        const data = messageDoc.data() as ScheduledMessage;
+                        
+                        // Check if it's a stale 'Sending' message
+                        if (data.status === 'Sending') {
+                            const claimedAt = data.claimedAt?.toDate();
+                            if (claimedAt && (now.getTime() - claimedAt.getTime()) > STALE_TIMEOUT_MS) {
+                                // It is stale. This process will take over.
+                            } else {
+                                // It's not stale, another process is (supposedly) working on it.
+                                throw new Error("already being processed");
+                            }
+                        } 
+                        // Check if it's a 'Scheduled' message that is due
+                        else if (data.status === 'Scheduled') {
+                             if (data.sendAt.toDate() > now) {
+                                throw new Error("not due yet");
+                            }
+                        }
+                        // Any other status ('Sent', 'Error') should not be processed
+                        else {
+                            throw new Error("already processed");
                         }
                         
-                        // Check if the message is still in 'Scheduled' state.
-                        if (messageDoc.data().status !== 'Scheduled') {
-                            // Another process has already claimed this message. Stop processing.
-                            throw new Error("Message already being processed.");
-                        }
-                        
-                        // Claim the message by updating its status.
-                        transaction.update(messageDocRef, { status: 'Sending' });
+                        // If we are here, we claim the message
+                        transaction.update(messageDocRef, { 
+                            status: 'Sending',
+                            claimedAt: Timestamp.now()
+                        });
                     });
 
                     // If the transaction succeeded, this client instance now "owns" the job.
@@ -84,16 +109,18 @@ export function ScheduledMessageHandler() {
                     });
 
                     if (!response.ok) {
+                        setDocumentNonBlocking(messageDocRef, { status: 'Error', claimedAt: null }, { merge: true });
                         throw new Error(`Falha ao enviar mensagem para o grupo ${msg.jid}`);
                     }
 
                     // Message sent successfully, now update its final state.
                     if (msg.repeatDaily) {
-                        const nextSendAt = add(msg.sendAt.toDate(), { days: 1 });
+                        const nextSendAt = addDays(msg.sendAt.toDate(), 1);
                         // Reschedule for the next day and set back to 'Scheduled'
                         setDocumentNonBlocking(messageDocRef, { 
                             sendAt: Timestamp.fromDate(nextSendAt),
-                            status: 'Scheduled' 
+                            status: 'Scheduled',
+                            claimedAt: null,
                         }, { merge: true });
                         toast({
                             title: "Mensagem recorrente enviada e reagendada.",
@@ -101,7 +128,7 @@ export function ScheduledMessageHandler() {
                         });
                     } else {
                         // Mark as sent permanently.
-                        setDocumentNonBlocking(messageDocRef, { status: 'Sent' }, { merge: true });
+                        setDocumentNonBlocking(messageDocRef, { status: 'Sent', claimedAt: null }, { merge: true });
                         toast({
                             title: "Mensagem Agendada Enviada!",
                             description: `A mensagem para o grupo ${msg.jid} foi enviada com sucesso.`,
@@ -109,32 +136,31 @@ export function ScheduledMessageHandler() {
                     }
 
                 } catch (error: any) {
-                    if (error.message.includes("already being processed") || error.message.includes("deleted")) {
-                        // This is not a "real" error, just another client instance winning the race.
-                        // We can safely ignore it.
+                    // Filter out non-actionable errors (race conditions, not due yet)
+                    if (error.message.includes("already being processed") || error.message.includes("not due yet") || error.message.includes("deleted")) {
+                       // Silently ignore
                     } else {
                         // This is a real error (e.g., webhook failed, transaction failed due to network).
                         console.error("Failed to send scheduled message:", error);
-                        // Mark the message as 'Error' so we don't try to send it again.
-                        setDocumentNonBlocking(messageDocRef, { status: 'Error' }, { merge: true });
+                        // The status is already set to 'Error' if webhook fails after transaction
                         toast({
                             variant: "destructive",
                             title: "Erro no Agendamento",
                             description: error.message || `Não foi possível enviar a mensagem agendada para ${msg.jid}.`,
                         });
                     }
+                } finally {
+                    processingRef.current.delete(msg.id); // Unmark as processing
                 }
             };
             
-            for (const msg of scheduledMessages) {
-                if (msg.sendAt.toDate() <= now) {
-                    processMessage(msg);
-                }
+            for (const msg of messagesToCheck) {
+                processMessage(msg);
             }
         };
         
-        // Check every minute
-        const intervalId = setInterval(checkScheduledMessages, 60 * 1000);
+        // Check every 30 seconds
+        const intervalId = setInterval(checkScheduledMessages, 30 * 1000);
 
         // Initial check
         checkScheduledMessages();
@@ -142,7 +168,7 @@ export function ScheduledMessageHandler() {
         // Cleanup on unmount
         return () => clearInterval(intervalId);
 
-    }, [scheduledMessages, settings, firestore, user, toast, userProfile]);
+    }, [messagesToCheck, settings, firestore, user, toast, userProfile]);
 
     return null; // This component doesn't render anything
 }
