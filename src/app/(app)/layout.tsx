@@ -109,7 +109,6 @@ function ExpirationOverlay() {
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                      <Button className="w-full" onClick={() => router.push('/profile')}>Renovar Assinatura</Button>
-                     <Button variant="outline" className="w-full" onClick={() => window.location.assign('/subscription')}>Ver Outros Planos</Button>
                      <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleLogout}>
                         <LogOut className="mr-2 h-4 w-4" />
                         Sair
@@ -444,9 +443,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             Pronto para escanear
           </Badge>
           <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
-          <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
-            <img src={qrCode} alt="QR Code do WhatsApp" width={150} height={150} data-ai-hint="qr code"/>
+          <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
+            <img src={qrCode} alt="QR Code do WhatsApp" width={220} height={220} data-ai-hint="qr code"/>
           </div>
+          <p className="text-lg font-semibold text-muted-foreground animate-pulse">
+            Aguardando conexão...
+          </p>
         </div>
       );
     }
@@ -609,11 +611,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               
               {permissions.inbox && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'E-Mail Temporário (Em Breve)' }}>
+                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'E-Mail Temporário' }}>
                         <Link href="/inbox">
                             <Mail />
                             <span>E-Mail Temporário</span>
-                            <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
+                             <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
                                 Em Breve
                             </Badge>
                         </Link>
