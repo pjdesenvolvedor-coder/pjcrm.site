@@ -700,7 +700,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {permissions.estoque && (
                  <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname.startsWith('/estoque')} tooltip={{ children: 'Estoque' }}>
-                        <Link href="/estoque"><Warehouse /><span>Estoque</span></Link>
+                        <Link href="/estoque">
+                            <Warehouse />
+                            <span>Estoque</span>
+                            <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
+                                Em Breve
+                            </Badge>
+                        </Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
