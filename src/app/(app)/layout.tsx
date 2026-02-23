@@ -206,6 +206,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         users: false,
         estoque: false,
         notes: false,
+        pix: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -699,6 +700,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
                     <Link href="/shot"><Send /><span>Disparo</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+               {permissions.pix && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith('/pix')} tooltip={{ children: 'Gerar Pix' }}>
+                    <Link href="/pix"><CreditCard /><span>Gerar Pix</span></Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}

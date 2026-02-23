@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
-  const { value } = await request.json();
+  const { value, token: requestToken } = await request.json();
 
   if (!value || typeof value !== 'number' || value <= 0) {
     return NextResponse.json({ error: 'Valor inválido' }, { status: 400 });
   }
 
-  const token = process.env.PUSHINPAY_TOKEN;
+  const token = requestToken || process.env.PUSHINPAY_TOKEN;
+  
   if (!token) {
-    return NextResponse.json({ error: 'API token não configurado no servidor' }, { status: 500 });
+    return NextResponse.json({ error: 'API token não configurado' }, { status: 500 });
   }
   
   const host = request.headers.get('host');

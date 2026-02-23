@@ -12,6 +12,7 @@ export type UserPermissions = {
   users: boolean;
   estoque: boolean;
   notes: boolean;
+  pix: boolean;
 };
 
 export type UserProfile = {
@@ -107,6 +108,7 @@ export type Message = {
 
 export type Settings = {
   webhookToken?: string;
+  pushinpayToken?: string;
   presetHour?: string;
   presetMinute?: string;
   usePresetTime?: boolean;

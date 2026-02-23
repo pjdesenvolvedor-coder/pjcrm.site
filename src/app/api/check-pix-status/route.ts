@@ -3,14 +3,16 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  const requestToken = searchParams.get('token');
+
+  const token = requestToken || process.env.PUSHINPAY_TOKEN;
 
   if (!id) {
     return NextResponse.json({ error: 'ID da transação é obrigatório' }, { status: 400 });
   }
   
-  const token = process.env.PUSHINPAY_TOKEN;
   if (!token) {
-    return NextResponse.json({ error: 'API token não configurado no servidor' }, { status: 500 });
+    return NextResponse.json({ error: 'API token não configurado' }, { status: 500 });
   }
 
   const url = `https://api.pushinpay.com.br/api/transactions/${id}`;
