@@ -266,6 +266,12 @@ export default function ProfilePage() {
     const userDocRef = useMemoFirebase(() => (user ? doc(firestore, 'users', user.uid) : null), [firestore, user]);
     const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
+    const settingsDocRef = useMemoFirebase(() => {
+        if (!user) return null;
+        return doc(firestore, 'users', user.uid, 'settings', 'config');
+    }, [firestore, user]);
+    const { data: settings } = useDoc<Settings>(settingsDocRef);
+
     const [isRenewing, setIsRenewing] = useState(false);
     const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
     const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
@@ -274,6 +280,16 @@ export default function ProfilePage() {
     const handleRenewSubscription = async () => {
         if (isRenewing || !userProfile?.subscriptionPlan) return;
         
+        const token = settings?.pushinpayToken;
+        if (!token) {
+            toast({
+                variant: "destructive",
+                title: "Token não configurado",
+                description: "Seu token de API PushInPay não foi encontrado. Por favor, vá para a página 'Gerar Pix' e configure seu token.",
+            });
+            return;
+        }
+
         setIsRenewing(true);
         setPaymentInfo(null);
         setPaymentStatus(null);
@@ -286,7 +302,7 @@ export default function ProfilePage() {
             const response = await fetch('/api/generate-pix', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ value: valueInCents }),
+                body: JSON.stringify({ value: valueInCents, token }),
             });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: 'Falha ao gerar o PIX.' }));
@@ -304,10 +320,12 @@ export default function ProfilePage() {
     };
     
     useEffect(() => {
-        if (paymentStatus !== 'pending' || !paymentInfo?.id) return;
+        const token = settings?.pushinpayToken;
+        if (paymentStatus !== 'pending' || !paymentInfo?.id || !token) return;
+
         const interval = setInterval(async () => {
             try {
-                const res = await fetch(`/api/check-pix-status?id=${paymentInfo.id}`);
+                const res = await fetch(`/api/check-pix-status?id=${paymentInfo.id}&token=${token}`);
                 if (!res.ok) return;
                 const data = await res.json();
                 if (data.status === 'paid') {
@@ -320,7 +338,7 @@ export default function ProfilePage() {
             } catch (e) { console.error('Polling error:', e); }
         }, 5000);
         return () => clearInterval(interval);
-    }, [paymentStatus, paymentInfo?.id]);
+    }, [paymentStatus, paymentInfo?.id, settings]);
 
     useEffect(() => {
         const grantRenewalAccess = async () => {
