@@ -3,11 +3,13 @@ import { Label } from '@/components/ui/label';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { CopyButton } from './copy-button';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface PixDetails {
     qr_code: string;
     qr_code_base64: string;
     value: number; // in cents
+    status: 'pending' | 'paid' | 'expired' | 'error';
 }
 
 async function getPixDetails(transactionId: string): Promise<PixDetails | null> {
@@ -41,6 +43,42 @@ export default async function PublicPaymentPage({ params }: { params: { transact
         currency: 'BRL',
     });
 
+    const renderContent = () => {
+        if (pixDetails.status === 'paid') {
+            return (
+                <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+                    <CheckCircle className="h-20 w-20 text-green-500" />
+                    <h3 className="text-2xl font-bold">Pagamento Aprovado!</h3>
+                    <p className="text-muted-foreground">Obrigado! Seu pagamento foi confirmado.</p>
+                </div>
+            )
+        }
+        
+        if (pixDetails.status !== 'pending' || !pixDetails.qr_code_base64) {
+             return (
+                <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+                    <AlertTriangle className="h-20 w-20 text-destructive" />
+                    <h3 className="text-2xl font-bold">Cobrança Expirada ou Inválida</h3>
+                    <p className="text-muted-foreground">Esta cobrança PIX não está mais disponível para pagamento.</p>
+                </div>
+            )
+        }
+
+        return (
+            <div className="flex flex-col items-center justify-center text-center gap-6">
+                <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-2 p-2 shadow-lg">
+                    <Image src={pixDetails.qr_code_base64} alt="PIX QR Code" width={200} height={200} data-ai-hint="qr code"/>
+                </div>
+                <div className="w-full px-4">
+                    <Label htmlFor="pix-code" className="text-sm font-medium text-left w-full block mb-1">
+                        Clique para copiar o PIX Copia e Cola
+                    </Label>
+                    <CopyButton textToCopy={pixDetails.qr_code} />
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
             <Card className="w-full max-w-md shadow-lg">
@@ -58,16 +96,8 @@ export default async function PublicPaymentPage({ params }: { params: { transact
                     <CardTitle className="text-2xl font-bold">Pagamento PIX</CardTitle>
                     <CardDescription>Valor da cobrança: <span className="font-bold text-foreground">{valueInReais}</span></CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-col items-center justify-center text-center gap-6">
-                    <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-2 p-2 shadow-lg">
-                        <Image src={pixDetails.qr_code_base64} alt="PIX QR Code" width={200} height={200} data-ai-hint="qr code"/>
-                    </div>
-                    <div className="w-full px-4">
-                        <Label htmlFor="pix-code" className="text-sm font-medium text-left w-full block mb-1">
-                            Clique para copiar o PIX Copia e Cola
-                        </Label>
-                        <CopyButton textToCopy={pixDetails.qr_code} />
-                    </div>
+                <CardContent>
+                    {renderContent()}
                 </CardContent>
             </Card>
         </div>
