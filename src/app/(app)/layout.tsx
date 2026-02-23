@@ -578,14 +578,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
 
-              {permissions.notes && (
-                <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/notes'} tooltip={{ children: 'Notas' }}>
-                        <Link href="/notes"><StickyNote /><span>Notas</span></Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
               {permissions.customers && (
                 <SidebarMenuItem>
                   <Collapsible>
@@ -707,6 +699,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
                     <Link href="/shot"><Send /><span>Disparo</span></Link>
                   </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.notes && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Notas'}}>
+                              <div className="flex items-center gap-2">
+                                  <StickyNote />
+                                  <span>Notas</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                              <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/notes/tasks')}>
+                                      <Link href="/notes/tasks">Tarefas</Link>
+                                  </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/notes/ads')}>
+                                      <Link href="/notes/ads">Anúncios</Link>
+                                  </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
                 </SidebarMenuItem>
               )}
               

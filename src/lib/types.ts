@@ -173,3 +173,12 @@ export type SystemAlert = {
   isActive: boolean;
   updatedAt: Timestamp;
 };
+
+export type AdCampaign = {
+  id: string;
+  userId: string;
+  campaignDate: Timestamp;
+  amountSpent: number;
+  totalReturn: number;
+  conversationsStarted: number;
+};

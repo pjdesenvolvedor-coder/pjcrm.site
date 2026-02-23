@@ -708,6 +708,21 @@
         }
       },
       "required": ["instanceId", "message", "isActive", "updatedAt"]
+    },
+    "AdCampaign": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AdCampaign",
+      "type": "object",
+      "description": "Represents an advertising campaign record.",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "campaignDate": { "type": "string", "format": "date-time" },
+        "amountSpent": { "type": "number" },
+        "totalReturn": { "type": "number" },
+        "conversationsStarted": { "type": "number" }
+      },
+      "required": ["id", "userId", "campaignDate", "amountSpent", "totalReturn"]
     }
   },
   "auth": {
@@ -1019,6 +1034,18 @@
               "name": "alertDocId",
               "description": "The unique identifier for the alert document (e.g., 'current')."
             }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/ad_campaigns/{campaignId}",
+        "definition": {
+          "entityName": "AdCampaign",
+          "schema": { "$ref": "#/backend/entities/AdCampaign" },
+          "description": "Stores advertising campaign records for each user.",
+          "params": [
+            { "name": "userId", "description": "The unique identifier for the user." },
+            { "name": "campaignId", "description": "The unique identifier for the campaign record." }
           ]
         }
       }
