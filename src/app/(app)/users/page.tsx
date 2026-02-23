@@ -32,7 +32,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -51,6 +51,7 @@ const permissionsSchema = z.object({
   settings: z.boolean().default(false),
   users: z.boolean().default(false),
   estoque: z.boolean().default(false),
+  notes: z.boolean().default(false),
 });
 
 const userFormSchema = z.object({
@@ -72,6 +73,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'zapconnect', label: 'ZapConexão' },
     { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
+    { key: 'notes', label: 'Notas' },
 ];
 
 function UserClientCount({ userId }: { userId: string }) {
@@ -153,6 +155,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
                 estoque: user.permissions?.estoque ?? false,
+                notes: user.permissions?.notes ?? false,
             },
             subscriptionEndDate: user.subscriptionEndDate ? format(user.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
         },
