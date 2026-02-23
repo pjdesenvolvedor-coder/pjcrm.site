@@ -1,5 +1,36 @@
 {
   "entities": {
+    "Note": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Note",
+      "type": "object",
+      "description": "Represents a user's task or note in the kanban board.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the note."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns this note."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content of the note."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["todo", "done"],
+          "description": "The status of the note in the kanban board."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the note was created.",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "content", "status", "createdAt"]
+    },
     "UserProfile": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "UserProfile",
@@ -687,6 +718,26 @@
   },
   "firestore": {
     "structure": [
+       {
+        "path": "/users/{userId}/notes/{noteId}",
+        "definition": {
+          "entityName": "Note",
+          "schema": {
+            "$ref": "#/backend/entities/Note"
+          },
+          "description": "Stores notes for each user's kanban board. Ownership is enforced via the path `/users/{userId}`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "noteId",
+              "description": "The unique identifier for the note."
+            }
+          ]
+        }
+      },
       {
         "path": "/users/{userId}",
         "definition": {

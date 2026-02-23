@@ -24,6 +24,7 @@ import {
   Construction,
   Warehouse,
   AlertTriangle,
+  StickyNote,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -203,6 +204,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         settings: false,
         users: false,
         estoque: false,
+        notes: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -572,6 +574,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip={{ children: 'Início' }}>
                         <Link href="/dashboard"><Home /><span>Início</span></Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.notes && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === '/notes'} tooltip={{ children: 'Notas' }}>
+                        <Link href="/notes"><StickyNote /><span>Notas</span></Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}

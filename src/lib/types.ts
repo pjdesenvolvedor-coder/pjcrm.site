@@ -11,6 +11,7 @@ export type UserPermissions = {
   settings: boolean;
   users: boolean;
   estoque: boolean;
+  notes: boolean;
 };
 
 export type UserProfile = {
@@ -26,6 +27,14 @@ export type UserProfile = {
   subscriptionEndDate?: Timestamp;
   status?: 'active' | 'blocked';
   trialActivated?: boolean;
+};
+
+export type Note = {
+    id: string;
+    userId: string;
+    content: string;
+    status: 'todo' | 'done';
+    createdAt: Timestamp;
 };
 
 export type Client = {
