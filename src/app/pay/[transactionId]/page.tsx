@@ -1,9 +1,13 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import Image from 'next/image';
-import { notFound } from 'next/navigation';
 import { CopyButton } from './copy-button';
-import { AlertTriangle, CheckCircle, CreditCard } from 'lucide-react';
+import { AlertTriangle, CheckCircle, CreditCard, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+
 
 interface PixDetails {
     qr_code: string;
@@ -12,38 +16,78 @@ interface PixDetails {
     status: 'pending' | 'paid' | 'expired' | 'error';
 }
 
-async function getPixDetails(transactionId: string): Promise<PixDetails | null> {
-    const apiHost = process.env.NEXT_PUBLIC_API_HOST || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002');
-    try {
-        const res = await fetch(`${apiHost}/api/get-pix-details?id=${transactionId}`, {
-            cache: 'no-store', // Always fetch latest status
-        });
+export default function PublicPaymentPage({ params }: { params: { transactionId: string } }) {
+    const [pixDetails, setPixDetails] = useState<PixDetails | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-        if (!res.ok) {
-            return null;
+    useEffect(() => {
+        const fetchDetails = async () => {
+            try {
+                const res = await fetch(`/api/get-pix-details?id=${params.transactionId}`);
+                if (!res.ok) {
+                    throw new Error('Não foi possível carregar os detalhes do pagamento.');
+                }
+                const data: PixDetails = await res.json();
+                setPixDetails(data);
+            } catch (e: any) {
+                setError(e.message || 'Ocorreu um erro.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchDetails();
+    }, [params.transactionId]);
+
+    useEffect(() => {
+        if (pixDetails?.status !== 'pending') {
+            return;
         }
-        const data = await res.json();
-        return data;
-    } catch (error) {
-        console.error("Failed to fetch PIX details:", error);
-        return null;
-    }
-}
 
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/check-pix-status?id=${params.transactionId}`);
+                if (!res.ok) return;
 
-export default async function PublicPaymentPage({ params }: { params: { transactionId: string } }) {
-    const pixDetails = await getPixDetails(params.transactionId);
+                const data = await res.json();
+                if (data.status === 'paid' || data.status === 'expired' || data.status === 'error') {
+                    setPixDetails(prev => prev ? { ...prev, status: data.status } : null);
+                    clearInterval(interval);
+                }
+            } catch (e) {
+                console.error('Polling for PIX status failed:', e);
+            }
+        }, 5000); // Poll every 5 seconds
 
-    if (!pixDetails) {
-        return notFound();
-    }
-    
-    const valueInReais = (pixDetails.value / 100).toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-    });
+        return () => clearInterval(interval);
+
+    }, [pixDetails, params.transactionId]);
+
 
     const renderContent = () => {
+        if (isLoading) {
+            return (
+                <div className="flex flex-col items-center justify-center text-center gap-6">
+                    <Skeleton className="w-56 h-56 rounded-lg" />
+                    <div className="w-full px-4 space-y-2">
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-10 w-full" />
+                    </div>
+                </div>
+            );
+        }
+
+        if (error || !pixDetails) {
+             return (
+                <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
+                    <AlertTriangle className="h-20 w-20 text-destructive" />
+                    <h3 className="text-2xl font-bold">Erro ao Carregar</h3>
+                    <p className="text-muted-foreground">{error || 'Os detalhes desta cobrança não puderam ser encontrados.'}</p>
+                </div>
+            );
+        }
+
         if (pixDetails.status === 'paid') {
             return (
                 <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
@@ -66,6 +110,10 @@ export default async function PublicPaymentPage({ params }: { params: { transact
 
         return (
             <div className="flex flex-col items-center justify-center text-center gap-6">
+                 <div className="flex flex-col items-center justify-center text-center">
+                    <Loader2 className="h-6 w-6 text-yellow-500 animate-spin mb-2" />
+                    <p className="text-sm font-medium text-yellow-600">Aguardando pagamento...</p>
+                 </div>
                 <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-2 p-2 shadow-lg">
                     <Image src={pixDetails.qr_code_base64} alt="PIX QR Code" width={200} height={200} data-ai-hint="qr code"/>
                 </div>
@@ -79,6 +127,11 @@ export default async function PublicPaymentPage({ params }: { params: { transact
         )
     }
 
+    const valueInReais = pixDetails?.value ? (pixDetails.value / 100).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }) : <Skeleton className="h-6 w-24 inline-block" />;
+
     return (
         <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
             <Card className="w-full max-w-md shadow-lg">
@@ -89,7 +142,7 @@ export default async function PublicPaymentPage({ params }: { params: { transact
                     <CardTitle className="text-2xl font-bold">Pagamento PIX</CardTitle>
                     <CardDescription>Valor da cobrança: <span className="font-bold text-foreground">{valueInReais}</span></CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-h-[420px] flex items-center justify-center">
                     {renderContent()}
                 </CardContent>
             </Card>
