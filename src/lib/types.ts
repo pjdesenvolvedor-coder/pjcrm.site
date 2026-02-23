@@ -157,3 +157,10 @@ export type Estoque = {
   senha: string;
   status: 'Disponível' | 'Em Uso';
 };
+
+export type SystemAlert = {
+  id: string;
+  message: string;
+  isActive: boolean;
+  updatedAt: Timestamp;
+};

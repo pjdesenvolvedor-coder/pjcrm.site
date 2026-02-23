@@ -652,6 +652,31 @@
         "senha",
         "status"
       ]
+    },
+    "SystemAlert": {
+      "title": "SystemAlert",
+      "type": "object",
+      "description": "Represents a system-wide alert message for all users.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the alert instance. Changes when the alert message is updated."
+        },
+        "message": {
+          "type": "string",
+          "description": "The content of the alert message."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether the alert is currently active and should be displayed."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of when the alert was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "message", "isActive", "updatedAt"]
     }
   },
   "auth": {
@@ -926,6 +951,22 @@
             {
               "name": "estoqueId",
               "description": "The unique identifier for the stock item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/system_alerts/{alertDocId}",
+        "definition": {
+          "entityName": "SystemAlert",
+          "schema": {
+            "$ref": "#/backend/entities/SystemAlert"
+          },
+          "description": "Stores the current system-wide alert. Should be treated as a singleton document (e.g., with a doc ID of 'current').",
+          "params": [
+            {
+              "name": "alertDocId",
+              "description": "The unique identifier for the alert document (e.g., 'current')."
             }
           ]
         }

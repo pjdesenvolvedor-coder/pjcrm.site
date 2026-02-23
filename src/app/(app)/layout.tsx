@@ -23,6 +23,7 @@ import {
   LifeBuoy,
   Construction,
   Warehouse,
+  AlertTriangle,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -73,6 +74,7 @@ import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
 import { DueDateMessageHandler } from '@/components/due-date-message-handler';
 import { SubscriptionTimer } from '@/components/SubscriptionTimer';
+import { SystemAlert } from '@/components/SystemAlert';
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -542,6 +544,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
       {userProfile?.status === 'blocked' && <BlockedOverlay />}
       {showExpiredOverlay && <ExpirationOverlay />}
+      <SystemAlert />
       <Sidebar
         variant="sidebar"
         collapsible="icon"
@@ -753,6 +756,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}>
                                         <Link href="/settings/tokens"><Package />Estoque de Tokens</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                              {userProfile?.role === 'Admin' && (
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}>
+                                        <Link href="/settings/alerts"><AlertTriangle />Alertas</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               )}
