@@ -17,6 +17,7 @@ interface PixDetails {
 }
 
 export default function PublicPaymentPage({ params }: { params: { transactionId: string } }) {
+    const { transactionId } = params;
     const [pixDetails, setPixDetails] = useState<PixDetails | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export default function PublicPaymentPage({ params }: { params: { transactionId:
     useEffect(() => {
         const fetchDetails = async () => {
             try {
-                const res = await fetch(`/api/get-pix-details?id=${params.transactionId}`);
+                const res = await fetch(`/api/get-pix-details?id=${transactionId}`);
                 if (!res.ok) {
                     throw new Error('Não foi possível carregar os detalhes do pagamento.');
                 }
@@ -38,7 +39,7 @@ export default function PublicPaymentPage({ params }: { params: { transactionId:
         };
 
         fetchDetails();
-    }, [params.transactionId]);
+    }, [transactionId]);
 
     useEffect(() => {
         if (pixDetails?.status !== 'pending') {
@@ -47,7 +48,7 @@ export default function PublicPaymentPage({ params }: { params: { transactionId:
 
         const interval = setInterval(async () => {
             try {
-                const res = await fetch(`/api/check-pix-status?id=${params.transactionId}`);
+                const res = await fetch(`/api/check-pix-status?id=${transactionId}`);
                 if (!res.ok) return;
 
                 const data = await res.json();
@@ -62,7 +63,7 @@ export default function PublicPaymentPage({ params }: { params: { transactionId:
 
         return () => clearInterval(interval);
 
-    }, [pixDetails, params.transactionId]);
+    }, [pixDetails, transactionId]);
 
 
     const renderContent = () => {
