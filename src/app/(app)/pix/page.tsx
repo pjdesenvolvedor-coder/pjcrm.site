@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, RefreshCw, CreditCard, CheckCircle, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { Copy, RefreshCw, CreditCard, CheckCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -17,16 +17,9 @@ export default function GeneratePixPage() {
 
   const [amount, setAmount] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [host, setHost] = useState('');
 
   const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-        setHost(window.location.origin);
-    }
-  }, []);
 
   const handleGeneratePix = async () => {
     const valueNum = parseFloat(amount.replace(',', '.'));
@@ -88,12 +81,6 @@ export default function GeneratePixPage() {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: 'Copiado!' });
-  };
-
-  const handleCopyLink = (transactionId: string) => {
-    const link = `${host}/pay/${transactionId}`;
-    navigator.clipboard.writeText(link);
-    toast({ title: 'Link de Pagamento Copiado!' });
   };
 
   return (
@@ -161,12 +148,6 @@ export default function GeneratePixPage() {
                                             <Copy className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                </div>
-                                <div>
-                                    <Button variant="outline" className="w-full" onClick={() => handleCopyLink(paymentInfo.id)}>
-                                        <LinkIcon className="mr-2 h-4 w-4" />
-                                        Compartilhar Link de Pagamento
-                                    </Button>
                                 </div>
                             </div>
                         </div>
