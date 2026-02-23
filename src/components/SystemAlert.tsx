@@ -27,22 +27,21 @@ export function SystemAlert() {
   const { data: alertData, isLoading } = useDoc<SystemAlertType>(alertDocRef);
 
   useEffect(() => {
-    if (isLoading || !alertData || !alertData.isActive) {
-      setIsOpen(false);
-      return;
+    if (isLoading) {
+      return; // Wait until loading is complete
     }
 
-    const dismissedAlertId = localStorage.getItem('dismissedAlertId');
-
-    if (alertData.instanceId !== dismissedAlertId) {
-      setIsOpen(true);
+    if (alertData && alertData.isActive) {
+      const dismissedAlertId = localStorage.getItem('dismissedAlertId');
+      if (alertData.instanceId !== dismissedAlertId) {
+        setIsOpen(true);
+      } else {
+        setIsOpen(false); // Ensure it's closed if ID matches
+      }
+    } else {
+      setIsOpen(false); // Ensure it's closed if alert is inactive or doesn't exist
     }
-    
   }, [alertData, isLoading]);
-
-  const handleClose = () => {
-    setIsOpen(false);
-  };
 
   const handleDismissPermanently = () => {
     if (alertData) {
@@ -51,8 +50,8 @@ export function SystemAlert() {
     setIsOpen(false);
   };
 
-  if (!isOpen || !alertData) {
-    return null;
+  if (isLoading) {
+    return null; // Don't render anything while loading to prevent flashes
   }
 
   return (
@@ -63,15 +62,17 @@ export function SystemAlert() {
             <AlertTriangle className="h-6 w-6 text-yellow-500" />
             Aviso Importante
           </AlertDialogTitle>
-          <AlertDialogDescription className="pt-4 text-base text-foreground whitespace-pre-wrap">
-            {alertData.message}
-          </AlertDialogDescription>
+          {alertData?.message && (
+            <AlertDialogDescription className="pt-4 text-base text-foreground whitespace-pre-wrap">
+              {alertData.message}
+            </AlertDialogDescription>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <Button variant="outline" onClick={handleDismissPermanently}>
             Não exibir novamente
           </Button>
-          <Button onClick={handleClose}>Fechar</Button>
+          <Button onClick={() => setIsOpen(false)}>Fechar</Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
