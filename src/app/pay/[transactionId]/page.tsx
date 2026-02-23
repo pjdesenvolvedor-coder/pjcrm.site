@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import Image from 'next/image';
@@ -16,13 +17,16 @@ interface PixDetails {
     status: 'pending' | 'paid' | 'expired' | 'error';
 }
 
-export default function PublicPaymentPage({ params }: { params: { transactionId: string } }) {
-    const { transactionId } = params;
+export default function PublicPaymentPage() {
+    const params = useParams();
+    const transactionId = Array.isArray(params.transactionId) ? params.transactionId[0] : params.transactionId;
     const [pixDetails, setPixDetails] = useState<PixDetails | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!transactionId) return;
+
         const fetchDetails = async () => {
             try {
                 const res = await fetch(`/api/get-pix-details?id=${transactionId}`);
@@ -42,7 +46,7 @@ export default function PublicPaymentPage({ params }: { params: { transactionId:
     }, [transactionId]);
 
     useEffect(() => {
-        if (pixDetails?.status !== 'pending') {
+        if (pixDetails?.status !== 'pending' || !transactionId) {
             return;
         }
 
