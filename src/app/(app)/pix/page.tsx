@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Copy, RefreshCw, CreditCard, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Copy, RefreshCw, CreditCard, CheckCircle, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 
@@ -23,6 +23,7 @@ export default function GeneratePixPage() {
   const [userToken, setUserToken] = useState('');
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [host, setHost] = useState('');
 
   const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
@@ -37,6 +38,9 @@ export default function GeneratePixPage() {
   useEffect(() => {
     if (settings?.pushinpayToken) {
       setUserToken(settings.pushinpayToken);
+    }
+    if (typeof window !== 'undefined') {
+        setHost(window.location.origin);
     }
   }, [settings]);
 
@@ -119,6 +123,12 @@ export default function GeneratePixPage() {
     toast({ title: 'Copiado!' });
   };
 
+  const handleCopyLink = (transactionId: string) => {
+    const link = `${host}/pay/${transactionId}`;
+    navigator.clipboard.writeText(link);
+    toast({ title: 'Link de Pagamento Copiado!' });
+  };
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
@@ -189,12 +199,20 @@ export default function GeneratePixPage() {
                             <div className="w-48 h-48 bg-white rounded-lg flex items-center justify-center my-2 p-2 shadow-lg">
                                 <Image src={paymentInfo.qr_code_base64} alt="PIX QR Code" width={180} height={180} data-ai-hint="qr code"/>
                             </div>
-                            <div className="w-full px-4">
-                                <Label htmlFor="pix-code">PIX Copia e Cola</Label>
-                                <div className="relative">
-                                    <Input id="pix-code" readOnly value={paymentInfo.qr_code} className="pr-10 bg-muted" />
-                                    <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => handleCopy(paymentInfo.qr_code)}>
-                                        <Copy className="h-4 w-4" />
+                            <div className="w-full px-4 space-y-2">
+                                <div>
+                                    <Label htmlFor="pix-code">PIX Copia e Cola</Label>
+                                    <div className="relative">
+                                        <Input id="pix-code" readOnly value={paymentInfo.qr_code} className="pr-10 bg-muted" />
+                                        <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => handleCopy(paymentInfo.qr_code)}>
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <Button variant="outline" className="w-full" onClick={() => handleCopyLink(paymentInfo.id)}>
+                                        <LinkIcon className="mr-2 h-4 w-4" />
+                                        Compartilhar Link de Pagamento
                                     </Button>
                                 </div>
                             </div>
