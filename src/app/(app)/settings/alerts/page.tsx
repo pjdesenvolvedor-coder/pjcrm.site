@@ -11,11 +11,12 @@ import type { SystemAlert } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Sparkles, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { correctText } from '@/ai/flows/correct-text';
 
 const alertSchema = z.object({
   isActive: z.boolean().default(false),
@@ -28,6 +29,7 @@ export default function SystemAlertsPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const { toast } = useToast();
+  const [isCorrecting, setIsCorrecting] = useState(false);
 
   const alertDocRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -53,16 +55,45 @@ export default function SystemAlertsPage() {
     }
   }, [currentAlert, form]);
 
+  const handleCorrectText = async () => {
+    const currentMessage = form.getValues('message');
+    if (!currentMessage.trim()) {
+        toast({
+            variant: 'destructive',
+            title: 'Texto Vazio',
+            description: 'Não há texto para corrigir.',
+        });
+        return;
+    }
+
+    setIsCorrecting(true);
+    try {
+        const result = await correctText({ text: currentMessage });
+        form.setValue('message', result.correctedText, { shouldValidate: true });
+        toast({
+            title: 'Texto Corrigido!',
+            description: 'A sugestão de correção foi aplicada.',
+        });
+    } catch (error) {
+        console.error('Text correction error:', error);
+        toast({
+            variant: 'destructive',
+            title: 'Erro na Correção',
+            description: 'Não foi possível corrigir o texto no momento.',
+        });
+    } finally {
+        setIsCorrecting(false);
+    }
+  };
+
   const onSubmit = (data: AlertFormData) => {
     if (alertDocRef) {
       const newAlertData = {
         ...data,
-        // By generating a new unique ID every time, we ensure that every user will see the new alert,
-        // because their stored 'dismissedAlertId' in localStorage will no longer match.
         instanceId: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         updatedAt: serverTimestamp(),
       };
-      setDocumentNonBlocking(alertDocRef, newAlertData, { merge: false }); // Overwrite completely
+      setDocumentNonBlocking(alertDocRef, newAlertData, { merge: false });
       toast({
         title: 'Alerta Salvo!',
         description: 'O aviso do sistema foi atualizado com sucesso.',
@@ -130,7 +161,17 @@ export default function SystemAlertsPage() {
                   name="message"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Mensagem do Alerta</FormLabel>
+                      <div className="flex justify-between items-center mb-2">
+                        <FormLabel>Mensagem do Alerta</FormLabel>
+                        <Button type="button" variant="ghost" size="sm" onClick={handleCorrectText} disabled={isCorrecting}>
+                            {isCorrecting ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Sparkles className="h-4 w-4" />
+                            )}
+                            <span className="ml-2">Corrigir texto</span>
+                        </Button>
+                      </div>
                       <FormControl>
                         <Textarea
                           placeholder="Digite o aviso aqui..."
