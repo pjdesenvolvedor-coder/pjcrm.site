@@ -1,67 +1,34 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc } from 'firebase/firestore';
-import { useFirebase, useUser, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import type { Settings } from '@/lib/types';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Copy, RefreshCw, CreditCard, CheckCircle, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function GeneratePixPage() {
-  const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
   const [amount, setAmount] = useState('');
-  const [userToken, setUserToken] = useState('');
-  const [isSavingToken, setIsSavingToken] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [host, setHost] = useState('');
 
   const [paymentInfo, setPaymentInfo] = useState<{ id: string; qr_code: string; qr_code_base64: string } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'error' | null>(null);
 
-  const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
-
-  const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
-
   useEffect(() => {
-    if (settings?.pushinpayToken) {
-      setUserToken(settings.pushinpayToken);
-    }
     if (typeof window !== 'undefined') {
         setHost(window.location.origin);
     }
-  }, [settings]);
-
-  const handleSaveToken = () => {
-    if (!userToken.trim()) {
-      toast({ variant: 'destructive', title: 'Token inválido.' });
-      return;
-    }
-    if (settingsDocRef) {
-      setIsSavingToken(true);
-      setDocumentNonBlocking(settingsDocRef, { pushinpayToken: userToken.trim() }, { merge: true });
-      toast({ title: 'Token Salvo!', description: 'Seu token PushInPay foi atualizado.' });
-      setIsSavingToken(false);
-    }
-  };
+  }, []);
 
   const handleGeneratePix = async () => {
-    if (!userToken) {
-      toast({ variant: 'destructive', title: 'Token não configurado', description: 'Por favor, insira e salve seu token PushInPay.' });
-      return;
-    }
     const valueNum = parseFloat(amount.replace(',', '.'));
     if (isNaN(valueNum) || valueNum <= 0) {
       toast({ variant: 'destructive', title: 'Valor inválido', description: 'Por favor, insira um valor numérico maior que zero.' });
@@ -77,11 +44,11 @@ export default function GeneratePixPage() {
       const response = await fetch('/api/generate-pix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: valueInCents, token: userToken }),
+        body: JSON.stringify({ value: valueInCents }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Falha ao gerar o PIX.' }));
+        const errorData = await response.json().catch(() => ({ error: 'O token de pagamento não foi configurado no servidor. Contate o administrador.' }));
         throw new Error(errorData.error);
       }
 
@@ -98,11 +65,11 @@ export default function GeneratePixPage() {
   };
 
   useEffect(() => {
-    if (paymentStatus !== 'pending' || !paymentInfo?.id || !userToken) return;
+    if (paymentStatus !== 'pending' || !paymentInfo?.id) return;
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/check-pix-status?id=${paymentInfo.id}&token=${userToken}`);
+        const res = await fetch(`/api/check-pix-status?id=${paymentInfo.id}`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.status === 'paid') {
@@ -116,7 +83,7 @@ export default function GeneratePixPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [paymentStatus, paymentInfo?.id, userToken]);
+  }, [paymentStatus, paymentInfo?.id]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -136,27 +103,13 @@ export default function GeneratePixPage() {
         description="Crie cobranças PIX avulsas aqui."
       />
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Configuração do Token</CardTitle>
-            <CardDescription>Insira seu token de API do PushInPay para gerar cobranças.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 max-w-lg">
-              <Input
-                placeholder="Cole seu token aqui..."
-                value={userToken}
-                onChange={(e) => setUserToken(e.target.value)}
-                disabled={isLoadingSettings || isSavingToken}
-                type="password"
-              />
-              <Button onClick={handleSaveToken} disabled={isLoadingSettings || isSavingToken}>
-                {isSavingToken && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <Alert>
+          <CreditCard className="h-4 w-4" />
+          <AlertTitle>Configuração Centralizada</AlertTitle>
+          <AlertDescription>
+            O token da API de pagamento é configurado pelo administrador do sistema para garantir o funcionamento dos links públicos de pagamento.
+          </AlertDescription>
+        </Alert>
 
         <div className="grid md:grid-cols-2 gap-6 items-start">
             <Card>
@@ -176,7 +129,7 @@ export default function GeneratePixPage() {
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={handleGeneratePix} disabled={isGenerating || !userToken}>
+                    <Button onClick={handleGeneratePix} disabled={isGenerating}>
                         {isGenerating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
                         Gerar PIX
                     </Button>
@@ -238,4 +191,3 @@ export default function GeneratePixPage() {
     </div>
   );
 }
-    

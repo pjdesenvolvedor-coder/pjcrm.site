@@ -108,7 +108,6 @@ export type Message = {
 
 export type Settings = {
   webhookToken?: string;
-  pushinpayToken?: string;
   presetHour?: string;
   presetMinute?: string;
   usePresetTime?: boolean;

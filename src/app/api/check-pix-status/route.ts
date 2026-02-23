@@ -3,9 +3,8 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
-  const requestToken = searchParams.get('token');
 
-  const token = requestToken || process.env.PUSHINPAY_TOKEN;
+  const token = process.env.PUSHINPAY_TOKEN;
 
   if (!id) {
     return NextResponse.json({ error: 'ID da transação é obrigatório' }, { status: 400 });
