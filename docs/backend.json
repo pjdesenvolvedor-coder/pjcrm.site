@@ -611,6 +611,47 @@
         }
       },
       "required": ["id", "userId", "groupName", "participantCount", "adminPhones", "memberPhones"]
+    },
+    "Estoque": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Estoque",
+      "type": "object",
+      "description": "Represents an item in the user's stock.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the stock item."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns this stock item."
+        },
+        "nome": {
+          "type": "string",
+          "description": "Name of the account/item in stock."
+        },
+        "login": {
+          "type": "string",
+          "description": "Login/username for the account."
+        },
+        "senha": {
+          "type": "string",
+          "description": "Password for the account."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Disponível", "Em Uso"],
+          "description": "Status of the stock item."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "nome",
+        "login",
+        "senha",
+        "status"
+      ]
     }
   },
   "auth": {
@@ -865,6 +906,26 @@
             {
               "name": "groupId",
               "description": "The unique identifier for the extracted group record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/estoque/{estoqueId}",
+        "definition": {
+          "entityName": "Estoque",
+          "schema": {
+            "$ref": "#/backend/entities/Estoque"
+          },
+          "description": "Stores stock items for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "estoqueId",
+              "description": "The unique identifier for the stock item."
             }
           ]
         }

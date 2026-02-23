@@ -201,14 +201,14 @@ export default function SubscriptionPage() {
   
       const allPermissionsFalse: UserPermissions = {
         dashboard: false, customers: false, inbox: false, automations: false,
-        groups: false, shot: false, zapconnect: false, settings: false, users: false,
+        groups: false, shot: false, zapconnect: false, settings: false, users: false, estoque: false,
       };
   
       let newPermissions: UserPermissions;
       if (plan === 'basic') {
         newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, shot: true, zapconnect: true };
       } else { // pro
-        newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, users: false };
+        newPermissions = { dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, users: false, estoque: true };
       }
   
       const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), isTrial ? 3 : 30));

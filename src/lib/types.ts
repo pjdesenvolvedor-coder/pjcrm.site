@@ -10,6 +10,7 @@ export type UserPermissions = {
   zapconnect: boolean;
   settings: boolean;
   users: boolean;
+  estoque: boolean;
 };
 
 export type UserProfile = {
@@ -146,4 +147,13 @@ export type ExtractedGroup = {
   participantCount: string;
   adminPhones: string[];
   memberPhones: string[];
+};
+
+export type Estoque = {
+  id: string;
+  userId: string;
+  nome: string;
+  login: string;
+  senha: string;
+  status: 'Disponível' | 'Em Uso';
 };

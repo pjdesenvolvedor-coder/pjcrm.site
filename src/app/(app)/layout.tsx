@@ -22,6 +22,7 @@ import {
   Package,
   LifeBuoy,
   Construction,
+  Warehouse,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -199,7 +200,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         zapconnect: false,
         settings: false,
         users: false,
-        liveChat: false,
+        estoque: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -444,7 +445,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Badge>
           <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
           <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
-            <img src={qrCode} alt="QR Code do WhatsApp" width={220} height={220} data-ai-hint="qr code"/>
+            <Image src={qrCode} alt="QR Code do WhatsApp" width={220} height={220} data-ai-hint="qr code"/>
           </div>
           <p className="text-lg font-semibold text-muted-foreground animate-pulse">
             Aguardando conexão...
@@ -693,6 +694,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
                     <Link href="/shot"><Send /><span>Disparo</span></Link>
                   </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              
+              {permissions.estoque && (
+                 <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname.startsWith('/estoque')} tooltip={{ children: 'Estoque' }}>
+                        <Link href="/estoque"><Warehouse /><span>Estoque</span></Link>
+                    </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
 

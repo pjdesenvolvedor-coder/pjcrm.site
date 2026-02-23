@@ -50,6 +50,7 @@ const permissionsSchema = z.object({
   zapconnect: z.boolean().default(false),
   settings: z.boolean().default(false),
   users: z.boolean().default(false),
+  estoque: z.boolean().default(false),
 });
 
 const userFormSchema = z.object({
@@ -67,6 +68,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'automations', label: 'Automações' },
     { key: 'groups', label: 'Grupos' },
     { key: 'shot', label: 'Disparo em Massa' },
+    { key: 'estoque', label: 'Estoque' },
     { key: 'zapconnect', label: 'ZapConexão' },
     { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
@@ -150,6 +152,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 zapconnect: user.permissions?.zapconnect ?? false,
                 settings: user.permissions?.settings ?? false,
                 users: user.permissions?.users ?? false,
+                estoque: user.permissions?.estoque ?? false,
             },
             subscriptionEndDate: user.subscriptionEndDate ? format(user.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
         },
