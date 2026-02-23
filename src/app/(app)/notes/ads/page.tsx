@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { PlusCircle, DollarSign, LineChart, MessageSquare, Trash2, Edit, TrendingUp, Wallet } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { PlusCircle, DollarSign, MessageSquare, Trash2, Edit, TrendingUp, Wallet } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,7 +37,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { format, startOfMonth, endOfMonth, parse } from 'date-fns';
+import { format, parse, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
@@ -46,6 +46,7 @@ const campaignSchema = z.object({
   amountSpent: z.coerce.number().min(0, 'O valor gasto deve ser positivo.'),
   totalReturn: z.coerce.number().min(0, 'O retorno deve ser positivo.'),
   conversationsStarted: z.coerce.number().int().min(0, 'O número de conversas deve ser positivo.'),
+  bm: z.string().optional(),
 });
 
 function CampaignForm({ onFinished, initialData }: { onFinished: () => void, initialData?: AdCampaign }) {
@@ -60,11 +61,13 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
             amountSpent: initialData.amountSpent,
             totalReturn: initialData.totalReturn,
             conversationsStarted: initialData.conversationsStarted,
+            bm: initialData.bm || '',
         } : {
             campaignDate: format(new Date(), 'yyyy-MM-dd'),
             amountSpent: 0,
             totalReturn: 0,
             conversationsStarted: 0,
+            bm: '',
         }
     });
 
@@ -73,12 +76,13 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
         
         const campaignDate = parse(values.campaignDate, 'yyyy-MM-dd', new Date());
 
-        const data = {
+        const data: Partial<AdCampaign> = {
             userId: user.uid,
             campaignDate: Timestamp.fromDate(campaignDate),
             amountSpent: values.amountSpent,
             totalReturn: values.totalReturn,
             conversationsStarted: values.conversationsStarted,
+            bm: values.bm || '',
         };
 
         if (isEditing && initialData?.id) {
@@ -101,6 +105,7 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <FormField control={form.control} name="campaignDate" render={({ field }) => ( <FormItem><FormLabel>Data</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                    <FormField control={form.control} name="bm" render={({ field }) => ( <FormItem><FormLabel>Nome da BM</FormLabel><FormControl><Input placeholder="Ex: BM Principal" {...field} /></FormControl><FormMessage /></FormItem> )} />
                     <FormField control={form.control} name="amountSpent" render={({ field }) => ( <FormItem><FormLabel>Valor Gasto (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
                     <FormField control={form.control} name="totalReturn" render={({ field }) => ( <FormItem><FormLabel>Retorno (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
                     <FormField control={form.control} name="conversationsStarted" render={({ field }) => ( <FormItem><FormLabel>Conversas Iniciadas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
@@ -118,6 +123,8 @@ export default function AdsPage() {
   const { firestore, user } = useFirebase();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<AdCampaign | undefined>(undefined);
+  const [period, setPeriod] = useState('this-month');
+  const [selectedBm, setSelectedBm] = useState('all');
 
   const campaignsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -126,17 +133,46 @@ export default function AdsPage() {
 
   const { data: campaigns, isLoading } = useCollection<AdCampaign>(campaignsQuery);
 
-  const monthlyData = useMemo(() => {
-    const now = new Date();
-    const start = startOfMonth(now);
-    const end = endOfMonth(now);
+  const businessManagers = useMemo(() => {
+    if (!campaigns) return [];
+    const bms = new Set(campaigns.map(c => c.bm).filter(Boolean) as string[]);
+    return ['all', ...Array.from(bms)];
+  }, [campaigns]);
 
-    const filteredCampaigns = campaigns?.filter(c => {
+  const filteredData = useMemo(() => {
+    const now = new Date();
+    let start, end;
+
+    switch (period) {
+        case 'today':
+            start = startOfDay(now);
+            end = endOfDay(now);
+            break;
+        case 'this-week':
+            start = startOfWeek(now);
+            end = endOfWeek(now);
+            break;
+        case 'this-year':
+            start = startOfYear(now);
+            end = endOfYear(now);
+            break;
+        case 'this-month':
+        default:
+            start = startOfMonth(now);
+            end = endOfMonth(now);
+            break;
+    }
+
+    const periodCampaigns = campaigns?.filter(c => {
         const campaignDate = c.campaignDate.toDate();
         return campaignDate >= start && campaignDate <= end;
     }) || [];
+
+    const bmCampaigns = selectedBm === 'all'
+        ? periodCampaigns
+        : periodCampaigns.filter(c => c.bm === selectedBm);
     
-    const stats = filteredCampaigns.reduce((acc, campaign) => {
+    const stats = bmCampaigns.reduce((acc, campaign) => {
         acc.gastoTotal += campaign.amountSpent;
         acc.retornoTotal += campaign.totalReturn;
         acc.conversasIniciadas += campaign.conversationsStarted;
@@ -146,8 +182,8 @@ export default function AdsPage() {
     const lucroLiquido = stats.retornoTotal - stats.gastoTotal;
     const custoPorMensagem = stats.conversasIniciadas > 0 ? stats.gastoTotal / stats.conversasIniciadas : 0;
 
-    return { ...stats, lucroLiquido, custoPorMensagem, campaigns: filteredCampaigns };
-  }, [campaigns]);
+    return { ...stats, lucroLiquido, custoPorMensagem, campaigns: bmCampaigns };
+  }, [campaigns, period, selectedBm]);
   
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -169,11 +205,11 @@ export default function AdsPage() {
   }
 
   const statCards = [
-    { title: 'Gasto Total', value: formatCurrency(monthlyData.gastoTotal), icon: DollarSign, color: 'text-red-500' },
-    { title: 'Retorno Total', value: formatCurrency(monthlyData.retornoTotal), icon: TrendingUp, color: 'text-yellow-500' },
-    { title: 'Lucro Líquido', value: formatCurrency(monthlyData.lucroLiquido), icon: Wallet, color: 'text-green-500' },
-    { title: 'Conversas Iniciadas', value: monthlyData.conversasIniciadas, icon: MessageSquare, color: 'text-blue-500' },
-    { title: 'Custo por Mensagem', value: formatCurrency(monthlyData.custoPorMensagem), icon: DollarSign, color: 'text-purple-500' },
+    { title: 'Gasto Total', value: formatCurrency(filteredData.gastoTotal), icon: DollarSign, color: 'text-red-500' },
+    { title: 'Retorno Total', value: formatCurrency(filteredData.retornoTotal), icon: TrendingUp, color: 'text-yellow-500' },
+    { title: 'Lucro Líquido', value: formatCurrency(filteredData.lucroLiquido), icon: Wallet, color: 'text-green-500' },
+    { title: 'Conversas Iniciadas', value: filteredData.conversasIniciadas, icon: MessageSquare, color: 'text-blue-500' },
+    { title: 'Custo por Mensagem', value: formatCurrency(filteredData.custoPorMensagem), icon: DollarSign, color: 'text-purple-500' },
   ];
 
   return (
@@ -182,14 +218,29 @@ export default function AdsPage() {
         title="Relatório de Anúncios"
         description="Monitore seus gastos e retornos."
       >
-        <Select defaultValue="this-month">
-            <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Selecione o período" />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value="this-month">Este Mês</SelectItem>
-            </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+            <Select value={selectedBm} onValueChange={setSelectedBm}>
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Selecione a BM" />
+                </SelectTrigger>
+                <SelectContent>
+                    {businessManagers.map(bm => (
+                        <SelectItem key={bm} value={bm}>{bm === 'all' ? 'Todas as BMs' : bm}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <Select value={period} onValueChange={setPeriod}>
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Selecione o período" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="today">Hoje</SelectItem>
+                    <SelectItem value="this-week">Esta Semana</SelectItem>
+                    <SelectItem value="this-month">Este Mês</SelectItem>
+                    <SelectItem value="this-year">Este Ano</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -224,6 +275,7 @@ export default function AdsPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Data</TableHead>
+                            <TableHead>BM</TableHead>
                             <TableHead>Valor Gasto</TableHead>
                             <TableHead>Retorno</TableHead>
                             <TableHead>Conversas</TableHead>
@@ -233,11 +285,12 @@ export default function AdsPage() {
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
-                            <TableRow><TableCell colSpan={6} className="text-center">Carregando...</TableCell></TableRow>
-                        ) : monthlyData.campaigns.length > 0 ? (
-                           monthlyData.campaigns.map((c) => (
+                            <TableRow><TableCell colSpan={7} className="text-center">Carregando...</TableCell></TableRow>
+                        ) : filteredData.campaigns.length > 0 ? (
+                           filteredData.campaigns.map((c) => (
                             <TableRow key={c.id}>
                                 <TableCell>{format(c.campaignDate.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                <TableCell>{c.bm || '-'}</TableCell>
                                 <TableCell>{formatCurrency(c.amountSpent)}</TableCell>
                                 <TableCell>{formatCurrency(c.totalReturn)}</TableCell>
                                 <TableCell>{c.conversationsStarted}</TableCell>
@@ -262,7 +315,7 @@ export default function AdsPage() {
                            ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center">Nenhum registro de anúncio no período.</TableCell>
+                                <TableCell colSpan={7} className="text-center">Nenhum registro de anúncio no período.</TableCell>
                             </TableRow>
                         )}
                     </TableBody>

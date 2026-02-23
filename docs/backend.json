@@ -717,6 +717,7 @@
       "properties": {
         "id": { "type": "string" },
         "userId": { "type": "string" },
+        "bm": { "type": "string", "description": "The name of the Business Manager for this campaign." },
         "campaignDate": { "type": "string", "format": "date-time" },
         "amountSpent": { "type": "number" },
         "totalReturn": { "type": "number" },

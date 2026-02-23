@@ -177,6 +177,7 @@ export type SystemAlert = {
 export type AdCampaign = {
   id: string;
   userId: string;
+  bm?: string;
   campaignDate: Timestamp;
   amountSpent: number;
   totalReturn: number;
