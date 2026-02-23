@@ -159,7 +159,7 @@ export type Estoque = {
 };
 
 export type SystemAlert = {
-  id: string;
+  instanceId: string;
   message: string;
   isActive: boolean;
   updatedAt: Timestamp;

@@ -34,7 +34,7 @@ export function SystemAlert() {
 
     const dismissedAlertId = localStorage.getItem('dismissedAlertId');
 
-    if (alertData.id !== dismissedAlertId) {
+    if (alertData.instanceId !== dismissedAlertId) {
       setIsOpen(true);
     }
     
@@ -46,7 +46,7 @@ export function SystemAlert() {
 
   const handleDismissPermanently = () => {
     if (alertData) {
-      localStorage.setItem('dismissedAlertId', alertData.id);
+      localStorage.setItem('dismissedAlertId', alertData.instanceId);
     }
     setIsOpen(false);
   };
