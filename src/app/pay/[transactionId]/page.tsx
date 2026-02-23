@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { CopyButton } from './copy-button';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, CreditCard } from 'lucide-react';
 
 interface PixDetails {
     qr_code: string;
@@ -84,14 +84,7 @@ export default async function PublicPaymentPage({ params }: { params: { transact
             <Card className="w-full max-w-md shadow-lg">
                 <CardHeader className="text-center">
                      <div className="flex items-center justify-center gap-2 mb-4">
-                        <Image
-                            src="https://i.imgur.com/sgoiuiz.png"
-                            alt="EMPREENDIMENTOS Logo"
-                            width={40}
-                            height={40}
-                            className="h-10 w-10"
-                            data-ai-hint="logo"
-                        />
+                        <CreditCard className="h-10 w-10 text-muted-foreground" />
                     </div>
                     <CardTitle className="text-2xl font-bold">Pagamento PIX</CardTitle>
                     <CardDescription>Valor da cobrança: <span className="font-bold text-foreground">{valueInReais}</span></CardDescription>
