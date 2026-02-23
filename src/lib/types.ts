@@ -183,3 +183,9 @@ export type AdCampaign = {
   totalReturn: number;
   conversationsStarted: number;
 };
+
+export type BusinessManager = {
+  id: string;
+  userId: string;
+  name: string;
+};

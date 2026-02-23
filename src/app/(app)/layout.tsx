@@ -25,6 +25,7 @@ import {
   Warehouse,
   AlertTriangle,
   StickyNote,
+  Briefcase,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -796,6 +797,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     <SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}>
                                         <Link href="/settings/alerts"><AlertTriangle />Alertas</Link>
                                     </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                              {permissions.settings && (
+                                <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/bms')}>
+                                    <Link href="/settings/bms"><Briefcase />BMs</Link>
+                                  </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               )}
                               {permissions.settings && (

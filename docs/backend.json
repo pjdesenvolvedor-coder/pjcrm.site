@@ -1,5 +1,30 @@
 {
   "entities": {
+    "BusinessManager": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BusinessManager",
+      "type": "object",
+      "description": "Represents a Business Manager (BM) that can be associated with ad campaigns.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Business Manager."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns this BM."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the Business Manager."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name"
+      ]
+    },
     "Note": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Note",
@@ -1047,6 +1072,26 @@
           "params": [
             { "name": "userId", "description": "The unique identifier for the user." },
             { "name": "campaignId", "description": "The unique identifier for the campaign record." }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/business_managers/{bmId}",
+        "definition": {
+          "entityName": "BusinessManager",
+          "schema": {
+            "$ref": "#/backend/entities/BusinessManager"
+          },
+          "description": "Stores Business Managers created by each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "bmId",
+              "description": "The unique identifier for the Business Manager."
+            }
           ]
         }
       }

@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select';
 import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, doc, Timestamp } from 'firebase/firestore';
-import type { AdCampaign } from '@/lib/types';
+import type { AdCampaign, BusinessManager } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -53,6 +53,12 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const isEditing = !!initialData;
+    
+    const bmsQuery = useMemoFirebase(() => {
+      if (!user) return null;
+      return query(collection(firestore, 'users', user.uid, 'business_managers'), orderBy('name'));
+    }, [firestore, user]);
+    const { data: bms } = useCollection<BusinessManager>(bmsQuery);
 
     const form = useForm<z.infer<typeof campaignSchema>>({
         resolver: zodResolver(campaignSchema),
@@ -105,7 +111,30 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <FormField control={form.control} name="campaignDate" render={({ field }) => ( <FormItem><FormLabel>Data</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                    <FormField control={form.control} name="bm" render={({ field }) => ( <FormItem><FormLabel>Nome da BM</FormLabel><FormControl><Input placeholder="Ex: BM Principal" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                    <FormField
+                      control={form.control}
+                      name="bm"
+                      render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Nome da BM</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                      <SelectTrigger>
+                                          <SelectValue placeholder="Selecione uma BM" />
+                                      </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                      {bms?.map((bm) => (
+                                          <SelectItem key={bm.id} value={bm.name}>
+                                              {bm.name}
+                                          </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                              </Select>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                    />
                     <FormField control={form.control} name="amountSpent" render={({ field }) => ( <FormItem><FormLabel>Valor Gasto (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
                     <FormField control={form.control} name="totalReturn" render={({ field }) => ( <FormItem><FormLabel>Retorno (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
                     <FormField control={form.control} name="conversationsStarted" render={({ field }) => ( <FormItem><FormLabel>Conversas Iniciadas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
@@ -132,12 +161,18 @@ export default function AdsPage() {
   }, [firestore, user]);
 
   const { data: campaigns, isLoading } = useCollection<AdCampaign>(campaignsQuery);
+  
+  const bmsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'business_managers'), orderBy('name'));
+  }, [firestore, user]);
+  const { data: bms } = useCollection<BusinessManager>(bmsQuery);
 
   const businessManagers = useMemo(() => {
-    if (!campaigns) return [];
-    const bms = new Set(campaigns.map(c => c.bm).filter(Boolean) as string[]);
-    return ['all', ...Array.from(bms)];
-  }, [campaigns]);
+    if (!bms) return [];
+    const bmNames = bms.map(bm => bm.name);
+    return ['all', ...bmNames];
+  }, [bms]);
 
   const filteredData = useMemo(() => {
     const now = new Date();
