@@ -57,7 +57,9 @@ export default function SystemAlertsPage() {
     if (alertDocRef) {
       const newAlertData = {
         ...data,
-        id: Date.now().toString(), // Generate a new ID to force re-display
+        // By generating a new unique ID every time, we ensure that every user will see the new alert,
+        // because their stored 'dismissedAlertId' in localStorage will no longer match.
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         updatedAt: serverTimestamp(),
       };
       setDocumentNonBlocking(alertDocRef, newAlertData, { merge: false }); // Overwrite completely
