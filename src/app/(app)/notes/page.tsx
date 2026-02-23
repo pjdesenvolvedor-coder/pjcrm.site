@@ -8,7 +8,7 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
-  closestCorners
+  rectIntersection,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -219,35 +219,36 @@ export default function NotesPage() {
     }
 
     // Moving to a different column
-    if (activeContainer) {
-        const overColumnId = overContainer || (overId as keyof Columns);
-        if (overColumnId in columns && activeContainer !== overColumnId) {
-             setColumns((prev) => {
-                const activeItems = [...prev[activeContainer].notes];
-                const overItems = [...prev[overColumnId].notes];
-                const activeIndex = activeItems.findIndex((n) => n.id === activeId);
-                let overIndex = overItems.findIndex((n) => n.id === overId);
+    if (activeContainer && overContainer && activeContainer !== overContainer) {
+        setColumns((prev) => {
+            const activeItems = prev[activeContainer].notes;
+            const overItems = prev[overContainer].notes;
+            const activeIndex = activeItems.findIndex((item) => item.id === activeId);
+            const overIndex = overItems.findIndex((item) => item.id === overId);
+            
+            const newIndex = overIndex >= 0 ? overIndex : overItems.length;
 
-                if (overIndex === -1) {
-                    overIndex = overItems.length;
-                }
+            return {
+                ...prev,
+                [activeContainer]: {
+                    ...prev[activeContainer],
+                    notes: activeItems.filter((item) => item.id !== activeId),
+                },
+                [overContainer]: {
+                    ...prev[overContainer],
+                    notes: [
+                        ...overItems.slice(0, newIndex),
+                        activeItems[activeIndex],
+                        ...overItems.slice(newIndex)
+                    ],
+                },
+            };
+        });
 
-                const [movedItem] = activeItems.splice(activeIndex, 1);
-                movedItem.status = overColumnId;
-                overItems.splice(overIndex, 0, movedItem);
-
-                return {
-                    ...prev,
-                    [activeContainer]: { ...prev[activeContainer], notes: activeItems },
-                    [overColumnId]: { ...prev[overColumnId], notes: overItems },
-                };
-             });
-
-             if (user) {
-                const noteDocRef = doc(firestore, 'users', user.uid, 'notes', activeId);
-                setDocumentNonBlocking(noteDocRef, { status: overColumnId }, { merge: true });
-             }
-        }
+         if (user) {
+            const noteDocRef = doc(firestore, 'users', user.uid, 'notes', activeId);
+            setDocumentNonBlocking(noteDocRef, { status: overContainer }, { merge: true });
+         }
     }
   };
   
@@ -284,7 +285,7 @@ export default function NotesPage() {
         </Dialog>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
-        <DndContext sensors={sensors} onDragEnd={onDragEnd} collisionDetection={closestCorners}>
+        <DndContext sensors={sensors} onDragEnd={onDragEnd} collisionDetection={rectIntersection}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             {Object.values(columns).map((column) => (
                 <div key={column.id} className="rounded-lg bg-muted/50 p-4">
@@ -293,7 +294,7 @@ export default function NotesPage() {
                         {column.title} ({column.notes.length})
                     </h2>
                      <SortableContext items={column.notes.map(n => n.id)} strategy={verticalListSortingStrategy}>
-                        <div className="space-y-4 min-h-[100px]">
+                        <div id={column.id} className="space-y-4 min-h-[100px]">
                             {isLoading ? (
                                 <Skeleton className="h-20 w-full" />
                             ) : column.notes.length > 0 ? (
