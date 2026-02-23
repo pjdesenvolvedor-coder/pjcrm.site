@@ -1,24 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  DndContext,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-  rectIntersection,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-
-import { PlusCircle, CheckCircle, ListTodo, Trash2 } from 'lucide-react';
+import { PlusCircle, CheckCircle, ListTodo, Trash2, Check, X } from 'lucide-react';
 import {
   collection,
   query,
@@ -54,60 +37,48 @@ import {
 import type { Note } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-  } from '@/components/ui/alert-dialog';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
-interface Columns {
-  todo: {
-    id: 'todo';
-    title: 'A Fazer';
-    notes: Note[];
-  };
-  done: {
-    id: 'done';
-    title: 'Feitas';
-    notes: Note[];
-  };
+interface NoteCardProps {
+    note: Note;
+    onDelete: (noteId: string) => void;
+    onStatusChange: (noteId: string, newStatus: 'todo' | 'done') => void;
 }
 
-function SortableNote({ note, onDelete }: { note: Note; onDelete: (noteId: string) => void; }) {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({ id: note.id });
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        zIndex: isDragging ? 1 : 0,
-        position: 'relative' as 'relative',
-    };
-    
+function NoteCard({ note, onDelete, onStatusChange }: NoteCardProps) {
     return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            <Card className={`shadow-sm hover:shadow-md transition-shadow ${isDragging ? 'shadow-lg' : ''}`}>
-                <CardContent className="p-4 relative">
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex items-start gap-4">
+                <div className="flex-1">
                     <p className="pr-8">{note.content}</p>
                     <p className="text-xs text-muted-foreground mt-2">
                         {note.createdAt instanceof Timestamp
                             ? format(note.createdAt.toDate(), "dd/MM/yyyy 'às' HH:mm")
                             : 'agora'}
                     </p>
+                </div>
+                <div className="flex flex-col gap-1">
+                     {note.status === 'todo' ? (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-500 hover:bg-green-100 hover:text-green-600" onClick={() => onStatusChange(note.id, 'done')}>
+                            <Check className="h-5 w-5" />
+                        </Button>
+                    ) : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-yellow-500 hover:bg-yellow-100 hover:text-yellow-600" onClick={() => onStatusChange(note.id, 'todo')}>
+                            <X className="h-5 w-5" />
+                        </Button>
+                    )}
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7">
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
                                 <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                         </AlertDialogTrigger>
@@ -122,22 +93,20 @@ function SortableNote({ note, onDelete }: { note: Note; onDelete: (noteId: strin
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
-                </CardContent>
-            </Card>
-        </div>
+                </div>
+            </CardContent>
+        </Card>
     );
 }
-
 
 export default function NotesPage() {
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
-  const [columns, setColumns] = useState<Columns>({
-    todo: { id: 'todo', title: 'A Fazer', notes: [] },
-    done: { id: 'done', title: 'Feitas', notes: [] },
-  });
+  
+  const [todoNotes, setTodoNotes] = useState<Note[]>([]);
+  const [doneNotes, setDoneNotes] = useState<Note[]>([]);
 
   const notesQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -151,14 +120,9 @@ export default function NotesPage() {
 
   useEffect(() => {
     if (notes) {
-      const todoNotes = notes.filter((note) => note.status === 'todo');
-      const doneNotes = notes.filter((note) => note.status === 'done');
-      setColumns({
-        todo: { ...columns.todo, notes: todoNotes },
-        done: { ...columns.done, notes: doneNotes },
-      });
+      setTodoNotes(notes.filter((note) => note.status === 'todo'));
+      setDoneNotes(notes.filter((note) => note.status === 'done'));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes]);
 
   const handleAddNote = () => {
@@ -183,83 +147,30 @@ export default function NotesPage() {
     toast({ title: 'Nota removida!' });
   };
   
-  const findContainer = (id: string) => {
-    if (id in columns) {
-        return id as keyof Columns;
-    }
-    return Object.keys(columns).find((key) => 
-      columns[key as keyof Columns].notes.some((note) => note.id === id)
-    ) as keyof Columns | undefined;
-  };
-
-  const onDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeId = String(active.id);
-    const overId = String(over.id);
-
-    const activeContainer = findContainer(activeId);
-    const overContainer = findContainer(overId);
-
-    // Reordering within the same column
-    if (activeContainer && overContainer && activeContainer === overContainer && activeId !== overId) {
-        const column = columns[activeContainer];
-        const oldIndex = column.notes.findIndex((n) => n.id === activeId);
-        const newIndex = column.notes.findIndex((n) => n.id === overId);
-        
-        setColumns((prev) => ({
-            ...prev,
-            [activeContainer]: {
-                ...prev[activeContainer],
-                notes: arrayMove(prev[activeContainer].notes, oldIndex, newIndex),
-            },
-        }));
-        return;
-    }
-
-    // Moving to a different column
-    if (activeContainer && overContainer && activeContainer !== overContainer) {
-        setColumns((prev) => {
-            const activeItems = prev[activeContainer].notes;
-            const overItems = prev[overContainer].notes;
-            const activeIndex = activeItems.findIndex((item) => item.id === activeId);
-            const overIndex = overItems.findIndex((item) => item.id === overId);
-            
-            const newIndex = overIndex >= 0 ? overIndex : overItems.length;
-
-            return {
-                ...prev,
-                [activeContainer]: {
-                    ...prev[activeContainer],
-                    notes: activeItems.filter((item) => item.id !== activeId),
-                },
-                [overContainer]: {
-                    ...prev[overContainer],
-                    notes: [
-                        ...overItems.slice(0, newIndex),
-                        activeItems[activeIndex],
-                        ...overItems.slice(newIndex)
-                    ],
-                },
-            };
-        });
-
-         if (user) {
-            const noteDocRef = doc(firestore, 'users', user.uid, 'notes', activeId);
-            setDocumentNonBlocking(noteDocRef, { status: overContainer }, { merge: true });
-         }
+  const handleStatusChange = (noteId: string, newStatus: 'todo' | 'done') => {
+    if (!user) return;
+    const noteDocRef = doc(firestore, 'users', user.uid, 'notes', noteId);
+    setDocumentNonBlocking(noteDocRef, { status: newStatus }, { merge: true });
+    
+    // Optimistic UI update
+    if (newStatus === 'done') {
+        const noteToMove = todoNotes.find(n => n.id === noteId);
+        if (noteToMove) {
+            setTodoNotes(prev => prev.filter(n => n.id !== noteId));
+            setDoneNotes(prev => [{...noteToMove, status: 'done'}, ...prev]);
+        }
+    } else {
+        const noteToMove = doneNotes.find(n => n.id === noteId);
+        if (noteToMove) {
+            setDoneNotes(prev => prev.filter(n => n.id !== noteId));
+            setTodoNotes(prev => [{...noteToMove, status: 'todo'}, ...prev]);
+        }
     }
   };
-  
-    const sensors = useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor)
-    );
 
   return (
     <div className="flex flex-col h-full">
-      <PageHeader title="Tarefas" description="Arraste as notas entre as colunas para alterar o status.">
+      <PageHeader title="Tarefas" description="Clique nos botões para mover as notas entre as colunas.">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1">
@@ -285,33 +196,46 @@ export default function NotesPage() {
         </Dialog>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
-        <DndContext sensors={sensors} onDragEnd={onDragEnd} collisionDetection={rectIntersection}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            {Object.values(columns).map((column) => (
-                <div key={column.id} className="rounded-lg bg-muted/50 p-4">
-                    <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                        {column.id === 'todo' ? <ListTodo className="text-yellow-500" /> : <CheckCircle className="text-green-500" />}
-                        {column.title} ({column.notes.length})
-                    </h2>
-                     <SortableContext items={column.notes.map(n => n.id)} strategy={verticalListSortingStrategy}>
-                        <div id={column.id} className="space-y-4 min-h-[100px]">
-                            {isLoading ? (
-                                <Skeleton className="h-20 w-full" />
-                            ) : column.notes.length > 0 ? (
-                                column.notes.map((note) => (
-                                    <SortableNote key={note.id} note={note} onDelete={handleDeleteNote}/>
-                                ))
-                            ) : (
-                                <div className="text-center text-muted-foreground py-4">
-                                {column.id === 'todo' ? 'Nenhuma tarefa pendente.' : 'Nenhuma tarefa concluída ainda.'}
-                                </div>
-                            )}
+            <div className="rounded-lg bg-muted/50 p-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                    <ListTodo className="text-yellow-500" />
+                    A Fazer ({todoNotes.length})
+                </h2>
+                <div className="space-y-4 min-h-[100px]">
+                    {isLoading ? (
+                        <Skeleton className="h-20 w-full" />
+                    ) : todoNotes.length > 0 ? (
+                        todoNotes.map((note) => (
+                            <NoteCard key={note.id} note={note} onDelete={handleDeleteNote} onStatusChange={handleStatusChange} />
+                        ))
+                    ) : (
+                        <div className="text-center text-muted-foreground py-4">
+                            Nenhuma tarefa pendente.
                         </div>
-                    </SortableContext>
+                    )}
                 </div>
-            ))}
+            </div>
+            <div className="rounded-lg bg-muted/50 p-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                    <CheckCircle className="text-green-500" />
+                    Feitas ({doneNotes.length})
+                </h2>
+                <div className="space-y-4 min-h-[100px]">
+                    {isLoading ? (
+                        <Skeleton className="h-20 w-full" />
+                    ) : doneNotes.length > 0 ? (
+                        doneNotes.map((note) => (
+                            <NoteCard key={note.id} note={note} onDelete={handleDeleteNote} onStatusChange={handleStatusChange} />
+                        ))
+                    ) : (
+                        <div className="text-center text-muted-foreground py-4">
+                            Nenhuma tarefa concluída ainda.
+                        </div>
+                    )}
+                </div>
+            </div>
           </div>
-        </DndContext>
       </main>
     </div>
   );
