@@ -13,6 +13,7 @@ import type { Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Copy, RefreshCw, CreditCard, CheckCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
+import { Badge } from '@/components/ui/badge';
 
 export default function GeneratePixPage() {
   const { firestore, user } = useFirebase();
@@ -219,3 +220,4 @@ export default function GeneratePixPage() {
     </div>
   );
 }
+    
