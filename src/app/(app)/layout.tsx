@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -660,10 +659,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/upsell')}>
-                                        <Link href="/automations/upsell">
-                                            <Rocket className="mr-2 h-4 w-4" />
-                                            UPSELL
-                                        </Link>
+                                        <Link href="/automations/upsell">Upsell</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                           </SidebarMenuSub>
