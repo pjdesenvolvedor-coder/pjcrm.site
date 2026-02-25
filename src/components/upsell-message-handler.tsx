@@ -2,9 +2,9 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, where, doc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, doc, runTransaction, arrayUnion } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import type { Client, Settings, UserProfile } from '@/lib/types';
+import type { Client, Settings, UserProfile, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -30,14 +30,13 @@ export function UpsellMessageHandler() {
     }, [firestore, user]);
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-    // 3. Get clients that haven't received upsell yet
-    const pendingUpsellQuery = useMemoFirebase(() => {
+    // 3. Get clients with 'Ativo' status
+    const activeClientsQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
         const clientsRef = collection(firestore, 'users', user.uid, 'clients');
-        // We only care about clients where upsellSent is false or undefined
-        return query(clientsRef, where("upsellSent", "==", false));
+        return query(clientsRef, where("status", "==", "Ativo"));
     }, [user, firestore]);
-    const { data: pendingClients } = useCollection<Client>(pendingUpsellQuery);
+    const { data: activeClients } = useCollection<Client>(activeClientsQuery);
 
     useEffect(() => {
         const processUpsellQueue = async () => {
@@ -48,42 +47,50 @@ export function UpsellMessageHandler() {
                 return;
             }
 
+            const activeUpsells = settings?.upsells?.filter(u => u.isActive && u.upsellMessage) || [];
+
             // Check if automation is active
-            if (!pendingClients || pendingClients.length === 0 || !settings?.isUpsellActive || !settings.upsellMessage || !settings.webhookToken || !user || !firestore) {
+            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !settings?.webhookToken || !user || !firestore) {
                 return;
             }
 
-            const now = new Date();
-            const delayMs = (settings.upsellDelayMinutes || 5) * 60 * 1000;
-
-            const clientsToProcess = pendingClients.filter(client => {
-                if (!client.createdAt) return false;
-                const creationTime = client.createdAt.toDate().getTime();
-                return (now.getTime() - creationTime) >= delayMs;
-            });
-            
-            if (clientsToProcess.length === 0) return;
-
             isProcessing.current = true;
 
+            const now = new Date();
             const token = settings.webhookToken;
-            const messageTemplate = settings.upsellMessage;
             
-            const processClient = async (client: Client) => {
+            const processUpsellForClient = async (client: Client, upsell: UpsellConfig) => {
+                if (!client.createdAt) return;
+                
+                const delayMs = (upsell.upsellDelayMinutes || 0) * 60 * 1000;
+                const creationTime = client.createdAt.toDate().getTime();
+                
+                // If not yet due
+                if ((now.getTime() - creationTime) < delayMs) return;
+
+                // If already sent
+                if (client.sentUpsellIds?.includes(upsell.id)) return;
+
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
 
                 try {
-                    // Atomically mark as sent to prevent duplicate sends
+                    // Atomically mark this specific upsell as sent
                     await runTransaction(firestore, async (transaction) => {
                         const clientDoc = await transaction.get(clientDocRef);
-                        if (!clientDoc.exists() || clientDoc.data().upsellSent === true) {
-                            throw new Error("Client already processed or deleted.");
+                        if (!clientDoc.exists()) throw new Error("deleted");
+                        
+                        const sentIds = clientDoc.data().sentUpsellIds || [];
+                        if (sentIds.includes(upsell.id)) {
+                            throw new Error("already sent");
                         }
-                        transaction.update(clientDocRef, { upsellSent: true });
+                        
+                        transaction.update(clientDocRef, { 
+                            sentUpsellIds: arrayUnion(upsell.id)
+                        });
                     });
 
                     // Format and send
-                    let formattedMessage = messageTemplate
+                    let formattedMessage = upsell.upsellMessage
                         .replace(/{cliente}/g, client.name)
                         .replace(/{telefone}/g, client.phone)
                         .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : client.email)
@@ -111,28 +118,31 @@ export function UpsellMessageHandler() {
                         description: `A oferta de upsell foi enviada para ${client.name}.`,
                     });
 
+                    await sleep(DELAY_BETWEEN_MESSAGES);
+
                 } catch (error: any) {
-                    if (!error.message.includes("already processed")) {
+                    if (error.message !== "already sent" && error.message !== "deleted") {
                         console.error("Failed to process upsell for client:", error);
                     }
                 }
             };
             
-            for (const client of clientsToProcess) {
-                await processClient(client);
-                await sleep(DELAY_BETWEEN_MESSAGES);
+            for (const client of activeClients) {
+                for (const upsell of activeUpsells) {
+                    await processUpsellForClient(client, upsell);
+                }
             }
             
             isProcessing.current = false;
         };
 
-        // Check every 30 seconds
-        const intervalId = setInterval(processUpsellQueue, 30 * 1000);
+        // Check every minute
+        const intervalId = setInterval(processUpsellQueue, 60 * 1000);
         processUpsellQueue();
 
         return () => clearInterval(intervalId);
 
-    }, [pendingClients, settings, firestore, user, toast, userProfile]);
+    }, [activeClients, settings, firestore, user, toast, userProfile]);
 
     return null;
 }

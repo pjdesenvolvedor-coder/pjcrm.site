@@ -56,7 +56,8 @@ export type Client = {
   amountPaid?: string | null;
   needsSupport?: boolean;
   createdAt?: Timestamp | null;
-  upsellSent?: boolean;
+  upsellSent?: boolean; // Legacy
+  sentUpsellIds?: string[]; // Tracking for multiple upsells
 };
 
 export type WhatsAppConnection = {
@@ -109,6 +110,13 @@ export type Message = {
   avatarUrl: string;
 };
 
+export type UpsellConfig = {
+  id: string;
+  isActive: boolean;
+  upsellDelayMinutes: number;
+  upsellMessage: string;
+};
+
 export type Settings = {
   webhookToken?: string;
   presetHour?: string;
@@ -125,9 +133,10 @@ export type Settings = {
   postSignupRemarketingDays?: number;
   postSignupRemarketingMessage?: string;
   // Upsell
-  isUpsellActive?: boolean;
-  upsellDelayMinutes?: number;
-  upsellMessage?: string;
+  isUpsellActive?: boolean; // Legacy
+  upsellDelayMinutes?: number; // Legacy
+  upsellMessage?: string; // Legacy
+  upsells?: UpsellConfig[];
 };
 
 export type Subscription = {
