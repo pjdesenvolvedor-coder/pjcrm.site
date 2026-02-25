@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -26,6 +27,7 @@ import {
   AlertTriangle,
   StickyNote,
   Briefcase,
+  Rocket,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -75,6 +77,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
 import { DueDateMessageHandler } from '@/components/due-date-message-handler';
+import { UpsellMessageHandler } from '@/components/upsell-message-handler';
 import { SubscriptionTimer } from '@/components/SubscriptionTimer';
 import { SystemAlert } from '@/components/SystemAlert';
 
@@ -655,6 +658,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                         <Link href="/automations/remarketing">Remarketing</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/upsell')}>
+                                        <Link href="/automations/upsell">
+                                            <Rocket className="mr-2 h-4 w-4" />
+                                            UPSELL
+                                        </Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
@@ -941,6 +952,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarInset>{children}</SidebarInset>
       <ScheduledMessageHandler />
       <DueDateMessageHandler />
+      <UpsellMessageHandler />
       <SubscriptionTimer />
     </SidebarProvider>
   );

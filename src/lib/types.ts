@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserPermissions = {
@@ -54,6 +55,8 @@ export type Client = {
   paymentMethod?: 'PIX' | 'Cartão' | 'Boleto' | null;
   amountPaid?: string | null;
   needsSupport?: boolean;
+  createdAt?: Timestamp | null;
+  upsellSent?: boolean;
 };
 
 export type WhatsAppConnection = {
@@ -121,6 +124,10 @@ export type Settings = {
   isPostSignupRemarketingActive?: boolean;
   postSignupRemarketingDays?: number;
   postSignupRemarketingMessage?: string;
+  // Upsell
+  isUpsellActive?: boolean;
+  upsellDelayMinutes?: number;
+  upsellMessage?: string;
 };
 
 export type Subscription = {

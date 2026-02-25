@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "BusinessManager": {
@@ -226,6 +227,15 @@
         "needsSupport": {
           "type": "boolean",
           "description": "Indicates if the client needs support."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the client was added to the system."
+        },
+        "upsellSent": {
+          "type": "boolean",
+          "description": "Whether the upsell message has been sent to this client."
         }
       },
       "required": [
@@ -510,6 +520,18 @@
         "postSignupRemarketingMessage": {
           "type": "string",
           "description": "The remarketing message template for new clients."
+        },
+        "isUpsellActive": {
+          "type": "boolean",
+          "description": "Flag to enable or disable the automated upsell message."
+        },
+        "upsellDelayMinutes": {
+          "type": "number",
+          "description": "Number of minutes to wait after client creation before sending upsell."
+        },
+        "upsellMessage": {
+          "type": "string",
+          "description": "The upsell message template."
         }
       }
     },

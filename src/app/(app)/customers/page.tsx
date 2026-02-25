@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, Timestamp, doc, query, orderBy } from 'firebase/firestore';
+import { collection, Timestamp, doc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -215,7 +216,13 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         if (dueDateTimestamp && dueDateTimestamp.toDate() <= new Date()) {
             newStatus = 'Vencido';
         }
-        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { ...clientData, status: newStatus, needsSupport: false });
+        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { 
+            ...clientData, 
+            status: newStatus, 
+            needsSupport: false,
+            createdAt: serverTimestamp(),
+            upsellSent: false
+        });
         toast({ title: "Cliente adicionado!", description: `${values.name} foi adicionado com sucesso.` });
     }
 
