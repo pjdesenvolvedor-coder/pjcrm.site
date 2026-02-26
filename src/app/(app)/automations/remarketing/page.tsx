@@ -27,6 +27,7 @@ const remarketingConfigSchema = z.object({
   isActive: z.boolean().default(false),
   days: z.coerce.number().min(0).default(3),
   message: z.string().optional(),
+  createdAt: z.number().optional(),
 });
 
 const remarketingSchema = z.object({
@@ -80,6 +81,7 @@ export default function RemarketingPage() {
           isActive: settings.isPostSignupRemarketingActive ?? false,
           days: settings.postSignupRemarketingDays ?? 3,
           message: settings.postSignupRemarketingMessage ?? '',
+          createdAt: 0,
         });
       }
 
@@ -90,6 +92,7 @@ export default function RemarketingPage() {
           isActive: settings.isPostDueDateRemarketingActive ?? false,
           days: settings.postDueDateRemarketingDays ?? 3,
           message: settings.postDueDateRemarketingMessage ?? '',
+          createdAt: 0,
         });
       }
 
@@ -119,7 +122,7 @@ export default function RemarketingPage() {
   }
 
   const handleAddRemarketing = (type: 'signup' | 'duedate') => {
-    const newRemarketing = { id: crypto.randomUUID(), isActive: false, days: 3, message: '' };
+    const newRemarketing = { id: crypto.randomUUID(), isActive: false, days: 3, message: '', createdAt: Date.now() };
     if (type === 'signup') signupFields.append(newRemarketing);
     else dueDateFields.append(newRemarketing);
   };
@@ -224,6 +227,11 @@ export default function RemarketingPage() {
                             </FormItem>
                           )}
                         />
+                        {field.createdAt > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                                Criado em: {new Date(field.createdAt).toLocaleString()} (Clientes antigos ignorados)
+                            </p>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -304,6 +312,11 @@ export default function RemarketingPage() {
                             </FormItem>
                           )}
                         />
+                        {field.createdAt > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                                Criado em: {new Date(field.createdAt).toLocaleString()} (Clientes antigos ignorados)
+                            </p>
+                        )}
                       </CardContent>
                     </Card>
                   ))}

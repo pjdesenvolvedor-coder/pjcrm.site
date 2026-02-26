@@ -58,8 +58,13 @@ export function RemarketingMessageHandler() {
                     ? client.createdAt?.toDate() 
                     : client.dueDate?.toDate();
                 
-                if (!startDate) return;
+                if (!startDate || !client.createdAt) return;
                 
+                // Safety filter: Only for clients created AFTER the rule was created
+                if (config.createdAt && client.createdAt.toMillis() < config.createdAt) {
+                    return;
+                }
+
                 const daysDiff = differenceInDays(now, startDate);
                 
                 if (daysDiff < config.days) return;
@@ -119,12 +124,10 @@ export function RemarketingMessageHandler() {
             for (const client of clients) {
                 if (Date.now() < quotaExceededUntilRef.current) break;
 
-                // Process Signup Remarketing (usually for Active or any client since creation)
                 for (const config of activeSignupRemarketings) {
                     await processRemarketingForClient(client, config, 'signup');
                 }
 
-                // Process Due Date Remarketing (only if client is Vencido)
                 if (client.status === 'Vencido') {
                     for (const config of activeDueDateRemarketings) {
                         await processRemarketingForClient(client, config, 'duedate');
@@ -135,7 +138,6 @@ export function RemarketingMessageHandler() {
             isProcessing.current = false;
         };
 
-        // Verificação a cada 10 minutos para economizar cota (pois remarketing é em dias)
         const intervalId = setInterval(processRemarketingQueue, 10 * 60 * 1000);
         processRemarketingQueue();
         return () => clearInterval(intervalId);

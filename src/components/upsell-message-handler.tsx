@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -54,6 +55,11 @@ export function UpsellMessageHandler() {
             
             const processUpsellForClient = async (client: Client, upsell: UpsellConfig) => {
                 if (!client.createdAt) return;
+                
+                // New logic: Only send to clients created AFTER the upsell rule was created
+                if (upsell.createdAt && client.createdAt.toMillis() < upsell.createdAt) {
+                    return;
+                }
                 
                 const delayMs = (upsell.upsellDelayMinutes || 0) * 60 * 1000;
                 const creationTime = client.createdAt.toDate().getTime();

@@ -118,6 +118,7 @@ export type UpsellConfig = {
   isActive: boolean;
   upsellDelayMinutes: number;
   upsellMessage: string;
+  createdAt?: number; // Timestamp in ms for filtering
 };
 
 export type RemarketingConfig = {
@@ -125,6 +126,7 @@ export type RemarketingConfig = {
   isActive: boolean;
   days: number;
   message: string;
+  createdAt?: number; // Timestamp in ms for filtering
 };
 
 export type Settings = {

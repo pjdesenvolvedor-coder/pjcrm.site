@@ -26,6 +26,7 @@ const upsellConfigSchema = z.object({
   isActive: z.boolean().default(false),
   upsellDelayMinutes: z.coerce.number().min(0).default(5),
   upsellMessage: z.string().optional(),
+  createdAt: z.number().optional(),
 });
 
 const upsellSchema = z.object({
@@ -62,7 +63,6 @@ export default function UpsellPage() {
 
   useEffect(() => {
     if (settings) {
-      // Handle legacy single upsell if exists and migrate to array if empty
       if (settings.upsells) {
         form.reset({ upsells: settings.upsells });
       } else if (settings.upsellMessage) {
@@ -72,10 +72,11 @@ export default function UpsellPage() {
             isActive: settings.isUpsellActive ?? false,
             upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
             upsellMessage: settings.upsellMessage ?? '',
+            createdAt: 0, // Legacy rules keep processing everyone
           }]
         });
       } else if (fields.length === 0) {
-          form.reset({ upsells: [{ id: crypto.randomUUID(), isActive: false, upsellDelayMinutes: 5, upsellMessage: '' }] });
+          form.reset({ upsells: [{ id: crypto.randomUUID(), isActive: false, upsellDelayMinutes: 5, upsellMessage: '', createdAt: Date.now() }] });
       }
     }
   }, [settings, form]);
@@ -104,6 +105,7 @@ export default function UpsellPage() {
       isActive: false,
       upsellDelayMinutes: 5,
       upsellMessage: '',
+      createdAt: Date.now(), // New rules only for new clients
     });
   };
 
@@ -219,6 +221,11 @@ export default function UpsellPage() {
                                     </FormItem>
                                 )}
                             />
+                            {field.createdAt && (
+                                <p className="text-[10px] text-muted-foreground">
+                                    Criado em: {new Date(field.createdAt).toLocaleString()} (Clientes antigos serão ignorados)
+                                </p>
+                            )}
                         </CardContent>
                     </Card>
                 ))}

@@ -57,12 +57,6 @@ const permissionsSchema = z.object({
   pix: z.boolean().default(false),
 });
 
-const userFormSchema = z.object({
-  role: z.enum(['Admin', 'Agent']),
-  permissions: permissionsSchema,
-  subscriptionEndDate: z.string().optional(),
-});
-
 type UserFormData = z.infer<typeof userFormSchema>;
 
 const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
@@ -98,6 +92,12 @@ function UserClientCount({ userId }: { userId: string }) {
 
   return <span>{activeClients?.length ?? 0}</span>;
 }
+
+const userFormSchema = z.object({
+  role: z.enum(['Admin', 'Agent']),
+  permissions: permissionsSchema,
+  subscriptionEndDate: z.string().optional(),
+});
 
 function formatDuration(seconds: number) {
     if (seconds < 0) return "Expirado";
@@ -197,7 +197,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
 
         if (data.subscriptionEndDate && data.subscriptionEndDate.length === 10) {
             const [day, month, year] = data.subscriptionEndDate.split('/');
-            const date = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
+            const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
             if (!isNaN(date.getTime())) {
                 date.setHours(23, 59, 59); // Set to end of day
                 dataToUpdate.subscriptionEndDate = Timestamp.fromDate(date);
@@ -319,7 +319,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
     );
 }
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE_USERS = 15;
 
 export default function UsersPage() {
   const { firestore, user: currentUser } = useFirebase();
@@ -345,11 +345,11 @@ export default function UsersPage() {
     let q;
   
     if (dir === 'next' && pagination.last) {
-      q = query(usersRef, orderBy('firstName'), startAfter(pagination.last), limit(PAGE_SIZE));
+      q = query(usersRef, orderBy('firstName'), startAfter(pagination.last), limit(PAGE_SIZE_USERS));
     } else if (dir === 'prev' && pagination.first) {
-      q = query(usersRef, orderBy('firstName'), endBefore(pagination.first), limitToLast(PAGE_SIZE));
+      q = query(usersRef, orderBy('firstName'), endBefore(pagination.first), limitToLast(PAGE_SIZE_USERS));
     } else {
-      q = query(usersRef, orderBy('firstName'), limit(PAGE_SIZE));
+      q = query(usersRef, orderBy('firstName'), limit(PAGE_SIZE_USERS));
     }
   
     try {
