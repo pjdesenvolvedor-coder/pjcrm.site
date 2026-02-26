@@ -1,32 +1,37 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { doc } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { Settings } from '@/lib/types';
+import type { Settings, RemarketingConfig } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { AlarmClock, UserPlus } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { AlarmClock, UserPlus, Plus, Trash2 } from 'lucide-react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const remarketingConfigSchema = z.object({
+  id: z.string(),
+  isActive: z.boolean().default(false),
+  days: z.coerce.number().min(0).default(3),
+  message: z.string().optional(),
+});
 
 const remarketingSchema = z.object({
-  isPostDueDateRemarketingActive: z.boolean().default(false),
-  postDueDateRemarketingDays: z.coerce.number().min(0).optional(),
-  postDueDateRemarketingMessage: z.string().optional(),
-  isPostSignupRemarketingActive: z.boolean().default(false),
-  postSignupRemarketingDays: z.coerce.number().min(0).optional(),
-  postSignupRemarketingMessage: z.string().optional(),
+  postSignupRemarketings: z.array(remarketingConfigSchema),
+  postDueDateRemarketings: z.array(remarketingConfigSchema),
 });
 
 type RemarketingFormData = z.infer<typeof remarketingSchema>;
@@ -48,24 +53,49 @@ export default function RemarketingPage() {
   const form = useForm<RemarketingFormData>({
     resolver: zodResolver(remarketingSchema),
     defaultValues: {
-      isPostDueDateRemarketingActive: false,
-      postDueDateRemarketingDays: 3,
-      postDueDateRemarketingMessage: '',
-      isPostSignupRemarketingActive: false,
-      postSignupRemarketingDays: 3,
-      postSignupRemarketingMessage: '',
+      postSignupRemarketings: [],
+      postDueDateRemarketings: [],
     },
+  });
+
+  const signupFields = useFieldArray({
+    control: form.control,
+    name: "postSignupRemarketings",
+  });
+
+  const dueDateFields = useFieldArray({
+    control: form.control,
+    name: "postDueDateRemarketings",
   });
 
   useEffect(() => {
     if (settings) {
+      const initialSignup: RemarketingConfig[] = settings.postSignupRemarketings || [];
+      const initialDueDate: RemarketingConfig[] = settings.postDueDateRemarketings || [];
+
+      // Migration for signup
+      if (initialSignup.length === 0 && settings.postSignupRemarketingMessage) {
+        initialSignup.push({
+          id: 'legacy-signup',
+          isActive: settings.isPostSignupRemarketingActive ?? false,
+          days: settings.postSignupRemarketingDays ?? 3,
+          message: settings.postSignupRemarketingMessage ?? '',
+        });
+      }
+
+      // Migration for due date
+      if (initialDueDate.length === 0 && settings.postDueDateRemarketingMessage) {
+        initialDueDate.push({
+          id: 'legacy-duedate',
+          isActive: settings.isPostDueDateRemarketingActive ?? false,
+          days: settings.postDueDateRemarketingDays ?? 3,
+          message: settings.postDueDateRemarketingMessage ?? '',
+        });
+      }
+
       form.reset({
-        isPostDueDateRemarketingActive: settings.isPostDueDateRemarketingActive ?? false,
-        postDueDateRemarketingDays: settings.postDueDateRemarketingDays ?? 3,
-        postDueDateRemarketingMessage: settings.postDueDateRemarketingMessage ?? '',
-        isPostSignupRemarketingActive: settings.isPostSignupRemarketingActive ?? false,
-        postSignupRemarketingDays: settings.postSignupRemarketingDays ?? 3,
-        postSignupRemarketingMessage: settings.postSignupRemarketingMessage ?? '',
+        postSignupRemarketings: initialSignup,
+        postDueDateRemarketings: initialDueDate,
       });
     }
   }, [settings, form]);
@@ -75,7 +105,7 @@ export default function RemarketingPage() {
       setDocumentNonBlocking(settingsDocRef, data, { merge: true });
       toast({
         title: 'Configurações Salvas!',
-        description: 'Suas configurações de remarketing foram salvas com sucesso.',
+        description: 'Suas automações de remarketing foram configuradas com sucesso.',
       });
     }
   };
@@ -88,26 +118,19 @@ export default function RemarketingPage() {
     })
   }
 
+  const handleAddRemarketing = (type: 'signup' | 'duedate') => {
+    const newRemarketing = { id: crypto.randomUUID(), isActive: false, days: 3, message: '' };
+    if (type === 'signup') signupFields.append(newRemarketing);
+    else dueDateFields.append(newRemarketing);
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <PageHeader
-          title="Automação de Remarketing"
-          description="Reengaje seus clientes com mensagens automáticas estratégicas."
-        />
-        <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-          <Card>
-            <CardContent className="pt-6 space-y-6">
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-32 w-full" />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6 space-y-6">
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-32 w-full" />
-            </CardContent>
-          </Card>
+        <PageHeader title="Automação de Remarketing" description="Configurando múltiplos fluxos..." />
+        <main className="flex-1 p-4 md:p-6 space-y-6">
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-48 w-full" />
         </main>
       </div>
     );
@@ -117,150 +140,202 @@ export default function RemarketingPage() {
     <div className="flex flex-col h-full">
       <PageHeader
         title="Automação de Remarketing"
-        description="Reengaje seus clientes com mensagens automáticas estratégicas."
+        description="Reengaje seus clientes com múltiplos fluxos automáticos."
       />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card>
-              <CardContent className="pt-6 space-y-6">
-                <h2 className="text-xl font-semibold">Remarketing Pós-Vencimento</h2>
-                <p className="text-sm text-muted-foreground -mt-4">Envie uma mensagem para clientes um tempo após a assinatura deles ter vencido.</p>
-                <FormField
-                  control={form.control}
-                  name="isPostDueDateRemarketingActive"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center space-x-4 rounded-md border p-4">
-                        <AlarmClock className="h-6 w-6" />
-                        <div className="flex-1 space-y-1">
-                          <FormLabel className="text-base">Ativar Remarketing Pós-Vencimento</FormLabel>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-                <div className="flex items-center gap-2">
-                    <Label>Enviar após</Label>
-                    <FormField
-                    control={form.control}
-                    name="postDueDateRemarketingDays"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormControl>
-                                <Input type="number" className="w-20" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                    <Label>dias do vencimento.</Label>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="postDueDateRemarketingMessage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Mensagem de Remarketing</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Olá {cliente}, notamos que sua assinatura venceu..."
-                          className="min-h-32"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+            <Tabs defaultValue="signup" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signup" className="gap-2">
+                  <UserPlus className="h-4 w-4" /> Pós-Cadastro
+                </TabsTrigger>
+                <TabsTrigger value="duedate" className="gap-2">
+                  <AlarmClock className="h-4 w-4" /> Pós-Vencimento
+                </TabsTrigger>
+              </TabsList>
 
-            <Card>
-              <CardContent className="pt-6 space-y-6">
-                <h2 className="text-xl font-semibold">Remarketing Pós-Cadastro</h2>
-                <p className="text-sm text-muted-foreground -mt-4">Envie uma mensagem de boas-vindas ou um lembrete para novos clientes após um tempo do cadastro.</p>
-                <FormField
-                  control={form.control}
-                  name="isPostSignupRemarketingActive"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center space-x-4 rounded-md border p-4">
-                        <UserPlus className="h-6 w-6" />
-                        <div className="flex-1 space-y-1">
-                          <FormLabel className="text-base">Ativar Remarketing Pós-Cadastro</FormLabel>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-                <div className="flex items-center gap-2">
-                    <Label>Enviar após</Label>
-                    <FormField
-                    control={form.control}
-                    name="postSignupRemarketingDays"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormControl>
-                                <Input type="number" className="w-20" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                    <Label>dias do cadastro.</Label>
+              <TabsContent value="signup" className="space-y-6 pt-4">
+                <div className="flex justify-between items-center">
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold">Remarketing Pós-Cadastro</h2>
+                    <p className="text-sm text-muted-foreground">Envie mensagens após o cadastro inicial.</p>
+                  </div>
+                  <Button type="button" size="sm" onClick={() => handleAddRemarketing('signup')} className="gap-2">
+                    <Plus className="h-4 w-4" /> Novo Fluxo
+                  </Button>
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="postSignupRemarketingMessage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Mensagem de Remarketing</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Olá {cliente}, bem-vindo! Que tal dar o próximo passo e ativar sua assinatura?"
-                          className="min-h-32"
-                          {...field}
+                <div className="space-y-4">
+                  {signupFields.fields.map((field, index) => (
+                    <Card key={field.id} className="border-l-4 border-l-primary">
+                      <CardContent className="pt-6 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <Badge variant="outline">Fluxo #{index + 1}</Badge>
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => signupFields.remove(index)}
+                            className="text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <FormField
+                          control={form.control}
+                          name={`postSignupRemarketings.${index}.isActive`}
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-4 rounded-md border p-4 bg-muted/30">
+                              <div className="flex-1 space-y-1">
+                                <FormLabel className="text-base">Ativar este remarketing</FormLabel>
+                              </div>
+                              <FormControl>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                              </FormControl>
+                            </FormItem>
+                          )}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+
+                        <div className="flex items-center gap-2">
+                          <Label>Enviar após</Label>
+                          <FormField
+                            control={form.control}
+                            name={`postSignupRemarketings.${index}.days`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl><Input type="number" className="w-20" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Label>dias do cadastro.</Label>
+                        </div>
+
+                        <FormField
+                          control={form.control}
+                          name={`postSignupRemarketings.${index}.message`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Mensagem</FormLabel>
+                              <FormControl><Textarea placeholder="Olá {cliente}, bem-vindo!..." className="min-h-32" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {signupFields.fields.length === 0 && (
+                    <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
+                      Nenhum remarketing pós-cadastro configurado.
+                    </div>
                   )}
-                />
-              </CardContent>
-            </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="duedate" className="space-y-6 pt-4">
+                <div className="flex justify-between items-center">
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold">Remarketing Pós-Vencimento</h2>
+                    <p className="text-sm text-muted-foreground">Reengaje clientes após a assinatura vencer.</p>
+                  </div>
+                  <Button type="button" size="sm" onClick={() => handleAddRemarketing('duedate')} className="gap-2">
+                    <Plus className="h-4 w-4" /> Novo Fluxo
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {dueDateFields.fields.map((field, index) => (
+                    <Card key={field.id} className="border-l-4 border-l-destructive">
+                      <CardContent className="pt-6 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <Badge variant="outline">Fluxo #{index + 1}</Badge>
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => dueDateFields.remove(index)}
+                            className="text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <FormField
+                          control={form.control}
+                          name={`postDueDateRemarketings.${index}.isActive`}
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-4 rounded-md border p-4 bg-muted/30">
+                              <div className="flex-1 space-y-1">
+                                <FormLabel className="text-base">Ativar este remarketing</FormLabel>
+                              </div>
+                              <FormControl>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="flex items-center gap-2">
+                          <Label>Enviar após</Label>
+                          <FormField
+                            control={form.control}
+                            name={`postDueDateRemarketings.${index}.days`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl><Input type="number" className="w-20" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Label>dias do vencimento.</Label>
+                        </div>
+
+                        <FormField
+                          control={form.control}
+                          name={`postDueDateRemarketings.${index}.message`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Mensagem</FormLabel>
+                              <FormControl><Textarea placeholder="Olá {cliente}, notamos que sua assinatura venceu..." className="min-h-32" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {dueDateFields.fields.length === 0 && (
+                    <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
+                      Nenhum remarketing pós-vencimento configurado.
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
             
-            <div>
-                <Label className="text-sm">Variáveis disponíveis para ambas as mensagens:</Label>
+            <Card>
+              <CardContent className="pt-6">
+                <Label className="text-sm">Variáveis disponíveis para todas as mensagens:</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
-                    {availableVariables.map(variable => (
-                        <Badge 
-                            key={variable} 
-                            variant="outline" 
-                            className="cursor-pointer hover:bg-accent"
-                            onClick={() => copyVariableToClipboard(variable)}
-                        >
-                            {variable}
-                        </Badge>
-                    ))}
+                  {availableVariables.map(variable => (
+                    <Badge 
+                      key={variable} 
+                      variant="outline" 
+                      className="cursor-pointer hover:bg-accent"
+                      onClick={() => copyVariableToClipboard(variable)}
+                    >
+                      {variable}
+                    </Badge>
+                  ))}
                 </div>
-            </div>
+              </CardContent>
+            </Card>
             
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              Salvar Todas as Configurações
+            <Button type="submit" disabled={form.formState.isSubmitting} className="w-full md:w-auto h-12 px-8">
+              Salvar Todas as Configurações de Remarketing
             </Button>
           </form>
         </Form>

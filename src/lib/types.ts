@@ -59,6 +59,7 @@ export type Client = {
   createdAt?: Timestamp | null;
   upsellSent?: boolean; // Legacy
   sentUpsellIds?: string[]; // Tracking for multiple upsells
+  sentRemarketingIds?: string[]; // Tracking for multiple remarketings
 };
 
 export type WhatsAppConnection = {
@@ -118,6 +119,13 @@ export type UpsellConfig = {
   upsellMessage: string;
 };
 
+export type RemarketingConfig = {
+  id: string;
+  isActive: boolean;
+  days: number;
+  message: string;
+};
+
 export type Settings = {
   webhookToken?: string;
   presetHour?: string;
@@ -125,14 +133,17 @@ export type Settings = {
   usePresetTime?: boolean;
   isDueDateMessageActive?: boolean;
   dueDateMessage?: string;
-  // Remarketing Pós-Vencimento
+  // Remarketing Pós-Vencimento (Legacy)
   isPostDueDateRemarketingActive?: boolean;
   postDueDateRemarketingDays?: number;
   postDueDateRemarketingMessage?: string;
-  // Remarketing Pós-Cadastro
+  // Remarketing Pós-Cadastro (Legacy)
   isPostSignupRemarketingActive?: boolean;
   postSignupRemarketingDays?: number;
   postSignupRemarketingMessage?: string;
+  // New Remarketing Arrays
+  postSignupRemarketings?: RemarketingConfig[];
+  postDueDateRemarketings?: RemarketingConfig[];
   // Upsell
   isUpsellActive?: boolean; // Legacy
   upsellDelayMinutes?: number; // Legacy

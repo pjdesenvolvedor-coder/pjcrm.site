@@ -78,6 +78,7 @@ import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
 import { DueDateMessageHandler } from '@/components/due-date-message-handler';
 import { UpsellMessageHandler } from '@/components/upsell-message-handler';
+import { RemarketingMessageHandler } from '@/components/remarketing-message-handler';
 import { SubscriptionTimer } from '@/components/SubscriptionTimer';
 import { SystemAlert } from '@/components/SystemAlert';
 import { SystemNotification } from '@/components/SystemNotification';
@@ -616,6 +617,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <ScheduledMessageHandler />
       <DueDateMessageHandler />
       <UpsellMessageHandler />
+      <RemarketingMessageHandler />
       <SubscriptionTimer />
     </SidebarProvider>
   );
