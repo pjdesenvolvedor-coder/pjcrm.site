@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Lock, Unlock, Package, Trash2, Gift, CalendarDays } from 'lucide-react';
@@ -52,6 +53,7 @@ const permissionsSchema = z.object({
   users: z.boolean().default(false),
   estoque: z.boolean().default(false),
   notes: z.boolean().default(false),
+  ads: z.boolean().default(false),
   pix: z.boolean().default(false),
 });
 
@@ -76,6 +78,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
     { key: 'users', label: 'Gerenciamento de Usuários' },
     { key: 'notes', label: 'Notas' },
+    { key: 'ads', label: 'Relatório de Anúncios' },
 ];
 
 function UserClientCount({ userId }: { userId: string }) {
@@ -158,6 +161,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 users: user.permissions?.users ?? false,
                 estoque: user.permissions?.estoque ?? false,
                 notes: user.permissions?.notes ?? false,
+                ads: user.permissions?.ads ?? false,
                 pix: user.permissions?.pix ?? false,
             },
             subscriptionEndDate: user.subscriptionEndDate ? format(user.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
@@ -193,7 +197,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
 
         if (data.subscriptionEndDate && data.subscriptionEndDate.length === 10) {
             const [day, month, year] = data.subscriptionEndDate.split('/');
-            const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+            const date = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
             if (!isNaN(date.getTime())) {
                 date.setHours(23, 59, 59); // Set to end of day
                 dataToUpdate.subscriptionEndDate = Timestamp.fromDate(date);
@@ -703,8 +707,8 @@ export default function UsersPage() {
                                 </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDeleteUser(user)}>Sim, Excluir</AlertDialogAction>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDeleteUser(user)}>Sim, Excluir</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>

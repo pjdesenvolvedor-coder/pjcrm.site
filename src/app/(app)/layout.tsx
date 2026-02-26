@@ -28,6 +28,7 @@ import {
   Briefcase,
   Activity,
   ShieldAlert,
+  TrendingUp,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -211,6 +212,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         users: false,
         estoque: false,
         notes: false,
+        ads: false,
         pix: false,
         usage: false,
     };
@@ -535,6 +537,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <SidebarMenuButton asChild isActive={pathname === '/shot'} tooltip="Disparo">
                     <Link href="/shot"><Send /><span>Disparo</span></Link>
                   </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.notes && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Notas">
+                              <div className="flex items-center gap-2"><StickyNote /><span>Notas</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/notes/tasks'}><Link href="/notes/tasks">Minhas Tarefas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.ads && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Relatórios">
+                              <div className="flex items-center gap-2"><TrendingUp /><span>Relatórios</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/notes/ads'}><Link href="/notes/ads">Relatório de Anúncios</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
                 </SidebarMenuItem>
               )}
 

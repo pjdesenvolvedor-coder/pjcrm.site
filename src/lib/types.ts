@@ -13,6 +13,7 @@ export type UserPermissions = {
   users: boolean;
   estoque: boolean;
   notes: boolean;
+  ads: boolean;
   pix: boolean;
   usage: boolean;
 };
