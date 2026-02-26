@@ -146,7 +146,8 @@ export function ScheduledMessageHandler() {
             }
         };
         
-        const intervalId = setInterval(checkScheduledMessages, 60 * 1000);
+        // Interval increased to 2 minutes to save Firebase credits
+        const intervalId = setInterval(checkScheduledMessages, 2 * 60 * 1000);
         checkScheduledMessages();
         return () => clearInterval(intervalId);
 

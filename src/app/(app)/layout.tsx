@@ -267,7 +267,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (settings?.webhookToken) {
       fetchStatus(); // Initial fetch
-      const intervalId = setInterval(fetchStatus, 5000); // Poll every 5 seconds
+      const intervalId = setInterval(fetchStatus, 10000); // Polling interval increased to 10s to save resources
       return () => clearInterval(intervalId);
     }
   }, [settings?.webhookToken, fetchStatus]);

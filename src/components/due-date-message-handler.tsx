@@ -112,7 +112,8 @@ export function DueDateMessageHandler() {
             isProcessing.current = false;
         };
 
-        const intervalId = setInterval(checkAndProcessOverdueClients, 60 * 1000);
+        // Interval increased to 5 minutes to save Firebase credits
+        const intervalId = setInterval(checkAndProcessOverdueClients, 5 * 60 * 1000);
         checkAndProcessOverdueClients();
         return () => clearInterval(intervalId);
 

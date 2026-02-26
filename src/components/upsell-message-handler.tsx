@@ -128,7 +128,8 @@ export function UpsellMessageHandler() {
             isProcessing.current = false;
         };
 
-        const intervalId = setInterval(processUpsellQueue, 60 * 1000);
+        // Interval increased to 5 minutes to save Firebase credits
+        const intervalId = setInterval(processUpsellQueue, 5 * 60 * 1000);
         processUpsellQueue();
         return () => clearInterval(intervalId);
 
