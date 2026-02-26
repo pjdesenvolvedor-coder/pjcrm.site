@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -27,6 +28,7 @@ import {
   StickyNote,
   Briefcase,
   Rocket,
+  Activity,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -209,6 +211,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         estoque: false,
         notes: false,
         pix: false,
+        usage: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -811,6 +814,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}>
                                         <Link href="/settings/alerts"><AlertTriangle />Alertas</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )}
+                              {userProfile?.role === 'Admin' && (
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}>
+                                        <Link href="/settings/usage"><Activity />Uso do Firebase</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               )}

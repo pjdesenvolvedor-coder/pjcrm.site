@@ -14,6 +14,7 @@ export type UserPermissions = {
   estoque: boolean;
   notes: boolean;
   pix: boolean;
+  usage: boolean;
 };
 
 export type UserProfile = {
