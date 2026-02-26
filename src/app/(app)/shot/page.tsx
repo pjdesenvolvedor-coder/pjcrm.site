@@ -56,7 +56,6 @@ export default function ShotPage() {
     const delayValue = delay[0] * 10;
 
     try {
-      // Usando a rota interna de API para evitar erros de CORS e usar o webhook correto
       const response = await fetch('/api/send-shot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

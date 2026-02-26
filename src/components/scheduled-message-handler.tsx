@@ -7,13 +7,13 @@ import type { ScheduledMessage, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { addDays } from 'date-fns';
 
-// Este componente lida com o envio de mensagens agendadas e controla erros de repetição.
 export function ScheduledMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const processingRef = useRef(new Set<string>());
     const lastErrorTimeRef = useRef<number>(0);
-    const ERROR_THROTTLE_MS = 60000; // Mostra apenas um erro a cada 1 minuto
+    const quotaExceededRef = useRef<boolean>(false);
+    const ERROR_THROTTLE_MS = 300000; // Mostra apenas um erro a cada 5 minutos em caso de cota
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -37,6 +37,13 @@ export function ScheduledMessageHandler() {
 
     useEffect(() => {
         const checkScheduledMessages = () => {
+            // Se já detectamos cota excedida recentemente, esperamos o reset
+            if (quotaExceededRef.current) {
+                const now = Date.now();
+                if (now - lastErrorTimeRef.current < ERROR_THROTTLE_MS) return;
+                quotaExceededRef.current = false;
+            }
+
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
             }
@@ -50,9 +57,7 @@ export function ScheduledMessageHandler() {
             const STALE_TIMEOUT_MS = 5 * 60 * 1000;
 
             const processMessage = async (msg: ScheduledMessage) => {
-                if (processingRef.current.has(msg.id)) {
-                    return;
-                }
+                if (processingRef.current.has(msg.id)) return;
                 
                 const messageDocRef = doc(firestore, 'users', user.uid, 'scheduled_messages', msg.id);
                 
@@ -106,10 +111,6 @@ export function ScheduledMessageHandler() {
                             status: 'Scheduled',
                             claimedAt: null,
                         }, { merge: true });
-                        toast({
-                            title: "Mensagem recorrente reagendada.",
-                            description: `A mensagem para o grupo foi enviada e repetirá amanhã.`,
-                        });
                     } else {
                         setDocumentNonBlocking(messageDocRef, { status: 'Sent', claimedAt: null }, { merge: true });
                         toast({
@@ -119,20 +120,21 @@ export function ScheduledMessageHandler() {
                     }
 
                 } catch (error: any) {
-                    if (!error.message.includes("already being processed") && !error.message.includes("not due yet") && !error.message.includes("deleted")) {
-                        console.error("Failed to send scheduled message:", error);
-                        
+                    const isQuota = error.message?.includes("Quota exceeded") || error.code === 'resource-exhausted';
+                    
+                    if (isQuota) {
+                        quotaExceededRef.current = true;
                         const currentTime = Date.now();
                         if (currentTime - lastErrorTimeRef.current > ERROR_THROTTLE_MS) {
                             toast({
                                 variant: "destructive",
-                                title: "Erro no Agendamento",
-                                description: error.message.includes("Quota exceeded") 
-                                    ? "Limite de uso do banco de dados atingido (Quota exceeded). Aguarde a renovação diária do sistema."
-                                    : error.message || "Erro ao processar mensagem agendada.",
+                                title: "Cota de Uso Atingida",
+                                description: "O limite gratuito do banco de dados foi atingido. As automações voltarão a funcionar em breve.",
                             });
                             lastErrorTimeRef.current = currentTime;
                         }
+                    } else if (!error.message.includes("already being processed") && !error.message.includes("not due yet") && !error.message.includes("deleted")) {
+                        console.error("Failed to send scheduled message:", error);
                     }
                 } finally {
                     processingRef.current.delete(msg.id);
@@ -144,7 +146,7 @@ export function ScheduledMessageHandler() {
             }
         };
         
-        const intervalId = setInterval(checkScheduledMessages, 30 * 1000);
+        const intervalId = setInterval(checkScheduledMessages, 60 * 1000);
         checkScheduledMessages();
         return () => clearInterval(intervalId);
 
