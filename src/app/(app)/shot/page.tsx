@@ -56,9 +56,8 @@ export default function ShotPage() {
     const delayValue = delay[0] * 10;
 
     try {
-      const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/eaad39ed-3dd9-4b20-a061-c45530b71e87';
-      
-      const response = await fetch(webhookUrl, {
+      // Usando a rota interna de API para evitar erros de CORS e usar o webhook correto
+      const response = await fetch('/api/send-shot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -70,8 +69,8 @@ export default function ShotPage() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Falha no webhook: ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Falha ao enviar disparo.');
       }
       
       toast({ title: 'Disparo Enviado!', description: `Sua mensagem está sendo enviada para os números fornecidos.` });
@@ -79,8 +78,8 @@ export default function ShotPage() {
       setNumbers('');
 
     } catch (error: any) {
-      console.error('Webhook error:', error);
-      toast({ variant: 'destructive', title: 'Erro no Envio', description: error.message || 'Não foi possível se comunicar com o webhook.' });
+      console.error('Shot error:', error);
+      toast({ variant: 'destructive', title: 'Erro no Envio', description: error.message || 'Não foi possível realizar o disparo.' });
     } finally {
       setIsSending(false);
     }
