@@ -1,7 +1,6 @@
- homeland
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { doc, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
@@ -107,7 +106,7 @@ export default function SystemAlertsPage() {
                       Modo de Manutenção Crítica
                   </CardTitle>
                   <CardDescription>
-                      Ao ativar esta opção, o sistema exibirá uma tela fosca para TODOS os usuários, impedindo qualquer ação. Use isso quando as cotas diárias esgotarem ou para atualizações.
+                      Ao ativar esta opção, o sistema exibirá uma tela fosca para TODOS os agentes, impedindo qualquer ação. O Administrador continuará tendo acesso para desativar esta opção.
                   </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
@@ -121,7 +120,7 @@ export default function SystemAlertsPage() {
                         <div className="flex-1 space-y-1">
                           <FormLabel className="text-base font-bold">Bloquear Todo o Sistema</FormLabel>
                           <p className="text-sm text-muted-foreground">
-                            Ative para travar a navegação e exibir o aviso global.
+                            Ative para travar a navegação dos usuários e exibir o aviso global.
                           </p>
                         </div>
                         <FormControl>

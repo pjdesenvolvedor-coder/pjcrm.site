@@ -3,57 +3,51 @@
 import { useState, useEffect } from 'react';
 import { doc } from 'firebase/firestore';
 import { useFirebase, useDoc, useMemoFirebase, useUser } from '@/firebase';
-import { AlertTriangle, Clock, Settings, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { AlertTriangle, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { SystemAlert as SystemAlertType, UserProfile } from '@/lib/types';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 
 /**
  * Componente de Alerta e Bloqueio Global.
  * Se o alerta estiver ativo (isActive), exibe uma tela fosca que impede a interação.
- * Admins podem ver um botão para acessar as configurações e desativar o bloqueio.
+ * O Administrador NUNCA vê este bloqueio, garantindo que ele sempre possa gerenciar o sistema.
  */
 export function SystemAlert() {
   const { firestore } = useFirebase();
   const { user } = useUser();
-  const pathname = usePathname();
   const [isVisible, setIsOpen] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
-  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+  
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
   const alertDocRef = useMemoFirebase(() => {
     if (!firestore) return null;
     return doc(firestore, 'system_alerts', 'current');
   }, [firestore]);
 
-  const { data: alertData, isLoading } = useDoc<SystemAlertType>(alertDocRef);
+  const { data: alertData, isLoading: isAlertLoading } = useDoc<SystemAlertType>(alertDocRef);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isAlertLoading) return;
 
     if (alertData && alertData.isActive) {
       setIsOpen(true);
     } else {
       setIsOpen(false);
     }
-  }, [alertData, isLoading]);
+  }, [alertData, isAlertLoading]);
 
-  if (isLoading || !isVisible) {
+  // Se ainda estiver carregando ou o alerta não estiver ativo, não mostra nada
+  if (isAlertLoading || isProfileLoading || !isVisible) {
     return null;
   }
 
-  const isAdmin = userProfile?.role === 'Admin';
-  const isAtSettings = pathname === '/settings/alerts';
-
-  // Se for admin e já estiver na página de configurações, não bloqueia a visão
-  // para que ele possa desativar o switch.
-  if (isAdmin && isAtSettings) {
+  // Se o usuário for Administrador, ele ignora o bloqueio
+  if (userProfile?.role === 'Admin') {
     return null;
   }
 
@@ -87,16 +81,6 @@ export function SystemAlert() {
               Para garantir a segurança dos seus dados e evitar perda de informações, o acesso foi pausado temporariamente.
             </p>
           </div>
-
-          {isAdmin && (
-            <Button asChild variant="outline" className="w-full gap-2 border-primary/30 hover:bg-primary/10">
-                <Link href="/settings/alerts">
-                    <Settings className="h-4 w-4" />
-                    Ir para Painel Administrativo
-                    <ArrowRight className="h-4 w-4 ml-auto" />
-                </Link>
-            </Button>
-          )}
 
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-semibold">
             Status: Manual Maintenance Mode
