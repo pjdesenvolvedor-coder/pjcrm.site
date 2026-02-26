@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Activity, BarChart3, ExternalLink, Info, ShieldCheck, Zap, DollarSign, TrendingDown, CreditCard } from 'lucide-react';
+import { Activity, BarChart3, ExternalLink, Info, ShieldCheck, Zap, DollarSign, TrendingDown, CreditCard, Clock } from 'lucide-react';
 import { firebaseConfig } from '@/firebase/config';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -27,6 +27,19 @@ export default function FirebaseUsagePage() {
             O erro "Quota Exceeded" acontece porque o Google bloqueia o uso gratuito após 50 mil leituras. Fazer o upgrade para o Plano Blaze resolve isso imediatamente.
           </AlertDescription>
         </Alert>
+
+        <Card className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400 text-base">
+              <Clock className="h-5 w-5" />
+              Atenção ao Reset da Cota
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm space-y-2">
+            <p>O limite diário <strong>não reseta à meia-noite do Brasil</strong>.</p>
+            <p>O Firebase segue o <strong>Horário do Pacífico (EUA)</strong>. No horário de Brasília, o reset costuma acontecer entre <strong>04:00 e 05:00 da manhã</strong>.</p>
+          </CardContent>
+        </Card>
 
         <Card className="border-primary bg-primary/5 shadow-lg overflow-hidden">
           <CardHeader className="bg-primary text-primary-foreground">
@@ -66,7 +79,7 @@ export default function FirebaseUsagePage() {
                 <BarChart3 className="h-5 w-5 text-primary" />
                 Limites do Plano Spark (Grátis)
               </CardTitle>
-              <CardDescription>Limites gratuitos que resetam todo dia à meia-noite.</CardDescription>
+              <CardDescription>Limites gratuitos que resetam todo dia.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -130,39 +143,6 @@ export default function FirebaseUsagePage() {
             </CardContent>
           </Card>
         </div>
-
-        <Card className="border-primary/50 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              Otimizações de Economia Ativas
-            </CardTitle>
-            <CardDescription>O sistema já está configurado para consumir o mínimo possível.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid md:grid-cols-3 gap-4">
-            <div className="flex items-start gap-3 text-sm p-3 bg-background rounded-lg border shadow-sm">
-              <ShieldCheck className="h-5 w-5 text-green-500 shrink-0" />
-              <div>
-                <p className="font-bold">WhatsApp: 10s</p>
-                <p className="text-muted-foreground text-xs">Verificação de conexão reduzida.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 text-sm p-3 bg-background rounded-lg border shadow-sm">
-              <TrendingDown className="h-5 w-5 text-green-500 shrink-0" />
-              <div>
-                <p className="font-bold">Automações: 5m</p>
-                <p className="text-muted-foreground text-xs">Buscas no banco a cada 5 minutos.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 text-sm p-3 bg-background rounded-lg border shadow-sm">
-              <Activity className="h-5 w-5 text-green-500 shrink-0" />
-              <div>
-                <p className="font-bold">Cache Local</p>
-                <p className="text-muted-foreground text-xs">Priorizamos dados salvos no navegador.</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </main>
     </div>
   );
