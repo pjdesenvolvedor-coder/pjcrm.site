@@ -2,22 +2,30 @@
 
 import { useState, useEffect } from 'react';
 import { doc } from 'firebase/firestore';
-import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
-import { AlertTriangle } from 'lucide-react';
+import { useFirebase, useDoc, useMemoFirebase, useUser } from '@/firebase';
+import { AlertTriangle, Clock, Settings, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import type { SystemAlert as SystemAlertType } from '@/lib/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { SystemAlert as SystemAlertType, UserProfile } from '@/lib/types';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
+/**
+ * Componente de Alerta e Bloqueio Global.
+ * Se o alerta estiver ativo (isActive), exibe uma tela fosca que impede a interação.
+ * Admins podem ver um botão para acessar as configurações e desativar o bloqueio.
+ */
 export function SystemAlert() {
   const { firestore } = useFirebase();
-  const [isOpen, setIsOpen] = useState(false);
+  const { user } = useUser();
+  const pathname = usePathname();
+  const [isVisible, setIsOpen] = useState(false);
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
   const alertDocRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -27,54 +35,74 @@ export function SystemAlert() {
   const { data: alertData, isLoading } = useDoc<SystemAlertType>(alertDocRef);
 
   useEffect(() => {
-    if (isLoading) {
-      return; // Wait until loading is complete
-    }
+    if (isLoading) return;
 
     if (alertData && alertData.isActive) {
-      const dismissedAlertId = localStorage.getItem('dismissedAlertId');
-      if (alertData.instanceId !== dismissedAlertId) {
-        setIsOpen(true);
-      } else {
-        setIsOpen(false); // Ensure it's closed if ID matches
-      }
+      setIsOpen(true);
     } else {
-      setIsOpen(false); // Ensure it's closed if alert is inactive or doesn't exist
+      setIsOpen(false);
     }
   }, [alertData, isLoading]);
 
-  const handleDismissPermanently = () => {
-    if (alertData) {
-      localStorage.setItem('dismissedAlertId', alertData.instanceId);
-    }
-    setIsOpen(false);
-  };
+  if (isLoading || !isVisible) {
+    return null;
+  }
 
-  if (isLoading) {
-    return null; // Don't render anything while loading to prevent flashes
+  const isAdmin = userProfile?.role === 'Admin';
+  const isAtSettings = pathname === '/settings/alerts';
+
+  // Se for admin e já estiver na página de configurações, não bloqueia a visão
+  // para que ele possa desativar o switch.
+  if (isAdmin && isAtSettings) {
+    return null;
   }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-yellow-500" />
-            Aviso Importante
-          </AlertDialogTitle>
-          {alertData?.message && (
-            <AlertDialogDescription className="pt-4 text-base text-foreground whitespace-pre-wrap">
-              {alertData.message}
-            </AlertDialogDescription>
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-background/60 backdrop-blur-md p-4 animate-in fade-in duration-500">
+      <Card className="max-w-md w-full shadow-2xl border-2 border-primary/50 overflow-hidden">
+        <div className="h-2 bg-primary animate-pulse" />
+        <CardHeader className="text-center pb-2 pt-8">
+          <div className="flex justify-center mb-4">
+            <div className="bg-primary/10 p-4 rounded-full">
+              <AlertTriangle className="h-12 w-12 text-primary animate-bounce" />
+            </div>
+          </div>
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
+            Atualização do Sistema
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-center space-y-6 px-8 pb-10">
+          <div className="space-y-2">
+            <p className="text-muted-foreground text-lg whitespace-pre-wrap">
+              {alertData?.message || "O sistema está passando por uma manutenção programada."}
+            </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-muted rounded-full text-primary font-bold">
+              <Clock className="h-5 w-5" />
+              <span>Aguarde até 00:01</span>
+            </div>
+          </div>
+          
+          <div className="text-sm text-muted-foreground leading-relaxed bg-accent/50 p-4 rounded-lg border border-border">
+            <p>
+              Para garantir a segurança dos seus dados e evitar perda de informações, o acesso foi pausado temporariamente.
+            </p>
+          </div>
+
+          {isAdmin && (
+            <Button asChild variant="outline" className="w-full gap-2 border-primary/30 hover:bg-primary/10">
+                <Link href="/settings/alerts">
+                    <Settings className="h-4 w-4" />
+                    Ir para Painel Administrativo
+                    <ArrowRight className="h-4 w-4 ml-auto" />
+                </Link>
+            </Button>
           )}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <Button variant="outline" onClick={handleDismissPermanently}>
-            Não exibir novamente
-          </Button>
-          <Button onClick={() => setIsOpen(false)}>Fechar</Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground/50 font-semibold">
+            Status: Manual Maintenance Mode
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

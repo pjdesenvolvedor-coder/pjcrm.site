@@ -1,3 +1,4 @@
+ homeland
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,7 +12,7 @@ import type { SystemAlert } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -62,8 +63,10 @@ export default function SystemAlertsPage() {
       };
       setDocumentNonBlocking(alertDocRef, newAlertData, { merge: false });
       toast({
-        title: 'Alerta Salvo!',
-        description: 'O aviso do sistema foi atualizado com sucesso.',
+        title: data.isActive ? 'Sistema Bloqueado!' : 'Bloqueio Removido!',
+        description: data.isActive 
+            ? 'O modo de manutenção foi ativado para todos os usuários.' 
+            : 'O sistema foi liberado para uso normal.',
       });
     }
   };
@@ -72,8 +75,8 @@ export default function SystemAlertsPage() {
     return (
       <div className="flex flex-col h-full">
         <PageHeader
-          title="Configuração do Alerta Global"
-          description="Crie um aviso que será exibido para todos os usuários ao acessarem o sistema."
+          title="Manutenção e Bloqueio Global"
+          description="Controle o acesso geral ao sistema."
         />
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <Card>
@@ -91,25 +94,34 @@ export default function SystemAlertsPage() {
   return (
     <div className="flex flex-col h-full">
        <PageHeader
-        title="Configuração do Alerta Global"
-        description="Crie um aviso que será exibido para todos os usuários ao acessarem o sistema."
+        title="Manutenção e Bloqueio Global"
+        description="Controle o acesso geral ao sistema."
       />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <Card>
+            <Card className="border-destructive/20">
+              <CardHeader className="bg-destructive/5">
+                  <CardTitle className="flex items-center gap-2 text-destructive">
+                      <ShieldAlert className="h-5 w-5" />
+                      Modo de Manutenção Crítica
+                  </CardTitle>
+                  <CardDescription>
+                      Ao ativar esta opção, o sistema exibirá uma tela fosca para TODOS os usuários, impedindo qualquer ação. Use isso quando as cotas diárias esgotarem ou para atualizações.
+                  </CardDescription>
+              </CardHeader>
               <CardContent className="pt-6 space-y-6">
                 <FormField
                   control={form.control}
                   name="isActive"
                   render={({ field }) => (
                     <FormItem>
-                      <div className="flex items-center space-x-4 rounded-md border p-4">
+                      <div className="flex items-center space-x-4 rounded-md border p-4 bg-background">
                         <AlertTriangle className="h-6 w-6 text-destructive" />
                         <div className="flex-1 space-y-1">
-                          <FormLabel className="text-base">Ativar Alerta Global</FormLabel>
+                          <FormLabel className="text-base font-bold">Bloquear Todo o Sistema</FormLabel>
                           <p className="text-sm text-muted-foreground">
-                            Habilite para exibir a mensagem para todos os usuários.
+                            Ative para travar a navegação e exibir o aviso global.
                           </p>
                         </div>
                         <FormControl>
@@ -128,10 +140,10 @@ export default function SystemAlertsPage() {
                   name="message"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Mensagem do Alerta</FormLabel>
+                      <FormLabel>Mensagem Exibida no Bloqueio</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Digite o aviso aqui..."
+                          placeholder="Ex: Atualização do sistema. Aguarde até 00:01..."
                           className="min-h-40"
                           {...field}
                         />
@@ -141,8 +153,13 @@ export default function SystemAlertsPage() {
                   )}
                 />
                 
-                <Button type="submit" disabled={form.formState.isSubmitting}>
-                  Salvar e Publicar Alerta
+                <Button 
+                    type="submit" 
+                    variant={form.watch('isActive') ? 'destructive' : 'default'}
+                    className="w-full md:w-auto"
+                    disabled={form.formState.isSubmitting}
+                >
+                  {form.watch('isActive') ? 'Ativar Bloqueio Agora' : 'Salvar e Liberar Sistema'}
                 </Button>
               </CardContent>
             </Card>
