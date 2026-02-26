@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -17,17 +18,16 @@ import {
   Send,
   CreditCard,
   ChevronRight,
-  Settings as SettingsIcon, // Renamed to avoid conflict
+  Settings as SettingsIcon,
   Contact,
   Package,
   LifeBuoy,
-  Construction,
   Warehouse,
   AlertTriangle,
   StickyNote,
   Briefcase,
-  Rocket,
   Activity,
+  ShieldAlert,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -70,7 +70,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where, getDocs, limit, writeBatch, deleteDoc, runTransaction, getDoc } from 'firebase/firestore';
+import { doc, collection, query, where } from 'firebase/firestore';
 import type { UserProfile, Settings, Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -80,6 +80,7 @@ import { DueDateMessageHandler } from '@/components/due-date-message-handler';
 import { UpsellMessageHandler } from '@/components/upsell-message-handler';
 import { SubscriptionTimer } from '@/components/SubscriptionTimer';
 import { SystemAlert } from '@/components/SystemAlert';
+import { SystemNotification } from '@/components/SystemNotification';
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -268,15 +269,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (settings?.webhookToken) {
-      fetchStatus(); // Initial fetch
-      const intervalId = setInterval(fetchStatus, 10000); // Polling interval increased to 10s to save resources
+      fetchStatus();
+      const intervalId = setInterval(fetchStatus, 10000);
       return () => clearInterval(intervalId);
     }
   }, [settings?.webhookToken, fetchStatus]);
 
   useEffect(() => {
     if (!isZapConnectOpen) {
-      // Reset dialog-specific state when it closes
       setTimeout(() => {
         setConnectionStatus('disconnected');
         setQrCode(null);
@@ -345,7 +345,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         toast({
             variant: 'destructive',
             title: 'Token não encontrado',
-            description: 'Seu token de autenticação não foi configurado. Isso deve acontecer automaticamente após a assinatura.',
+            description: 'Seu token de autenticação não foi configurado.',
         });
         setConnectionStatus('error');
         return;
@@ -357,15 +357,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
         const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: settings.webhookToken }),
         });
 
-        if (!response.ok) {
-            throw new Error('A resposta da rede não foi boa.');
-        }
+        if (!response.ok) throw new Error('Falha na resposta do webhook.');
 
         const data = await response.json();
         const qrCodeValue = data.qrcode;
@@ -373,65 +369,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (qrCodeValue) {
             setQrCode(qrCodeValue.startsWith('data:image') ? qrCodeValue : `data:image/png;base64,${qrCodeValue}`);
             setConnectionStatus('qr_code');
-            toast({
-                title: 'QR Code Pronto!',
-                description: 'Escaneie o código com seu WhatsApp para conectar.',
-            });
+            toast({ title: 'QR Code Pronto!', description: 'Escaneie para conectar.' });
         } else {
-            throw new Error('A resposta do webhook não continha um QR code válido.');
+            throw new Error('QR code inválido.');
         }
-
     } catch (error: any) {
-        console.error('Falha ao conectar:', error);
+        console.error(error);
         setConnectionStatus('error');
-        toast({
-            variant: 'destructive',
-            title: 'Falha na Conexão',
-            description: error.message || 'Não foi possível obter o QR code do webhook.',
-        });
+        toast({ variant: 'destructive', title: 'Falha na Conexão', description: error.message });
     }
   };
   
   const handleDisconnect = async () => {
-    if (!settings?.webhookToken) {
-        toast({
-            variant: 'destructive',
-            title: 'Token não encontrado',
-            description: 'Não é possível desconectar sem um token de autenticação.',
-        });
-        return;
-    }
-
+    if (!settings?.webhookToken) return;
     setIsDisconnecting(true);
     try {
-        const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+        await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: settings.webhookToken }),
         });
-
-        if (!response.ok) {
-            throw new Error('A resposta da rede não foi boa ao desconectar.');
-        }
-
-        toast({
-            title: 'Desconectado!',
-            description: 'Sua sessão do WhatsApp foi encerrada.',
-        });
+        toast({ title: 'Desconectado!' });
         setLiveStatus({ status: 'disconnected' });
-        // Reset the main dialog view
         setConnectionStatus('disconnected');
         setQrCode(null);
-
     } catch (error: any) {
-        console.error('Falha ao desconectar:', error);
-        toast({
-            variant: 'destructive',
-            title: 'Falha ao Desconectar',
-            description: error.message || 'Não foi possível encerrar a conexão.',
-        });
+        toast({ variant: 'destructive', title: 'Falha ao Desconectar' });
     } finally {
         setIsDisconnecting(false);
     }
@@ -442,7 +405,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
           <Loader2 className="h-16 w-16 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground mt-4">Aguardando QR code...</p>
+          <p className="text-sm text-muted-foreground mt-4">Gerando QR code...</p>
         </div>
       );
     }
@@ -450,127 +413,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
           <Badge variant="default" className="py-1 px-3 bg-blue-100 text-blue-800">
-            <QrCode className="h-4 w-4 mr-2" />
-            Pronto para escanear
+            <QrCode className="h-4 w-4 mr-2" /> Pronto para escanear
           </Badge>
-          <p className="text-sm text-muted-foreground">Abra o WhatsApp e escaneie o código abaixo.</p>
           <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
-            <Image src={qrCode} alt="QR Code do WhatsApp" width={220} height={220} data-ai-hint="qr code"/>
+            <Image src={qrCode} alt="QR Code" width={220} height={220} data-ai-hint="qr code"/>
           </div>
-          <p className="text-lg font-semibold text-muted-foreground animate-pulse">
-            Aguardando conexão...
-          </p>
+          <p className="text-lg font-semibold text-muted-foreground animate-pulse">Aguardando conexão...</p>
         </div>
       );
     }
-     if (connectionStatus === 'error') {
-      return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="destructive" className="py-1 px-3">
-            <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
-            Falha na conexão
-          </Badge>
-          <p className="text-sm text-muted-foreground">Não foi possível conectar. Tente novamente.</p>
-        </div>
-      );
-    }
-
     if (liveStatus?.status === 'connected') {
       return (
         <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="default" className="py-1 px-3 bg-green-100 text-green-800">
-            <div className="h-2 w-2 mr-2 rounded-full bg-green-500 animate-pulse"></div>
-            Conectado
-          </Badge>
-          {liveStatus.profilePicUrl ? (
-            <Image 
-                src={liveStatus.profilePicUrl} 
-                alt="Foto de Perfil" 
-                width={96} 
-                height={96} 
-                className="rounded-full my-4 border-4 border-background shadow-lg"
-                data-ai-hint="person avatar"
-            />
-          ) : (
-            <div className="w-24 h-24 my-4 rounded-full bg-muted flex items-center justify-center">
-              <UserCircle className="w-16 h-16 text-muted-foreground" />
-            </div>
-          )}
-          <p className="font-semibold text-lg">{liveStatus.profileName || 'Nome não disponível'}</p>
-           <Button
-              type="button"
-              variant="destructive"
-              className="mt-4 animate-pulse-destructive"
-              onClick={handleDisconnect}
-              disabled={isDisconnecting}
-            >
-              {isDisconnecting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Desconectando...
-                </>
-              ) : (
-                <>
-                  <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
-                  Desconectar
-                </>
-              )}
+          <Badge variant="default" className="py-1 px-3 bg-green-100 text-green-800">Conectado</Badge>
+          {liveStatus.profilePicUrl && <Image src={liveStatus.profilePicUrl} alt="Foto" width={96} height={96} className="rounded-full my-4 shadow-lg" />}
+          <p className="font-semibold text-lg">{liveStatus.profileName}</p>
+           <Button variant="destructive" onClick={handleDisconnect} disabled={isDisconnecting}>
+              {isDisconnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : "Desconectar"}
             </Button>
         </div>
       );
     }
-
-    if (!liveStatus || liveStatus.status === 'disconnected') {
-       return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="destructive" className="py-1 px-3">
-            <div className="h-2 w-2 mr-2 rounded-full bg-red-500"></div>
-            Desconectado
-          </Badge>
-          <p className="text-sm text-muted-foreground">
-            Clique em 'Conectar' para parear com o WhatsApp.
-          </p>
-          <div className="w-40 h-40 bg-gradient-to-br from-muted/30 to-muted/10 rounded-lg flex items-center justify-center my-4">
-            <Zap className="h-20 w-20 text-muted-foreground/20" />
-          </div>
-        </div>
-      );
-    }
-    
-    // Fallback for connecting status or other intermediate states
     return (
-       <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-         <Loader2 className="h-16 w-16 text-primary animate-spin" />
-         <p className="text-sm text-muted-foreground mt-4">Verificando status...</p>
-       </div>
-     );
-
+        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
+          <Badge variant="destructive" className="py-1 px-3">Desconectado</Badge>
+          <p className="text-sm text-muted-foreground">Clique em 'Conectar' para parear.</p>
+          <div className="w-40 h-40 bg-muted/20 rounded-lg flex items-center justify-center my-4"><Zap className="h-20 w-20 text-muted-foreground/20" /></div>
+        </div>
+    );
   };
 
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
       {userProfile?.status === 'blocked' && <BlockedOverlay />}
-      {showExpiredOverlay && <ExpirationOverlay />}
       <SystemAlert />
-      <Sidebar
-        variant="sidebar"
-        collapsible="icon"
-        className="border-r border-sidebar-border"
-      >
+      <Sidebar variant="sidebar" collapsible="icon">
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <Image
-              src="https://i.imgur.com/sgoiuiz.png"
-              alt="EMPREENDIMENTOS Logo"
-              width={32}
-              height={32}
-              className="w-8 h-8"
-              data-ai-hint="logo"
-            />
-            <span className="text-lg font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              EMPREENDIMENTOS - CRM
-            </span>
+            <Image src="https://i.imgur.com/sgoiuiz.png" alt="Logo" width={32} height={32} className="w-8 h-8" />
+            <span className="text-lg font-semibold group-data-[collapsible=icon]:hidden">EMPREENDIMENTOS - CRM</span>
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -578,7 +460,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <SidebarMenu>
               {permissions.dashboard && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip={{ children: 'Início' }}>
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Início">
                         <Link href="/dashboard"><Home /><span>Início</span></Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -588,31 +470,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                   <Collapsible>
                       <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Clientes'}}>
-                              <div className="flex items-center gap-2">
-                                  <Contact />
-                                  <span>Clientes</span>
-                              </div>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Clientes">
+                              <div className="flex items-center gap-2"><Contact /><span>Clientes</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/customers'}><Link href="/customers">Todos os Clientes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/customers')}>
-                                      <Link href="/customers">Todos os Clientes</Link>
-                                  </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                              <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/support')}>
-                                      <Link href="/support">
-                                          <span>Suporte</span>
-                                          {supportCount > 0 && (
-                                              <Badge variant="secondary" className="ml-auto h-5 w-5 flex items-center justify-center p-0">
-                                                  {supportCount}
-                                              </Badge>
-                                          )}
-                                      </Link>
+                                  <SidebarMenuSubButton asChild isActive={pathname === '/support'}>
+                                      <Link href="/support"><span>Suporte</span>{supportCount > 0 && <Badge variant="secondary" className="ml-auto">{supportCount}</Badge>}</Link>
                                   </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
                           </SidebarMenuSub>
@@ -621,49 +489,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
               
-              {permissions.inbox && (
-                <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/inbox'} tooltip={{ children: 'E-Mail Temporário' }}>
-                        <Link href="/inbox">
-                            <Mail />
-                            <span>E-Mail Temporário</span>
-                             <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
-                                Em Breve
-                            </Badge>
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-              
               {permissions.automations && (
                 <SidebarMenuItem>
                   <Collapsible>
                       <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Automações'}}>
-                              <div className="flex items-center gap-2">
-                                  <Bot />
-                                  <span>Automações</span>
-                              </div>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Automações">
+                              <div className="flex items-center gap-2"><Bot /><span>Automações</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/due-date')}>
-                                        <Link href="/automations/due-date">Vencimento</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/remarketing')}>
-                                        <Link href="/automations/remarketing">Remarketing</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/automations/upsell')}>
-                                        <Link href="/automations/upsell">Upsell</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/due-date'}><Link href="/automations/due-date">Vencimento</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Upsell</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
@@ -674,31 +513,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                   <Collapsible>
                       <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Grupos'}}>
-                              <div className="flex items-center gap-2">
-                                  <Users />
-                                  <span>Grupos</span>
-                              </div>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Grupos">
+                              <div className="flex items-center gap-2"><Users /><span>Grupos</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/get-jid')}>
-                                        <Link href="/groups/get-jid">Obter JID Grupo</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/extract-members')}>
-                                        <Link href="/groups/extract-members">Extrair Membros</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/groups/schedule-message')}>
-                                        <Link href="/groups/schedule-message">Agendar Mensagem</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/groups/get-jid'}><Link href="/groups/get-jid">Obter JID Grupo</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/groups/extract-members'}><Link href="/groups/extract-members">Extrair Membros</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/groups/schedule-message'}><Link href="/groups/schedule-message">Agendar Mensagem</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
@@ -707,81 +531,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.shot && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname.startsWith('/shot')} tooltip={{ children: 'Disparo' }}>
+                  <SidebarMenuButton asChild isActive={pathname === '/shot'} tooltip="Disparo">
                     <Link href="/shot"><Send /><span>Disparo</span></Link>
                   </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-               {permissions.pix && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname.startsWith('/pix')} tooltip={{ children: 'Gerar Pix' }}>
-                    <Link href="/pix"><CreditCard /><span>Gerar Pix</span></Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
-              {permissions.notes && (
-                <SidebarMenuItem>
-                  <Collapsible>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Notas'}}>
-                              <div className="flex items-center gap-2">
-                                  <StickyNote />
-                                  <span>Notas</span>
-                              </div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                              <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/notes/tasks')}>
-                                      <Link href="/notes/tasks">Tarefas</Link>
-                                  </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                              <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/notes/ads')}>
-                                      <Link href="/notes/ads">Anúncios</Link>
-                                  </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
-              
-              {permissions.estoque && (
-                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname.startsWith('/estoque')} tooltip={{ children: 'Estoque' }}>
-                        <Link href="/estoque">
-                            <Warehouse />
-                            <span>Estoque</span>
-                            <Badge variant="outline" className="ml-auto text-xs border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 group-data-[collapsible=icon]:hidden">
-                                Em Breve
-                            </Badge>
-                        </Link>
-                    </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
 
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip={{ children: 'ZapConexão' }}>
-                      <Zap />
-                      <span className="flex-1">ZapConexão</span>
+                    <SidebarMenuButton tooltip="ZapConexão">
+                      <Zap /><span className="flex-1">ZapConexão</span>
                       <div className="group-data-[collapsible=icon]:hidden">
-                        {liveStatus?.status === 'connected' ? (
-                          <Badge variant="secondary" className="py-0.5 px-2 text-xs font-medium bg-green-100 text-green-800 border-green-200">
-                            <div className="h-2 w-2 mr-1 rounded-full bg-green-500 animate-pulse"></div>
-                            Conectado
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="py-0.5 px-2 text-xs font-medium">
-                            <div className="h-2 w-2 mr-1 rounded-full bg-red-500"></div>
-                            Desconectado
-                          </Badge>
-                        )}
+                        {liveStatus?.status === 'connected' ? <Badge variant="secondary" className="bg-green-100 text-green-800">Conectado</Badge> : <Badge variant="destructive">Desconectado</Badge>}
                       </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -792,65 +554,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                   <Collapsible>
                       <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip={{children: 'Configurações'}}>
-                              <div className="flex items-center gap-2">
-                                  <SettingsIcon />
-                                  <span>Configurações</span>
-                              </div>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
+                              <div className="flex items-center gap-2"><SettingsIcon /><span>Configurações</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
                               {userProfile?.role === 'Admin' && (
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}>
-                                        <Link href="/settings/tokens"><Package />Estoque de Tokens</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
+                                <>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage"><Activity />Uso do Firebase</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                </>
                               )}
-                              {userProfile?.role === 'Admin' && (
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}>
-                                        <Link href="/settings/alerts"><AlertTriangle />Alertas</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                              {userProfile?.role === 'Admin' && (
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}>
-                                        <Link href="/settings/usage"><Activity />Uso do Firebase</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                              {permissions.settings && (
-                                <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/bms')}>
-                                    <Link href="/settings/bms"><Briefcase />BMs</Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                              {permissions.settings && (
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/subscriptions')}>
-                                        <Link href="/settings/subscriptions">Assinaturas</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                               {permissions.settings && (
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/settings/presets')}>
-                                        <Link href="/settings/presets">Predefinição</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                              {permissions.users && (
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname.startsWith('/users')}>
-                                        <Link href="/users">Gerenciamento de Usuários</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              {permissions.users && <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users">Usuários</Link></SidebarMenuSubButton></SidebarMenuSubItem>}
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
@@ -858,41 +579,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm">
-                <DialogHeader className="p-6 border-b">
-                    <div className="flex items-center gap-2">
-                        <Zap className="h-6 w-6 text-primary" />
-                        <DialogTitle className="text-xl font-bold">ZapConexão</DialogTitle>
-                    </div>
-                </DialogHeader>
-                
+                <DialogHeader className="p-6 border-b"><DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle></DialogHeader>
                 {renderContent()}
-
                 <DialogFooter className="p-6 border-t bg-muted/50">
-                  {(liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code') && (
-                    <Button
-                      type="button"
-                      className="w-full animate-pulse-primary"
-                      size="lg"
-                      onClick={handleConnect}
-                      disabled={isLoadingSettings || connectionStatus === 'connecting'}
-                    >
-                      {connectionStatus === 'connecting' ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Conectando...
-                        </>
-                      ) : connectionStatus === 'error' ? (
-                        <>
-                          <Zap className="h-4 w-4 mr-2" />
-                          Tentar Novamente
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-2" />
-                          Conectar
-                        </>
-                      )}
-                    </Button>
+                  {liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code' && (
+                    <Button className="w-full" size="lg" onClick={handleConnect} disabled={connectionStatus === 'connecting'}><Zap className="mr-2 h-4 w-4" />Conectar</Button>
                   )}
                 </DialogFooter>
             </DialogContent>
@@ -902,59 +593,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <div className="flex items-center gap-3 w-full cursor-pointer">
-                    {isProfileLoading ? (
-                        <Skeleton className="h-10 w-10 rounded-full" />
-                    ) : (
-                        <Image
-                        src={userAvatar}
-                        alt="Avatar do usuário"
-                        width={40}
-                        height={40}
-                        className="rounded-full"
-                        data-ai-hint="user avatar"
-                        />
-                    )}
+                    <Image src={userAvatar} alt="Avatar" width={40} height={40} className="rounded-full" />
                     <div className="flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
-                        {isProfileLoading ? (
-                            <div className='space-y-1'>
-                                <Skeleton className="h-4 w-24" />
-                                <Skeleton className="h-3 w-32" />
-                            </div>
-                        ) : (
-                            <>
-                                <p className="font-semibold text-sm truncate text-sidebar-foreground">
-                                    {userProfile?.firstName} {userProfile?.lastName}
-                                    {liveStatus?.status === 'connected' && liveStatus.profileName && ` - ${liveStatus.profileName}`}
-                                </p>
-                                <p className="text-xs truncate text-sidebar-foreground/70">{userProfile?.email}</p>
-                            </>
-                        )}
+                        <p className="font-semibold text-sm truncate">{userProfile?.firstName} {userProfile?.lastName}</p>
+                        <p className="text-xs truncate text-muted-foreground">{userProfile?.email}</p>
                     </div>
                 </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 mb-2" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{userProfile?.firstName} {userProfile?.lastName}</p>
-
-                    <p className="text-xs leading-none text-muted-foreground">
-                    {userProfile?.email}
-                    </p>
-                </div>
-                </DropdownMenuLabel>
+            <DropdownMenuContent className="w-56 mb-2" align="end">
+                <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/profile"><UserCircle className="mr-2 h-4 w-4" /><span>Perfil</span></Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSignOut}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Sair</span>
-                </DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="/profile"><UserCircle className="mr-2 h-4 w-4" />Perfil</Link></DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSignOut}><LogOut className="mr-2 h-4 w-4" />Sair</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset>
+        <SystemNotification />
+        {children}
+      </SidebarInset>
       <ScheduledMessageHandler />
       <DueDateMessageHandler />
       <UpsellMessageHandler />

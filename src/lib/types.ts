@@ -192,6 +192,12 @@ export type SystemAlert = {
   updatedAt: Timestamp;
 };
 
+export type SystemMaintenance = {
+  isActive: boolean;
+  message: string;
+  updatedAt: Timestamp;
+};
+
 export type AdCampaign = {
   id: string;
   userId: string;
