@@ -506,6 +506,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/due-date'}><Link href="/automations/due-date">Vencimento</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Upsell</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Suporte</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>

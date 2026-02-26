@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { format } from 'date-fns';
 
 
 function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Client; onSend: (message: string) => void; onCancel: () => void; isSending: boolean; }) {
@@ -76,14 +78,42 @@ export default function SupportPage() {
 
   const { data: supportClients, isLoading } = useCollection<Client>(supportClientsQuery);
 
-  const handleMarkAsCompleted = (client: Client) => {
-    if (!user) return;
+  const handleMarkAsCompleted = async (client: Client) => {
+    if (!user || !settings) return;
     const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
     setDocumentNonBlocking(docRef, { needsSupport: false }, { merge: true });
+    
     toast({
         title: "Suporte Concluído",
         description: `O cliente ${client.name} foi removido da lista de suporte.`,
     });
+
+    // Send automated message if active
+    if (settings.isSupportAutomationActive && settings.webhookToken && settings.supportFinishedMessage) {
+        let formattedMessage = settings.supportFinishedMessage
+            .replace(/{cliente}/g, client.name)
+            .replace(/{telefone}/g, client.phone)
+            .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : client.email)
+            .replace(/{assinatura}/g, client.subscription || '')
+            .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '')
+            .replace(/{valor}/g, client.amountPaid || '0,00')
+            .replace(/{status}/g, client.status);
+
+        try {
+            await fetch('/api/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: formattedMessage,
+                    phoneNumber: client.phone,
+                    token: settings.webhookToken,
+                }),
+            });
+            toast({ title: 'Automação: Mensagem Enviada', description: `Mensagem de conclusão enviada para ${client.name}.` });
+        } catch (e) {
+            console.error("Failed to send support finished automation message:", e);
+        }
+    }
   };
 
   const handleSendMessage = async (message: string) => {

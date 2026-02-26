@@ -150,6 +150,10 @@ export type Settings = {
   upsellDelayMinutes?: number; // Legacy
   upsellMessage?: string; // Legacy
   upsells?: UpsellConfig[];
+  // Support Automation
+  isSupportAutomationActive?: boolean;
+  supportStartedMessage?: string;
+  supportFinishedMessage?: string;
 };
 
 export type Subscription = {
