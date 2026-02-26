@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Campos obrigatórios ausentes' }, { status: 400 });
     }
 
-    // Webhook de produção atualizado
+    // Webhook de produção final atualizado (removido o -test)
     const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/eaad39ed-3dd9-4b20-a061-c45530b71e87';
 
     const webhookResponse = await fetch(webhookUrl, {

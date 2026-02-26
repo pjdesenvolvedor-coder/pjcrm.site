@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +9,7 @@ import type { SystemMaintenance, UserProfile } from '@/lib/types';
 
 /**
  * Componente de Bloqueio Total (Modo Manutenção).
- * Administradores NUNCA são bloqueados.
+ * O Administrador NUNCA vê este bloqueio para poder desativá-lo.
  */
 export function SystemAlert() {
   const { firestore } = useFirebase();
@@ -39,6 +38,7 @@ export function SystemAlert() {
     }
   }, [maintenanceData]);
 
+  // Se for Admin ou não estiver ativo, não mostra nada
   if (isLoading || !isVisible || userProfile?.role === 'Admin') {
     return null;
   }
