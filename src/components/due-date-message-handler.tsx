@@ -14,6 +14,7 @@ export function DueDateMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const isProcessing = useRef(false);
+    const quotaExceededUntilRef = useRef<number>(0);
     const lastErrorTimeRef = useRef<number>(0);
     const ERROR_THROTTLE_MS = 60000;
 
@@ -38,7 +39,8 @@ export function DueDateMessageHandler() {
 
     useEffect(() => {
         const checkAndProcessOverdueClients = async () => {
-             if (isProcessing.current) return;
+            const nowTime = Date.now();
+            if (isProcessing.current || nowTime < quotaExceededUntilRef.current) return;
 
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
@@ -92,25 +94,17 @@ export function DueDateMessageHandler() {
                     });
 
                 } catch (error: any) {
-                    if (!error.message.includes("already processed")) {
+                    if (error.message.includes("quota exceeded") || error.code === 'resource-exhausted') {
+                        // Silencia por 10 minutos se for erro de cota
+                        quotaExceededUntilRef.current = Date.now() + 600000;
+                    } else if (!error.message.includes("already processed")) {
                         console.error("Failed to process overdue client:", error);
-                        
-                        const currentTime = Date.now();
-                        if (currentTime - lastErrorTimeRef.current > ERROR_THROTTLE_MS) {
-                            toast({
-                                variant: "destructive",
-                                title: "Erro no Envio de Vencimento",
-                                description: error.message.includes("Quota exceeded")
-                                    ? "Limite de uso do banco de dados atingido (Quota exceeded)."
-                                    : "Erro ao enviar mensagens de vencimento automático.",
-                            });
-                            lastErrorTimeRef.current = currentTime;
-                        }
                     }
                 }
             };
             
             for (const client of overdueClients) {
+                if (Date.now() < quotaExceededUntilRef.current) break;
                 await processClient(client);
                 await sleep(DELAY_MS);
             }

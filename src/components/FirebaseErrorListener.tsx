@@ -7,32 +7,38 @@ import { useToast } from '@/hooks/use-toast';
 
 /**
  * Escuta erros de permissão e cota do Firestore e exibe como toasts amigáveis.
- * Implementa um throttle para não sobrecarregar a tela em caso de erros repetidos.
+ * Implementa um throttle agressivo para erros de cota.
  */
 export function FirebaseErrorListener() {
   const { toast } = useToast();
   const lastToastTimeRef = useRef<number>(0);
-  const TOAST_THROTTLE_MS = 10000; // Mostra no máximo um aviso a cada 10 segundos
+  const lastQuotaErrorTimeRef = useRef<number>(0);
+  
+  const TOAST_THROTTLE_MS = 10000; 
+  const QUOTA_THROTTLE_MS = 300000; // 5 minutos para erros de cota
 
   useEffect(() => {
     const handleError = (error: FirestorePermissionError) => {
       const now = Date.now();
-      if (now - lastToastTimeRef.current < TOAST_THROTTLE_MS) return;
-
       const message = error.message.toLowerCase();
       const isQuotaError = message.includes('quota exceeded') || 
                            message.includes('resource exhausted') ||
                            message.includes('resource_exhausted');
 
       if (isQuotaError) {
+        // Se for erro de cota, só avisa a cada 5 minutos
+        if (now - lastQuotaErrorTimeRef.current < QUOTA_THROTTLE_MS) return;
+        
         toast({
           variant: 'destructive',
           title: 'Limite Diário Atingido',
-          description: 'A cota gratuita do banco de dados acabou. As funções de salvamento e automações serão retomadas automaticamente após o reset diário.',
+          description: 'Seu plano gratuito do Firebase atingiu o limite. As automações voltarão a funcionar após o reset diário ou ao fazer upgrade para o plano Blaze.',
         });
-        lastToastTimeRef.current = now;
+        lastQuotaErrorTimeRef.current = now;
       } else {
-        // Erro de permissão padrão (Security Rules)
+        // Erro de permissão padrão (Security Rules) - a cada 10s
+        if (now - lastToastTimeRef.current < TOAST_THROTTLE_MS) return;
+        
         toast({
           variant: 'destructive',
           title: 'Erro de Acesso',
