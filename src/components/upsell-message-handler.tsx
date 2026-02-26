@@ -14,8 +14,7 @@ export function UpsellMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const isProcessing = useRef(false);
-    const lastErrorTimeRef = useRef<number>(0);
-    const ERROR_THROTTLE_MS = 60000;
+    const quotaExceededUntilRef = useRef<number>(0);
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -38,7 +37,7 @@ export function UpsellMessageHandler() {
 
     useEffect(() => {
         const processUpsellQueue = async () => {
-             if (isProcessing.current) return;
+             if (isProcessing.current || Date.now() < quotaExceededUntilRef.current) return;
 
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
@@ -51,7 +50,6 @@ export function UpsellMessageHandler() {
             }
 
             isProcessing.current = true;
-
             const now = new Date();
             
             const processUpsellForClient = async (client: Client, upsell: UpsellConfig) => {
@@ -95,31 +93,20 @@ export function UpsellMessageHandler() {
 
                     toast({
                         title: "UPSELL Enviado!",
-                        description: `A oferta de upsell foi enviada para ${client.name}.`,
+                        description: `A oferta foi enviada para ${client.name}.`,
                     });
 
                     await sleep(DELAY_BETWEEN_MESSAGES);
 
                 } catch (error: any) {
-                    if (error.message !== "already sent" && error.message !== "deleted") {
-                        console.error("Failed to process upsell for client:", error);
-                        
-                        const currentTime = Date.now();
-                        if (currentTime - lastErrorTimeRef.current > ERROR_THROTTLE_MS) {
-                            toast({
-                                variant: "destructive",
-                                title: "Erro no Upsell",
-                                description: error.message.includes("Quota exceeded")
-                                    ? "Limite de uso do banco de dados atingido (Quota exceeded)."
-                                    : "Erro ao processar automações de Upsell.",
-                            });
-                            lastErrorTimeRef.current = currentTime;
-                        }
+                    if (error.message.includes("quota exceeded") || error.code === 'resource-exhausted') {
+                        quotaExceededUntilRef.current = Date.now() + 600000;
                     }
                 }
             };
             
             for (const client of activeClients) {
+                if (Date.now() < quotaExceededUntilRef.current) break;
                 for (const upsell of activeUpsells) {
                     await processUpsellForClient(client, upsell);
                 }
@@ -128,7 +115,7 @@ export function UpsellMessageHandler() {
             isProcessing.current = false;
         };
 
-        // Interval increased to 5 minutes to save Firebase credits
+        // Verificação a cada 5 minutos
         const intervalId = setInterval(processUpsellQueue, 5 * 60 * 1000);
         processUpsellQueue();
         return () => clearInterval(intervalId);

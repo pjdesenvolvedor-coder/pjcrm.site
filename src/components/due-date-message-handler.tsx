@@ -15,8 +15,6 @@ export function DueDateMessageHandler() {
     const { toast } = useToast();
     const isProcessing = useRef(false);
     const quotaExceededUntilRef = useRef<number>(0);
-    const lastErrorTimeRef = useRef<number>(0);
-    const ERROR_THROTTLE_MS = 60000;
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -95,10 +93,8 @@ export function DueDateMessageHandler() {
 
                 } catch (error: any) {
                     if (error.message.includes("quota exceeded") || error.code === 'resource-exhausted') {
-                        // Silencia por 10 minutos se for erro de cota
+                        // Pausa por 10 minutos em caso de cota
                         quotaExceededUntilRef.current = Date.now() + 600000;
-                    } else if (!error.message.includes("already processed")) {
-                        console.error("Failed to process overdue client:", error);
                     }
                 }
             };
@@ -112,7 +108,7 @@ export function DueDateMessageHandler() {
             isProcessing.current = false;
         };
 
-        // Interval increased to 5 minutes to save Firebase credits
+        // Verificação a cada 5 minutos para economia
         const intervalId = setInterval(checkAndProcessOverdueClients, 5 * 60 * 1000);
         checkAndProcessOverdueClients();
         return () => clearInterval(intervalId);

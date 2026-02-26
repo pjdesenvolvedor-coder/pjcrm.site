@@ -11,9 +11,9 @@ export function ScheduledMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const processingRef = useRef(new Set<string>());
-    const lastErrorTimeRef = useRef<number>(0);
     const quotaExceededRef = useRef<boolean>(false);
-    const ERROR_THROTTLE_MS = 300000; // Mostra apenas um erro a cada 5 minutos em caso de cota
+    const lastErrorTimeRef = useRef<number>(0);
+    const ERROR_THROTTLE_MS = 300000; // 5 minutos
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -37,7 +37,6 @@ export function ScheduledMessageHandler() {
 
     useEffect(() => {
         const checkScheduledMessages = () => {
-            // Se já detectamos cota excedida recentemente, esperamos o reset
             if (quotaExceededRef.current) {
                 const now = Date.now();
                 if (now - lastErrorTimeRef.current < ERROR_THROTTLE_MS) return;
@@ -101,7 +100,7 @@ export function ScheduledMessageHandler() {
 
                     if (!response.ok) {
                         setDocumentNonBlocking(messageDocRef, { status: 'Error', claimedAt: null }, { merge: true });
-                        throw new Error(`Falha ao enviar mensagem para o grupo ${msg.jid}`);
+                        throw new Error(`Falha no envio para o grupo ${msg.jid}`);
                     }
 
                     if (msg.repeatDaily) {
@@ -114,27 +113,18 @@ export function ScheduledMessageHandler() {
                     } else {
                         setDocumentNonBlocking(messageDocRef, { status: 'Sent', claimedAt: null }, { merge: true });
                         toast({
-                            title: "Mensagem Agendada Enviada!",
-                            description: `A mensagem para o grupo foi enviada com sucesso.`,
+                            title: "Agendamento Enviado!",
+                            description: `Mensagem enviada com sucesso para o grupo.`,
                         });
                     }
 
                 } catch (error: any) {
                     const isQuota = error.message?.includes("Quota exceeded") || error.code === 'resource-exhausted';
-                    
                     if (isQuota) {
                         quotaExceededRef.current = true;
-                        const currentTime = Date.now();
-                        if (currentTime - lastErrorTimeRef.current > ERROR_THROTTLE_MS) {
-                            toast({
-                                variant: "destructive",
-                                title: "Cota de Uso Atingida",
-                                description: "O limite gratuito do banco de dados foi atingido. As automações voltarão a funcionar em breve.",
-                            });
-                            lastErrorTimeRef.current = currentTime;
-                        }
+                        lastErrorTimeRef.current = Date.now();
                     } else if (!error.message.includes("already being processed") && !error.message.includes("not due yet") && !error.message.includes("deleted")) {
-                        console.error("Failed to send scheduled message:", error);
+                        console.error("Scheduled message error:", error);
                     }
                 } finally {
                     processingRef.current.delete(msg.id);
@@ -146,7 +136,7 @@ export function ScheduledMessageHandler() {
             }
         };
         
-        // Interval increased to 2 minutes to save Firebase credits
+        // Intervalo de 2 minutos para economia
         const intervalId = setInterval(checkScheduledMessages, 2 * 60 * 1000);
         checkScheduledMessages();
         return () => clearInterval(intervalId);
