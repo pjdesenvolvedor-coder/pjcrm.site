@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -66,6 +66,7 @@ const clientSchema = z.object({
   phone: z.string().min(1, 'Número é obrigatório'),
   clientType: z.enum(clientTypes).optional(),
   emails: z.array(z.object({ value: z.string().email('Email inválido') })).min(1, { message: 'Pelo menos um email é obrigatório.'}),
+  password: z.string().optional(),
   dueDate: z.string().optional(),
   dueTimeHour: z.string().optional(),
   dueTimeMinute: z.string().optional(),
@@ -109,6 +110,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       phone: initialData?.phone || '',
       clientType: initialData?.clientType || undefined,
       emails: defaultEmails,
+      password: initialData?.password || '',
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
@@ -181,6 +183,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       name: values.name,
       email: values.emails.map(email => email.value),
       phone: values.phone,
+      password: values.clientType ? null : (values.password || null),
       telegramUser: values.telegramUser ?? null,
       clientType: values.clientType ?? null,
       dueDate: dueDateTimestamp ?? null,
@@ -324,6 +327,25 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         )}
                     </div>
                 </div>
+                
+                {!clientType && (
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                        <FormLabel className="md:text-right">Senha</FormLabel>
+                        <FormControl>
+                          <div className="relative md:col-span-3">
+                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input placeholder="Senha de acesso" {...field} className="pl-9" />
+                          </div>
+                        </FormControl>
+                        <FormMessage className="md:col-start-2 md:col-span-3" />
+                      </FormItem>
+                    )}
+                  />
+                )}
             </div>
           </TabsContent>
           <TabsContent value="vencimento">

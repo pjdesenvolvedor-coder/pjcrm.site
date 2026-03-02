@@ -47,6 +47,7 @@ export type Client = {
   name: string;
   email: string[];
   phone: string;
+  password?: string | null;
   dueDate?: Timestamp | null;
   status: 'Ativo' | 'Inativo' | 'Vencido';
   telegramUser?: string | null;
