@@ -157,6 +157,9 @@ export type Settings = {
   isSupportAutomationActive?: boolean;
   supportStartedMessage?: string;
   supportFinishedMessage?: string;
+  // Delivery Automation
+  isDeliveryAutomationActive?: boolean;
+  deliveryMessage?: string;
 };
 
 export type Subscription = {

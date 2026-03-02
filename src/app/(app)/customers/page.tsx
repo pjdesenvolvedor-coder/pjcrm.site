@@ -162,7 +162,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     form.setValue('dueDate', formatted);
   };
 
-  const onSubmit = (values: z.infer<typeof clientSchema>) => {
+  const onSubmit = async (values: z.infer<typeof clientSchema>) => {
     if (!user) return;
     
     let dueDateTimestamp: Timestamp | undefined = undefined;
@@ -219,14 +219,45 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         if (dueDateTimestamp && dueDateTimestamp.toDate() <= new Date()) {
             newStatus = 'Vencido';
         }
-        addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { 
+        
+        // Add document
+        await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { 
             ...clientData, 
             status: newStatus, 
             needsSupport: false,
             createdAt: serverTimestamp(),
             upsellSent: false
         });
+        
         toast({ title: "Cliente adicionado!", description: `${values.name} foi adicionado com sucesso.` });
+
+        // Trigger Delivery Automation if active
+        if (settings?.isDeliveryAutomationActive && settings.deliveryMessage && settings.webhookToken) {
+            let formattedMessage = settings.deliveryMessage
+                .replace(/{cliente}/g, values.name)
+                .replace(/{telefone}/g, values.phone)
+                .replace(/{email}/g, values.emails.map(e => e.value).join(', '))
+                .replace(/{senha}/g, values.password || 'N/A')
+                .replace(/{assinatura}/g, values.subscription)
+                .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
+                .replace(/{valor}/g, values.amountPaid || '0,00')
+                .replace(/{status}/g, newStatus);
+
+            try {
+                fetch('/api/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: formattedMessage,
+                        phoneNumber: values.phone,
+                        token: settings.webhookToken,
+                    }),
+                });
+                toast({ title: 'Automação: Mensagem de Entrega Enviada', description: `Dados de acesso enviados para ${values.name}.` });
+            } catch (e) {
+                console.error("Failed to send delivery automation message:", e);
+            }
+        }
     }
 
     onFinished();
