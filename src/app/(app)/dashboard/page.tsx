@@ -106,6 +106,7 @@ export default function DashboardPage() {
     clients.forEach(client => {
       const amount = parseCurrency(client.amountPaid);
       const dueDate = client.dueDate ? client.dueDate.toDate() : null;
+      const createdAt = client.createdAt ? client.createdAt.toDate() : null;
 
       // Main status categorization (Active vs Overdue)
       let isOverdue = false;
@@ -137,8 +138,9 @@ export default function DashboardPage() {
         }
       }
       
-      // Stat dependent on 'period'
-      if (dueDate && isWithinInterval(dueDate, { start: periodStart, end: periodEnd })) {
+      // Stat dependent on 'period' - filter by creation date as requested
+      const dateToFilter = createdAt || dueDate;
+      if (dateToFilter && isWithinInterval(dateToFilter, { start: periodStart, end: periodEnd })) {
         totalSales += amount;
       }
 
@@ -294,7 +296,7 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                     <CardTitle>Total de Vendas</CardTitle>
-                    <p className="text-sm text-muted-foreground">Receita total no período selecionado.</p>
+                    <p className="text-sm text-muted-foreground">Receita total no período selecionado (Baseado na data de cadastro).</p>
                 </div>
                 <Select value={period} onValueChange={setPeriod}>
                     <SelectTrigger className="w-[180px]">
