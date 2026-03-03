@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -59,6 +59,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
+const screenOptions = ["1", "2", "3", "4", "5", "6", "7"] as const;
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -67,6 +68,7 @@ const clientSchema = z.object({
   clientType: z.enum(clientTypes).optional(),
   emails: z.array(z.object({ value: z.string().email('Email inválido') })).min(1, { message: 'Pelo menos um email é obrigatório.'}),
   password: z.string().optional(),
+  screen: z.string().optional(),
   dueDate: z.string().optional(),
   dueTimeHour: z.string().optional(),
   dueTimeMinute: z.string().optional(),
@@ -111,6 +113,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       clientType: initialData?.clientType || undefined,
       emails: defaultEmails,
       password: initialData?.password || '',
+      screen: initialData?.screen || '',
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
@@ -184,6 +187,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       email: values.emails.map(email => email.value),
       phone: values.phone,
       password: values.clientType ? null : (values.password || null),
+      screen: values.screen || null,
       telegramUser: values.telegramUser ?? null,
       clientType: values.clientType ?? null,
       dueDate: dueDateTimestamp ?? null,
@@ -238,6 +242,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 .replace(/{telefone}/g, values.phone)
                 .replace(/{email}/g, values.emails.map(e => e.value).join(', '))
                 .replace(/{senha}/g, values.password || 'N/A')
+                .replace(/{tela}/g, values.screen || 'N/A')
                 .replace(/{assinatura}/g, values.subscription)
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
                 .replace(/{valor}/g, values.amountPaid || '0,00')
@@ -360,22 +365,49 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 </div>
                 
                 {!clientType && (
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                        <FormLabel className="md:text-right">Senha</FormLabel>
-                        <FormControl>
-                          <div className="relative md:col-span-3">
-                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Senha de acesso" {...field} className="pl-9" />
-                          </div>
-                        </FormControl>
-                        <FormMessage className="md:col-start-2 md:col-span-3" />
-                      </FormItem>
-                    )}
-                  />
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                          <FormLabel className="md:text-right">Senha</FormLabel>
+                          <FormControl>
+                            <div className="relative md:col-span-3">
+                              <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input placeholder="Senha de acesso" {...field} className="pl-9" />
+                            </div>
+                          </FormControl>
+                          <FormMessage className="md:col-start-2 md:col-span-3" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="screen"
+                      render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                          <FormLabel className="md:text-right">Tela</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="md:col-span-3">
+                                <div className="flex items-center gap-2">
+                                  <Monitor className="h-4 w-4 text-muted-foreground" />
+                                  <SelectValue placeholder="Selecione a tela" />
+                                </div>
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {screenOptions.map((opt) => (
+                                <SelectItem key={opt} value={opt}>Tela {opt}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage className="md:col-start-2 md:col-span-3" />
+                        </FormItem>
+                      )}
+                    />
+                  </>
                 )}
             </div>
           </TabsContent>
@@ -640,6 +672,7 @@ export default function CustomersPage() {
                 .replace(/{assinatura}/g, client.subscription || '')
                 .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '')
                 .replace(/{valor}/g, client.amountPaid || '0,00')
+                .replace(/{tela}/g, client.screen || 'N/A')
                 .replace(/{status}/g, client.status);
 
             try {

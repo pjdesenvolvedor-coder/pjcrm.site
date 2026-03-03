@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,7 +27,7 @@ const dueDateMessageSchema = z.object({
 
 type DueDateMessageFormData = z.infer<typeof dueDateMessageSchema>;
 
-const availableVariables = ["{cliente}", "{telefone}", "{email}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
+const availableVariables = ["{cliente}", "{telefone}", "{email}", "{senha}", "{tela}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
 
 export default function DueDateMessagePage() {
   const { firestore } = useFirebase();

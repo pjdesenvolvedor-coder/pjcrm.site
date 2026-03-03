@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -74,6 +75,8 @@ export function DueDateMessageHandler() {
                         .replace(/{assinatura}/g, client.subscription || '')
                         .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '')
                         .replace(/{valor}/g, client.amountPaid || '0,00')
+                        .replace(/{senha}/g, client.password || 'N/A')
+                        .replace(/{tela}/g, client.screen || 'N/A')
                         .replace(/{status}/g, 'Vencido');
 
                     await fetch('/api/send-message', {

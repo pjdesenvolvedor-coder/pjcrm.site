@@ -35,7 +35,7 @@ const upsellSchema = z.object({
 
 type UpsellFormData = z.infer<typeof upsellSchema>;
 
-const availableVariables = ["{cliente}", "{telefone}", "{email}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
+const availableVariables = ["{cliente}", "{telefone}", "{email}", "{senha}", "{tela}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
 
 export default function UpsellPage() {
   const { firestore } = useFirebase();
@@ -249,7 +249,6 @@ export default function UpsellPage() {
                                 ))}
                             </div>
                         </CardContent>
-                    </Card>
                     
                     <Button type="submit" disabled={form.formState.isSubmitting} className="w-full md:w-auto">
                         Salvar Todas as Configurações de UPSELL

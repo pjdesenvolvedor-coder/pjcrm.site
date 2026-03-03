@@ -48,6 +48,7 @@ export type Client = {
   email: string[];
   phone: string;
   password?: string | null;
+  screen?: string | null; // Added screen field
   dueDate?: Timestamp | null;
   status: 'Ativo' | 'Inativo' | 'Vencido';
   telegramUser?: string | null;

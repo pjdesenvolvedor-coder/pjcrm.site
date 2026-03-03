@@ -28,7 +28,7 @@ const supportAutomationSchema = z.object({
 
 type SupportAutomationFormData = z.infer<typeof supportAutomationSchema>;
 
-const availableVariables = ["{cliente}", "{telefone}", "{email}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
+const availableVariables = ["{cliente}", "{telefone}", "{email}", "{senha}", "{tela}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
 
 export default function SupportAutomationPage() {
   const { firestore } = useFirebase();

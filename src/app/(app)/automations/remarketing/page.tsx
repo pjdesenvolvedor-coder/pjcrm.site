@@ -37,7 +37,7 @@ const remarketingSchema = z.object({
 
 type RemarketingFormData = z.infer<typeof remarketingSchema>;
 
-const availableVariables = ["{cliente}", "{telefone}", "{email}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
+const availableVariables = ["{cliente}", "{telefone}", "{email}", "{senha}", "{tela}", "{assinatura}", "{vencimento}", "{valor}", "{status}"];
 
 export default function RemarketingPage() {
   const { firestore } = useFirebase();

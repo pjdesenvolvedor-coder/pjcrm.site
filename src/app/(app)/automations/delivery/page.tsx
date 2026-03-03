@@ -32,6 +32,7 @@ const availableVariables = [
     "{telefone}", 
     "{email}", 
     "{senha}", 
+    "{tela}",
     "{assinatura}", 
     "{vencimento}", 
     "{valor}", 
@@ -133,7 +134,7 @@ export default function DeliveryAutomationPage() {
                         <div className="flex-1 space-y-1">
                           <FormLabel className="text-base">Ativar Entrega Automática</FormLabel>
                           <p className="text-sm text-muted-foreground">
-                            Enviar e-mail e senha logo após salvar o cliente.
+                            Enviar dados de acesso logo após salvar o cliente.
                           </p>
                         </div>
                         <FormControl>
@@ -156,7 +157,7 @@ export default function DeliveryAutomationPage() {
                         <CardDescription className="mb-2">Use as variáveis abaixo para incluir os dados de acesso.</CardDescription>
                         <FormControl>
                             <Textarea
-                            placeholder="Olá {cliente}, aqui estão seus dados de acesso:&#10;E-mail: {email}&#10;Senha: {senha}"
+                            placeholder="Olá {cliente}, aqui estão seus dados de acesso:&#10;E-mail: {email}&#10;Senha: {senha}&#10;Tela: {tela}"
                             className="min-h-48"
                             {...field}
                             />
