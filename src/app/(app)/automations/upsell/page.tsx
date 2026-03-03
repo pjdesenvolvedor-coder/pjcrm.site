@@ -63,7 +63,7 @@ export default function UpsellPage() {
 
   useEffect(() => {
     if (settings) {
-      if (settings.upsells) {
+      if (settings.upsells && settings.upsells.length > 0) {
         form.reset({ upsells: settings.upsells });
       } else if (settings.upsellMessage) {
         form.reset({
@@ -72,7 +72,7 @@ export default function UpsellPage() {
             isActive: settings.isUpsellActive ?? false,
             upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
             upsellMessage: settings.upsellMessage ?? '',
-            createdAt: 0, // Legacy rules keep processing everyone
+            createdAt: 0,
           }]
         });
       } else if (fields.length === 0) {
@@ -105,7 +105,7 @@ export default function UpsellPage() {
       isActive: false,
       upsellDelayMinutes: 5,
       upsellMessage: '',
-      createdAt: Date.now(), // New rules only for new clients
+      createdAt: Date.now(),
     });
   };
 
@@ -249,6 +249,7 @@ export default function UpsellPage() {
                                 ))}
                             </div>
                         </CardContent>
+                    </Card>
                     
                     <Button type="submit" disabled={form.formState.isSubmitting} className="w-full md:w-auto">
                         Salvar Todas as Configurações de UPSELL
