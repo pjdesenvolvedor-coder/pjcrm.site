@@ -41,6 +41,16 @@ export type Note = {
     createdAt: Timestamp;
 };
 
+export type Lead = {
+  id: string;
+  userId: string;
+  name: string;
+  phone: string;
+  interestedSubscription: string;
+  status: 'pending' | 'converted' | 'lost';
+  createdAt: Timestamp;
+};
+
 export type Client = {
   id: string;
   userId: string;
@@ -48,7 +58,7 @@ export type Client = {
   email: string[];
   phone: string;
   password?: string | null;
-  screen?: string | null; // Added screen field
+  screen?: string | null;
   dueDate?: Timestamp | null;
   status: 'Ativo' | 'Inativo' | 'Vencido';
   telegramUser?: string | null;
@@ -60,9 +70,9 @@ export type Client = {
   amountPaid?: string | null;
   needsSupport?: boolean;
   createdAt?: Timestamp | null;
-  upsellSent?: boolean; // Legacy
-  sentUpsellIds?: string[]; // Tracking for multiple upsells
-  sentRemarketingIds?: string[]; // Tracking for multiple remarketings
+  upsellSent?: boolean;
+  sentUpsellIds?: string[];
+  sentRemarketingIds?: string[];
 };
 
 export type WhatsAppConnection = {
@@ -120,7 +130,7 @@ export type UpsellConfig = {
   isActive: boolean;
   upsellDelayMinutes: number;
   upsellMessage: string;
-  createdAt?: number; // Timestamp in ms for filtering
+  createdAt?: number;
 };
 
 export type RemarketingConfig = {
@@ -128,7 +138,7 @@ export type RemarketingConfig = {
   isActive: boolean;
   days: number;
   message: string;
-  createdAt?: number; // Timestamp in ms for filtering
+  createdAt?: number;
 };
 
 export type Settings = {
@@ -138,29 +148,28 @@ export type Settings = {
   usePresetTime?: boolean;
   isDueDateMessageActive?: boolean;
   dueDateMessage?: string;
-  // Remarketing Pós-Vencimento (Legacy)
   isPostDueDateRemarketingActive?: boolean;
   postDueDateRemarketingDays?: number;
   postDueDateRemarketingMessage?: string;
-  // Remarketing Pós-Cadastro (Legacy)
   isPostSignupRemarketingActive?: boolean;
   postSignupRemarketingDays?: number;
   postSignupRemarketingMessage?: string;
-  // New Remarketing Arrays
   postSignupRemarketings?: RemarketingConfig[];
   postDueDateRemarketings?: RemarketingConfig[];
-  // Upsell
-  isUpsellActive?: boolean; // Legacy
-  upsellDelayMinutes?: number; // Legacy
-  upsellMessage?: string; // Legacy
+  isUpsellActive?: boolean;
+  upsellDelayMinutes?: number;
+  upsellMessage?: string;
   upsells?: UpsellConfig[];
-  // Support Automation
   isSupportAutomationActive?: boolean;
   supportStartedMessage?: string;
   supportFinishedMessage?: string;
-  // Delivery Automation
   isDeliveryAutomationActive?: boolean;
   deliveryMessage?: string;
+  // Lead Messages
+  isLeadAutomationActive?: boolean;
+  leadInitialMessage?: string;
+  leadConvertedMessage?: string;
+  leadLostMessage?: string;
 };
 
 export type Subscription = {

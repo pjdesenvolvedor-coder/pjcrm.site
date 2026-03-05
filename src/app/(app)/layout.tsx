@@ -29,6 +29,7 @@ import {
   Activity,
   ShieldAlert,
   TrendingUp,
+  ShoppingCart,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -72,7 +73,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, collection, query, where } from 'firebase/firestore';
-import type { UserProfile, Settings, Client } from '@/lib/types';
+import type { UserProfile, Settings, Client, Lead } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -197,7 +198,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const { data: supportClients } = useCollection<Client>(supportClientsQuery);
 
+  const pendingLeadsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'leads'), where('status', '==', 'pending'));
+  }, [firestore, user]);
+  const { data: pendingLeads } = useCollection<Lead>(pendingLeadsQuery);
+
   const supportCount = supportClients?.length ?? 0;
+  const leadCount = pendingLeads?.length ?? 0;
 
   const permissions = useMemo(() => {
     const defaultPermissions = {
@@ -471,7 +479,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.customers && (
                 <SidebarMenuItem>
-                  <Collapsible>
+                  <Collapsible defaultOpen={pathname.startsWith('/customers') || pathname === '/support'}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Clientes">
                               <div className="flex items-center gap-2"><Contact /><span>Clientes</span></div>
@@ -481,6 +489,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       <CollapsibleContent>
                           <SidebarMenuSub>
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/customers'}><Link href="/customers">Todos os Clientes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton asChild isActive={pathname === '/customers/wants-to-buy'}>
+                                      <Link href="/customers/wants-to-buy"><span>Quer Comprar</span>{leadCount > 0 && <Badge variant="default" className="ml-auto bg-blue-500">{leadCount}</Badge>}</Link>
+                                  </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
                               <SidebarMenuSubItem>
                                   <SidebarMenuSubButton asChild isActive={pathname === '/support'}>
                                       <Link href="/support"><span>Suporte</span>{supportCount > 0 && <Badge variant="secondary" className="ml-auto">{supportCount}</Badge>}</Link>
@@ -508,6 +521,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Upsell</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/delivery'}><Link href="/automations/delivery">Entrega</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Suporte (Auto)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/leads'}><Link href="/automations/leads">Vendas (Leads)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
