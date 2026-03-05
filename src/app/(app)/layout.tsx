@@ -596,34 +596,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </DialogTrigger>
               )}
 
-              <SidebarMenuItem>
-                <Collapsible>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
-                            <div className="flex items-center gap-2"><SettingsIcon /><span>Configurações</span></div>
-                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                            {userProfile?.role === 'Admin' && (
-                              <>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users"><Users />Usuários do Sistema</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage"><Activity />Uso do Firebase</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              </>
-                            )}
-                            {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                            )}
-                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
-              </SidebarMenuItem>
+              {permissions.settings && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
+                              <div className="flex items-center gap-2"><SettingsIcon /><span>Configurações</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                              {userProfile?.role === 'Admin' && (
+                                <>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users"><Users />Usuários do Sistema</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage"><Activity />Uso do Firebase</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                </>
+                              )}
+                              {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              )}
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm">
                 <DialogHeader className="p-6 border-b"><DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle></DialogHeader>
