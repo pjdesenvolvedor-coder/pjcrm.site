@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -50,14 +51,14 @@ const campaignSchema = z.object({
 });
 
 function CampaignForm({ onFinished, initialData }: { onFinished: () => void, initialData?: AdCampaign }) {
-    const { firestore, user } = useFirebase();
+    const { firestore, effectiveUserId } = useFirebase();
     const { toast } = useToast();
     const isEditing = !!initialData;
     
     const bmsQuery = useMemoFirebase(() => {
-      if (!user) return null;
-      return query(collection(firestore, 'users', user.uid, 'business_managers'), orderBy('name'));
-    }, [firestore, user]);
+      if (!effectiveUserId) return null;
+      return query(collection(firestore, 'users', effectiveUserId, 'business_managers'), orderBy('name'));
+    }, [firestore, effectiveUserId]);
     const { data: bms } = useCollection<BusinessManager>(bmsQuery);
 
     const form = useForm<z.infer<typeof campaignSchema>>({
@@ -78,12 +79,12 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
     });
 
     const onSubmit = (values: z.infer<typeof campaignSchema>) => {
-        if (!user) return;
+        if (!effectiveUserId) return;
         
         const campaignDate = parse(values.campaignDate, 'yyyy-MM-dd', new Date());
 
         const data: Partial<AdCampaign> = {
-            userId: user.uid,
+            userId: effectiveUserId,
             campaignDate: Timestamp.fromDate(campaignDate),
             amountSpent: values.amountSpent,
             totalReturn: values.totalReturn,
@@ -92,10 +93,10 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
         };
 
         if (isEditing && initialData?.id) {
-            setDocumentNonBlocking(doc(firestore, 'users', user.uid, 'ad_campaigns', initialData.id), data, { merge: true });
+            setDocumentNonBlocking(doc(firestore, 'users', effectiveUserId, 'ad_campaigns', initialData.id), data, { merge: true });
             toast({ title: 'Registro Atualizado!', description: 'O registro da campanha foi salvo.' });
         } else {
-            addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'ad_campaigns'), data);
+            addDocumentNonBlocking(collection(firestore, 'users', effectiveUserId, 'ad_campaigns'), data);
             toast({ title: 'Registro Adicionado!', description: 'O novo registro de campanha foi salvo.' });
         }
 
@@ -149,23 +150,23 @@ function CampaignForm({ onFinished, initialData }: { onFinished: () => void, ini
 }
 
 export default function AdsPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<AdCampaign | undefined>(undefined);
   const [period, setPeriod] = useState('this-month');
   const [selectedBm, setSelectedBm] = useState('all');
 
   const campaignsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'ad_campaigns'), orderBy('campaignDate', 'desc'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'ad_campaigns'), orderBy('campaignDate', 'desc'));
+  }, [firestore, effectiveUserId]);
 
   const { data: campaigns, isLoading } = useCollection<AdCampaign>(campaignsQuery);
   
   const bmsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'business_managers'), orderBy('name'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'business_managers'), orderBy('name'));
+  }, [firestore, effectiveUserId]);
   const { data: bms } = useCollection<BusinessManager>(bmsQuery);
 
   const businessManagers = useMemo(() => {
@@ -235,8 +236,8 @@ export default function AdsPage() {
   };
 
   const handleDelete = (campaignId: string) => {
-    if(!user) return;
-    deleteDocumentNonBlocking(doc(firestore, 'users', user.uid, 'ad_campaigns', campaignId));
+    if(!effectiveUserId) return;
+    deleteDocumentNonBlocking(doc(firestore, 'users', effectiveUserId, 'ad_campaigns', campaignId));
   }
 
   const statCards = [

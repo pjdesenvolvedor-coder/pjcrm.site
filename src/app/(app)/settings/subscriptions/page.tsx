@@ -1,3 +1,4 @@
+
 'use client';
 
 import { PlusCircle, Trash2, Edit } from 'lucide-react';
@@ -40,15 +41,15 @@ const subscriptionSchema = z.object({
 });
 
 export default function SubscriptionsPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
 
   const subscriptionsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'subscriptions'), orderBy('name'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'subscriptions'), orderBy('name'));
+  }, [firestore, effectiveUserId]);
 
   const { data: subscriptions, isLoading } = useCollection<Subscription>(subscriptionsQuery);
 
@@ -75,18 +76,18 @@ export default function SubscriptionsPage() {
   }, [editingSubscription, form]);
 
   const onSubmit = (values: z.infer<typeof subscriptionSchema>) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
 
     if (editingSubscription) {
-      const docRef = doc(firestore, 'users', user.uid, 'subscriptions', editingSubscription.id);
-      setDocumentNonBlocking(docRef, { ...values, userId: user.uid }, { merge: true });
+      const docRef = doc(firestore, 'users', effectiveUserId, 'subscriptions', editingSubscription.id);
+      setDocumentNonBlocking(docRef, { ...values, userId: effectiveUserId }, { merge: true });
       toast({ title: 'Assinatura atualizada!', description: `A assinatura "${values.name}" foi salva com sucesso.` });
     } else {
       const newSubscription = {
         ...values,
-        userId: user.uid,
+        userId: effectiveUserId,
       };
-      addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'subscriptions'), newSubscription);
+      addDocumentNonBlocking(collection(firestore, 'users', effectiveUserId, 'subscriptions'), newSubscription);
       toast({ title: 'Assinatura criada!', description: `A assinatura "${values.name}" foi adicionada.` });
     }
     
@@ -96,8 +97,8 @@ export default function SubscriptionsPage() {
   };
 
   const handleDelete = (subscription: Subscription) => {
-    if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'subscriptions', subscription.id);
+    if (!effectiveUserId) return;
+    const docRef = doc(firestore, 'users', effectiveUserId, 'subscriptions', subscription.id);
     deleteDocumentNonBlocking(docRef);
     toast({ title: 'Assinatura removida!', description: `A assinatura "${subscription.name}" foi removida.` });
   };

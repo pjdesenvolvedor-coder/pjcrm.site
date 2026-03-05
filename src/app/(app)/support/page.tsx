@@ -57,30 +57,30 @@ function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Cl
 }
 
 export default function SupportPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
 
   const [dialogClient, setDialogClient] = useState<Client | null>(null);
   const [isSending, setIsSending] = useState(false);
   
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return doc(firestore, 'users', effectiveUserId, 'settings', 'config');
+  }, [firestore, effectiveUserId]);
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
   
   const supportClientsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    const clientsRef = collection(firestore, 'users', user.uid, 'clients');
+    if (!effectiveUserId) return null;
+    const clientsRef = collection(firestore, 'users', effectiveUserId, 'clients');
     return query(clientsRef, where("needsSupport", "==", true));
-  }, [user, firestore]);
+  }, [effectiveUserId, firestore]);
 
   const { data: supportClients, isLoading } = useCollection<Client>(supportClientsQuery);
 
   const handleMarkAsCompleted = async (client: Client) => {
-    if (!user || !settings) return;
-    const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+    if (!effectiveUserId || !settings) return;
+    const docRef = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
     setDocumentNonBlocking(docRef, { needsSupport: false }, { merge: true });
     
     toast({
@@ -117,7 +117,7 @@ export default function SupportPage() {
   };
 
   const handleSendMessage = async (message: string) => {
-    if (!dialogClient || !user) return;
+    if (!dialogClient || !effectiveUserId) return;
 
     if (!settings?.webhookToken) {
         toast({

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { PlusCircle, Trash2 } from 'lucide-react';
@@ -39,14 +40,14 @@ const bmSchema = z.object({
 });
 
 export default function BmsPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
 
   const bmsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'business_managers'), orderBy('name'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'business_managers'), orderBy('name'));
+  }, [firestore, effectiveUserId]);
 
   const { data: bms, isLoading } = useCollection<BusinessManager>(bmsQuery);
 
@@ -58,20 +59,20 @@ export default function BmsPage() {
   });
 
   const onSubmit = (values: z.infer<typeof bmSchema>) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     const newBm = {
       ...values,
-      userId: user.uid,
+      userId: effectiveUserId,
     };
-    addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'business_managers'), newBm);
+    addDocumentNonBlocking(collection(firestore, 'users', effectiveUserId, 'business_managers'), newBm);
     toast({ title: 'BM criada!', description: `A BM "${values.name}" foi adicionada.` });
     form.reset();
     setOpen(false);
   };
 
   const handleDelete = (bm: BusinessManager) => {
-    if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'business_managers', bm.id);
+    if (!effectiveUserId) return;
+    const docRef = doc(firestore, 'users', effectiveUserId, 'business_managers', bm.id);
     deleteDocumentNonBlocking(docRef);
     toast({ title: 'BM removida!', description: `A BM "${bm.name}" foi removida.` });
   }

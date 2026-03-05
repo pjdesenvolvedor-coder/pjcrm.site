@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Users, AlertTriangle, Calendar, Clock, DollarSign } from 'lucide-react';
@@ -34,13 +35,13 @@ const formatCurrency = (value: number): string => {
 };
 
 export default function DashboardPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const [period, setPeriod] = useState('this-month');
 
   const clientsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'clients'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'clients'));
+  }, [firestore, effectiveUserId]);
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
