@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label"
 import { useFirebase, useUser, setDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, getDocs, orderBy, doc, where, Timestamp, deleteDoc, limit } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/lib/types';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -173,12 +173,22 @@ export default function AttendantsPage() {
     if (!firestore || !currentUser) return null;
     return query(
         collection(firestore, 'users'), 
-        where('parentId', '==', currentUser.uid),
-        orderBy('firstName')
+        where('parentId', '==', currentUser.uid)
+        // Removido orderBy do servidor para evitar erro de índice composto
     );
   }, [firestore, currentUser]);
 
-  const { data: attendants, isLoading } = useCollection<UserProfile>(attendantsQuery);
+  const { data: attendantsRaw, isLoading } = useCollection<UserProfile>(attendantsQuery);
+
+  // Ordenação feita no cliente para evitar necessidade de índice composto no Firestore
+  const attendants = useMemo(() => {
+    if (!attendantsRaw) return null;
+    return [...attendantsRaw].sort((a, b) => {
+        const nameA = a.firstName || '';
+        const nameB = b.firstName || '';
+        return nameA.localeCompare(nameB);
+    });
+  }, [attendantsRaw]);
 
   const handleCopyInviteLink = () => {
       const url = window.location.origin + '/signup?ref=' + currentUser?.uid;
