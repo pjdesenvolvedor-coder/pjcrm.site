@@ -2,14 +2,16 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, doc, runTransaction, arrayUnion } from 'firebase/firestore';
+import { collection, query, doc, runTransaction, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile, RemarketingConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DELAY_BETWEEN_MESSAGES = 3000;
+const STANDARD_DELAY = 3000;
+const BULK_DELAY = 30000;
 
 export function RemarketingMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -52,37 +54,62 @@ export function RemarketingMessageHandler() {
             isProcessing.current = true;
             const now = new Date();
             
-            const processRemarketingForClient = async (client: Client, config: RemarketingConfig, type: 'signup' | 'duedate') => {
-                const startDate = type === 'signup' 
-                    ? client.createdAt?.toDate() 
-                    : client.dueDate?.toDate();
-                
-                if (!startDate || !client.createdAt) return;
-                
-                if (config.createdAt && client.createdAt.toMillis() < config.createdAt) {
-                    return;
+            // Gather all possible tasks first to check for bulk
+            const tasks: { client: Client, config: RemarketingConfig, type: 'signup' | 'duedate' }[] = [];
+            for (const client of clients) {
+                for (const config of activeSignupRemarketings) {
+                    const startDate = client.createdAt?.toDate();
+                    if (startDate && client.createdAt && (!config.createdAt || client.createdAt.toMillis() >= config.createdAt)) {
+                        const daysDiff = differenceInDays(now, startDate);
+                        if (daysDiff >= config.days && !client.sentRemarketingIds?.includes(config.id)) {
+                            tasks.push({ client, config, type: 'signup' });
+                        }
+                    }
                 }
+                if (client.status === 'Vencido') {
+                    for (const config of activeDueDateRemarketings) {
+                        const startDate = client.dueDate?.toDate();
+                        if (startDate && client.createdAt && (!config.createdAt || client.createdAt.toMillis() >= config.createdAt)) {
+                            const daysDiff = differenceInDays(now, startDate);
+                            if (daysDiff >= config.days && !client.sentRemarketingIds?.includes(config.id)) {
+                                tasks.push({ client, config, type: 'duedate' });
+                            }
+                        }
+                    }
+                }
+            }
 
-                const daysDiff = differenceInDays(now, startDate);
-                
-                if (daysDiff < config.days) return;
-                if (client.sentRemarketingIds?.includes(config.id)) return;
+            if (tasks.length === 0) {
+                isProcessing.current = false;
+                return;
+            }
 
+            const useBulkDelay = tasks.length >= 50;
+            const currentDelay = useBulkDelay ? BULK_DELAY : STANDARD_DELAY;
+
+            const processTask = async (task: typeof tasks[0]) => {
+                const { client, config, type } = task;
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+                const logRef = collection(firestore, 'users', user.uid, 'logs');
 
                 try {
                     await runTransaction(firestore, async (transaction) => {
                         const clientDoc = await transaction.get(clientDocRef);
                         if (!clientDoc.exists()) throw new Error("deleted");
-                        
-                        if (type === 'duedate' && clientDoc.data().status !== 'Vencido') {
-                            throw new Error("client no longer overdue");
-                        }
-
+                        if (type === 'duedate' && clientDoc.data().status !== 'Vencido') throw new Error("no longer overdue");
                         const sentIds = clientDoc.data().sentRemarketingIds || [];
                         if (sentIds.includes(config.id)) throw new Error("already sent");
-                        
                         transaction.update(clientDocRef, { sentRemarketingIds: arrayUnion(config.id) });
+                    });
+
+                    addDocumentNonBlocking(logRef, {
+                        userId: user.uid,
+                        type: 'Remarketing',
+                        clientName: client.name,
+                        target: client.phone,
+                        status: 'Enviando',
+                        delayApplied: currentDelay / 1000,
+                        timestamp: serverTimestamp(),
                     });
 
                     let formattedMessage = config.message
@@ -96,7 +123,7 @@ export function RemarketingMessageHandler() {
                         .replace(/{tela}/g, client.screen || 'N/A')
                         .replace(/{status}/g, client.status);
 
-                    await fetch('/api/send-message', {
+                    const response = await fetch('/api/send-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -106,34 +133,41 @@ export function RemarketingMessageHandler() {
                         }),
                     });
 
-                    toast({
-                        title: `Remarketing ${type === 'signup' ? 'Cadastro' : 'Vencimento'} Enviado!`,
-                        description: `Enviado para ${client.name}.`,
-                    });
+                    if (response.ok) {
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Remarketing',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Enviado',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+                        toast({ title: `Remarketing Enviado!`, description: `Enviado para ${client.name}.` });
+                    } else {
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Remarketing',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Erro',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+                    }
 
-                    await sleep(DELAY_BETWEEN_MESSAGES);
+                    await sleep(currentDelay);
 
-                } catch (error: any) {
-                    // Error ignored
-                }
+                } catch (error: any) {}
             };
             
-            for (const client of clients) {
-                for (const config of activeSignupRemarketings) {
-                    await processRemarketingForClient(client, config, 'signup');
-                }
-
-                if (client.status === 'Vencido') {
-                    for (const config of activeDueDateRemarketings) {
-                        await processRemarketingForClient(client, config, 'duedate');
-                    }
-                }
+            for (const task of tasks) {
+                await processTask(task);
             }
             
             isProcessing.current = false;
         };
 
-        // Verificação a cada 2 minutos
         const intervalId = setInterval(processRemarketingQueue, 2 * 60 * 1000);
         processRemarketingQueue();
         return () => clearInterval(intervalId);

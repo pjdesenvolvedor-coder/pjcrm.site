@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp } from 'lucide-react';
+import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -25,7 +25,6 @@ import { cn } from '@/lib/utils';
 
 const parseCurrency = (value?: string): number => {
   if (!value) return 0;
-  // Handles formats like "1.500,50" or "1500.50"
   const cleanedValue = value.toString().replace(/\./g, '').replace(',', '.');
   const number = parseFloat(cleanedValue);
   return isNaN(number) ? 0 : number;
@@ -60,6 +59,7 @@ export default function DashboardPage() {
       activePercentage: 0,
       overduePercentage: 0,
       newClientsTodayCount: 0,
+      expiredTodayCount: 0,
     };
 
     if (!clients) {
@@ -103,6 +103,7 @@ export default function DashboardPage() {
     let dueIn3DaysTotal = 0;
     let totalSales = 0;
     let newClientsTodayCount = 0;
+    let expiredTodayCount = 0;
 
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
@@ -112,48 +113,47 @@ export default function DashboardPage() {
       const dueDate = client.dueDate ? client.dueDate.toDate() : null;
       const createdAt = client.createdAt ? client.createdAt.toDate() : null;
 
-      // Track new clients added today
       if (createdAt && isToday(createdAt)) {
           newClientsTodayCount++;
       }
 
-      // Main status categorization (Active vs Overdue)
       let isOverdue = false;
       if (client.status === 'Vencido') {
           isOverdue = true;
+          if (dueDate && isToday(dueDate)) {
+              expiredTodayCount++;
+          }
       } else if (client.status === 'Ativo' && dueDate && dueDate <= now) {
           isOverdue = true;
+          if (isToday(dueDate)) {
+              expiredTodayCount++;
+          }
       }
       
       if (isOverdue) {
           overdueCount++;
           overdueTotal += amount;
-      } else if (client.status === 'Ativo') { // Not overdue, must be active
+      } else if (client.status === 'Ativo') {
           activeCount++;
           activeTotal += amount;
       }
 
-      // Card-specific categorization
       if (dueDate) {
-        // "Vencem Hoje": due date is today, but time has not yet passed
         if (isToday(dueDate) && dueDate > now) {
           dueTodayCount++;
           dueTodayTotal += amount;
         } 
-        // "Vencem em 3 Dias": due date is in the next 3 days (but not today)
         else if (isWithinInterval(dueDate, { start: addDays(today, 1), end: threeDaysFromNow })) {
           dueIn3DaysCount++;
           dueIn3DaysTotal += amount;
         }
       }
       
-      // Stat dependent on 'period' - filter by creation date as requested
       const dateToFilter = createdAt || dueDate;
       if (dateToFilter && isWithinInterval(dateToFilter, { start: periodStart, end: periodEnd })) {
         totalSales += amount;
       }
 
-      // Chart data
       const sub = client.subscription || 'N/A';
       subscriptionCounts[sub] = (subscriptionCounts[sub] || 0) + 1;
 
@@ -177,7 +177,8 @@ export default function DashboardPage() {
       totalSales,
       activePercentage,
       overduePercentage,
-      newClientsTodayCount
+      newClientsTodayCount,
+      expiredTodayCount
     };
 
     const subscriptionData = Object.entries(subscriptionCounts).map(([name, value], index) => ({
@@ -263,7 +264,7 @@ export default function DashboardPage() {
                     "flex items-center text-xs font-medium",
                     stats.newClientsTodayCount >= 1 ? "text-green-600" : "text-red-600"
                 )}>
-                    <ArrowUp className="h-3 w-3 mr-0.5" />
+                    {stats.newClientsTodayCount >= 1 ? <ArrowUp className="h-3 w-3 mr-0.5" /> : <ArrowDown className="h-3 w-3 mr-0.5" />}
                     {stats.newClientsTodayCount}
                 </div>
               </div>
@@ -281,7 +282,16 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
-              <div className="text-3xl font-bold">{stats.overdueCount}</div>
+              <div className="flex items-baseline gap-2">
+                <div className="text-3xl font-bold">{stats.overdueCount}</div>
+                <div className={cn(
+                    "flex items-center text-xs font-medium",
+                    stats.expiredTodayCount >= 1 ? "text-red-600" : "text-green-600"
+                )}>
+                    {stats.expiredTodayCount >= 1 ? <ArrowUp className="h-3 w-3 mr-0.5" /> : <ArrowDown className="h-3 w-3 mr-0.5" />}
+                    {stats.expiredTodayCount}
+                </div>
+              </div>
               <div className="text-lg font-semibold">{formatCurrency(stats.overdueTotal)}</div>
             </CardContent>
           </Card>

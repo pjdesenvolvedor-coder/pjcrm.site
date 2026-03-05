@@ -53,6 +53,7 @@ const permissionsSchema = z.object({
   notes: z.boolean().default(false),
   ads: z.boolean().default(false),
   pix: z.boolean().default(false),
+  logs: z.boolean().default(false),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -69,6 +70,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'pix', label: 'Gerar Pix (Cobrança)' },
     { key: 'estoque', label: 'Estoque de Contas' },
     { key: 'settings', label: 'Configurações' },
+    { key: 'logs', label: 'Logs de Envio' },
 ];
 
 const userFormSchema = z.object({
@@ -96,6 +98,7 @@ function UserEditForm({ attendant, onFinished }: { attendant: UserProfile, onFin
                 notes: attendant.permissions?.notes ?? false,
                 ads: attendant.permissions?.ads ?? false,
                 pix: attendant.permissions?.pix ?? false,
+                logs: attendant.permissions?.logs ?? false,
             },
             subscriptionEndDate: attendant.subscriptionEndDate ? format(attendant.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
         },
@@ -174,13 +177,11 @@ export default function AttendantsPage() {
     return query(
         collection(firestore, 'users'), 
         where('parentId', '==', currentUser.uid)
-        // Removido orderBy do servidor para evitar erro de índice composto
     );
   }, [firestore, currentUser]);
 
   const { data: attendantsRaw, isLoading } = useCollection<UserProfile>(attendantsQuery);
 
-  // Ordenação feita no cliente para evitar necessidade de índice composto no Firestore
   const attendants = useMemo(() => {
     if (!attendantsRaw) return null;
     return [...attendantsRaw].sort((a, b) => {
@@ -265,7 +266,7 @@ export default function AttendantsPage() {
                         </Badge>
                     </TableCell>
                     <TableCell className="text-xs">
-                        {att.subscriptionEndDate ? format(att.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : 'Vitalício'}
+                        {att.subscriptionEndDate ? format(attendant.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : 'Vitalício'}
                     </TableCell>
                     <TableCell className="text-right space-x-1">
                         <Button variant="outline" size="sm" onClick={() => handleGrantTrial(att)} className="text-[10px] h-7 px-2">+3 dias</Button>

@@ -2,11 +2,15 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, where, Timestamp, doc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, Timestamp, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, setDocumentNonBlocking, useDoc } from '@/firebase';
 import type { ScheduledMessage, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { addDays } from 'date-fns';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const BULK_DELAY = 30000;
 
 export function ScheduledMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -34,7 +38,7 @@ export function ScheduledMessageHandler() {
     const { data: messagesToCheck } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
 
     useEffect(() => {
-        const checkScheduledMessages = () => {
+        const checkScheduledMessages = async () => {
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
             }
@@ -46,11 +50,25 @@ export function ScheduledMessageHandler() {
             const now = new Date();
             const token = settings.webhookToken;
             const STALE_TIMEOUT_MS = 2 * 60 * 1000;
+            
+            const dueMessages = messagesToCheck.filter(msg => {
+                if (msg.status === 'Sending') {
+                    const claimedAt = msg.claimedAt?.toDate();
+                    return claimedAt && (now.getTime() - claimedAt.getTime()) > STALE_TIMEOUT_MS;
+                }
+                return msg.sendAt.toDate() <= now;
+            });
+
+            if (dueMessages.length === 0) return;
+
+            const useBulkDelay = dueMessages.length >= 50;
+            const currentDelay = useBulkDelay ? BULK_DELAY : 0;
 
             const processMessage = async (msg: ScheduledMessage) => {
                 if (processingRef.current.has(msg.id)) return;
                 
                 const messageDocRef = doc(firestore, 'users', user.uid, 'scheduled_messages', msg.id);
+                const logRef = collection(firestore, 'users', user.uid, 'logs');
                 
                 try {
                     processingRef.current.add(msg.id);
@@ -79,6 +97,16 @@ export function ScheduledMessageHandler() {
                         });
                     });
 
+                    addDocumentNonBlocking(logRef, {
+                        userId: user.uid,
+                        type: 'Grupo',
+                        clientName: 'Grupo WhatsApp',
+                        target: msg.jid,
+                        status: 'Enviando',
+                        delayApplied: currentDelay / 1000,
+                        timestamp: serverTimestamp(),
+                    });
+
                     const response = await fetch('/api/send-group-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -92,8 +120,27 @@ export function ScheduledMessageHandler() {
 
                     if (!response.ok) {
                         setDocumentNonBlocking(messageDocRef, { status: 'Error', claimedAt: null }, { merge: true });
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Grupo',
+                            clientName: 'Grupo WhatsApp',
+                            target: msg.jid,
+                            status: 'Erro',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
                         throw new Error(`Falha no envio para o grupo ${msg.jid}`);
                     }
+
+                    addDocumentNonBlocking(logRef, {
+                        userId: user.uid,
+                        type: 'Grupo',
+                        clientName: 'Grupo WhatsApp',
+                        target: msg.jid,
+                        status: 'Enviado',
+                        delayApplied: currentDelay / 1000,
+                        timestamp: serverTimestamp(),
+                    });
 
                     if (msg.repeatDaily) {
                         const nextSendAt = addDays(msg.sendAt.toDate(), 1);
@@ -110,19 +157,21 @@ export function ScheduledMessageHandler() {
                         });
                     }
 
+                    if (currentDelay > 0) {
+                        await sleep(currentDelay);
+                    }
+
                 } catch (error: any) {
-                    // Ignored silent checks
                 } finally {
                     processingRef.current.delete(msg.id);
                 }
             };
             
-            for (const msg of messagesToCheck) {
-                processMessage(msg);
+            for (const msg of dueMessages) {
+                await processMessage(msg);
             }
         };
         
-        // Verificação a cada 30 segundos (Máxima Precisão para Agendamentos)
         const intervalId = setInterval(checkScheduledMessages, 30 * 1000);
         checkScheduledMessages();
         return () => clearInterval(intervalId);

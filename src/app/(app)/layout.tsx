@@ -27,6 +27,7 @@ import {
   Briefcase,
   Activity,
   AlertTriangle,
+  ClipboardList,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -213,6 +214,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         ads: false,
         pix: false,
         usage: false,
+        logs: false,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -619,6 +621,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
                                   <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               )}
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs"><ClipboardList />Logs de Envio</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>

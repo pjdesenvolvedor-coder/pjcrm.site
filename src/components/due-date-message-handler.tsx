@@ -2,14 +2,16 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, where, doc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DELAY_MS = 3000; // Reduzido para 3s entre envios
+const STANDARD_DELAY = 3000;
+const BULK_DELAY = 30000; // 30 seconds for bulk
 
 export function DueDateMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -53,9 +55,13 @@ export function DueDateMessageHandler() {
             if (overdueClients.length === 0) return;
 
             isProcessing.current = true;
+            
+            const useBulkDelay = overdueClients.length >= 50;
+            const currentDelay = useBulkDelay ? BULK_DELAY : STANDARD_DELAY;
 
             const processClient = async (client: Client) => {
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+                const logRef = collection(firestore, 'users', user.uid, 'logs');
 
                 try {
                     await runTransaction(firestore, async (transaction) => {
@@ -64,6 +70,17 @@ export function DueDateMessageHandler() {
                             throw new Error("already processed");
                         }
                         transaction.update(clientDocRef, { status: 'Vencido' });
+                    });
+
+                    // Add log entry: Starting
+                    addDocumentNonBlocking(logRef, {
+                        userId: user.uid,
+                        type: 'Vencimento',
+                        clientName: client.name,
+                        target: client.phone,
+                        status: 'Enviando',
+                        delayApplied: currentDelay / 1000,
+                        timestamp: serverTimestamp(),
                     });
 
                     let formattedMessage = settings.dueDateMessage!
@@ -77,7 +94,7 @@ export function DueDateMessageHandler() {
                         .replace(/{tela}/g, client.screen || 'N/A')
                         .replace(/{status}/g, 'Vencido');
 
-                    await fetch('/api/send-message', {
+                    const response = await fetch('/api/send-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -87,10 +104,32 @@ export function DueDateMessageHandler() {
                         }),
                     });
 
-                    toast({
-                        title: "Mensagem de Vencimento Enviada!",
-                        description: `A mensagem foi enviada para ${client.name}.`,
-                    });
+                    if (response.ok) {
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Vencimento',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Enviado',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+                        
+                        toast({
+                            title: "Mensagem de Vencimento Enviada!",
+                            description: `A mensagem foi enviada para ${client.name}.`,
+                        });
+                    } else {
+                         addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Vencimento',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Erro',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+                    }
 
                 } catch (error: any) {
                     // Logs removidos para manter o foco
@@ -99,13 +138,12 @@ export function DueDateMessageHandler() {
             
             for (const client of overdueClients) {
                 await processClient(client);
-                await sleep(DELAY_MS);
+                await sleep(currentDelay);
             }
             
             isProcessing.current = false;
         };
 
-        // Verificação a cada 1 minuto (Alta Precisão)
         const intervalId = setInterval(checkAndProcessOverdueClients, 1 * 60 * 1000);
         checkAndProcessOverdueClients();
         return () => clearInterval(intervalId);

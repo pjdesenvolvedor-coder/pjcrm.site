@@ -2,14 +2,16 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, where, doc, runTransaction, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, doc, runTransaction, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DELAY_BETWEEN_MESSAGES = 3000;
+const STANDARD_DELAY = 3000;
+const BULK_DELAY = 30000;
 
 export function UpsellMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -52,20 +54,33 @@ export function UpsellMessageHandler() {
             isProcessing.current = true;
             const now = new Date();
             
-            const processUpsellForClient = async (client: Client, upsell: UpsellConfig) => {
-                if (!client.createdAt) return;
-                
-                if (upsell.createdAt && client.createdAt.toMillis() < upsell.createdAt) {
-                    return;
+            const tasks: { client: Client, upsell: UpsellConfig }[] = [];
+            for (const client of activeClients) {
+                for (const upsell of activeUpsells) {
+                    if (!client.createdAt) continue;
+                    if (upsell.createdAt && client.createdAt.toMillis() < upsell.createdAt) continue;
+                    
+                    const delayMs = (upsell.upsellDelayMinutes || 0) * 60 * 1000;
+                    const creationTime = client.createdAt.toDate().getTime();
+                    
+                    if ((now.getTime() - creationTime) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
+                        tasks.push({ client, upsell });
+                    }
                 }
-                
-                const delayMs = (upsell.upsellDelayMinutes || 0) * 60 * 1000;
-                const creationTime = client.createdAt.toDate().getTime();
-                
-                if ((now.getTime() - creationTime) < delayMs) return;
-                if (client.sentUpsellIds?.includes(upsell.id)) return;
+            }
 
+            if (tasks.length === 0) {
+                isProcessing.current = false;
+                return;
+            }
+
+            const useBulkDelay = tasks.length >= 50;
+            const currentDelay = useBulkDelay ? BULK_DELAY : STANDARD_DELAY;
+
+            const processTask = async (task: typeof tasks[0]) => {
+                const { client, upsell } = task;
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+                const logRef = collection(firestore, 'users', user.uid, 'logs');
 
                 try {
                     await runTransaction(firestore, async (transaction) => {
@@ -74,6 +89,16 @@ export function UpsellMessageHandler() {
                         const sentIds = clientDoc.data().sentUpsellIds || [];
                         if (sentIds.includes(upsell.id)) throw new Error("already sent");
                         transaction.update(clientDocRef, { sentUpsellIds: arrayUnion(upsell.id) });
+                    });
+
+                    addDocumentNonBlocking(logRef, {
+                        userId: user.uid,
+                        type: 'Upsell',
+                        clientName: client.name,
+                        target: client.phone,
+                        status: 'Enviando',
+                        delayApplied: currentDelay / 1000,
+                        timestamp: serverTimestamp(),
                     });
 
                     let formattedMessage = upsell.upsellMessage
@@ -87,7 +112,7 @@ export function UpsellMessageHandler() {
                         .replace(/{tela}/g, client.screen || 'N/A')
                         .replace(/{status}/g, client.status);
 
-                    await fetch('/api/send-message', {
+                    const response = await fetch('/api/send-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -97,28 +122,41 @@ export function UpsellMessageHandler() {
                         }),
                     });
 
-                    toast({
-                        title: "UPSELL Enviado!",
-                        description: `A oferta foi enviada para ${client.name}.`,
-                    });
+                    if (response.ok) {
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Upsell',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Enviado',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+                        toast({ title: "UPSELL Enviado!", description: `A oferta foi enviada para ${client.name}.` });
+                    } else {
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Upsell',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Erro',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+                    }
 
-                    await sleep(DELAY_BETWEEN_MESSAGES);
+                    await sleep(currentDelay);
 
-                } catch (error: any) {
-                    // Error ignored
-                }
+                } catch (error: any) {}
             };
             
-            for (const client of activeClients) {
-                for (const upsell of activeUpsells) {
-                    await processUpsellForClient(client, upsell);
-                }
+            for (const task of tasks) {
+                await processTask(task);
             }
             
             isProcessing.current = false;
         };
 
-        // Verificação a cada 1 minuto
         const intervalId = setInterval(processUpsellQueue, 1 * 60 * 1000);
         processUpsellQueue();
         return () => clearInterval(intervalId);

@@ -11,12 +11,13 @@ export type UserPermissions = {
   zapconnect: boolean;
   settings: boolean;
   users: boolean;
-  attendants: boolean; // Permission to manage own attendants
+  attendants: boolean;
   estoque: boolean;
   notes: boolean;
   ads: boolean;
   pix: boolean;
   usage: boolean;
+  logs: boolean;
 };
 
 export type UserProfile = {
@@ -25,8 +26,8 @@ export type UserProfile = {
   lastName: string;
   email: string;
   createdAt: Timestamp;
-  role: 'Admin' | 'User' | 'Agent'; // Admin: System, User: Owner, Agent: Attendant
-  parentId?: string | null; // UID of the owner who created this attendant
+  role: 'Admin' | 'User' | 'Agent';
+  parentId?: string | null;
   avatarUrl?: string;
   permissions?: Partial<UserPermissions>;
   subscriptionPlan?: 'basic' | 'pro' | null;
@@ -77,70 +78,15 @@ export type Client = {
   sentRemarketingIds?: string[];
 };
 
-export type WhatsAppConnection = {
+export type MessageLog = {
   id: string;
   userId: string;
-  phoneNumber: string;
-  apiKey: string;
-  connectionStatus: string;
-};
-
-export type AutomatedMessageWorkflow = {
-  id: string;
-  userId: string;
-  name: string;
-  trigger: string;
-  status: 'Active' | 'Inactive';
-};
-
-export type MessageAnalytics = {
-  id: string;
+  type: 'Vencimento' | 'Remarketing' | 'Upsell' | 'Grupo' | 'Disparo';
+  clientName: string;
+  target: string;
+  status: 'Aguardando' | 'Enviando' | 'Enviado' | 'Erro';
+  delayApplied: number;
   timestamp: Timestamp;
-  messagesSent: number;
-  messagesReceived: number;
-  engagementRate: number;
-  satisfactionScore: number;
-};
-
-export type AIResponseSuggestion = {
-  id: string;
-  messageContext: string;
-  suggestion: string;
-  confidenceScore: number;
-  timestamp: Timestamp;
-};
-
-export type Conversation = {
-  id: string;
-  customerName: string;
-  lastMessage: string;
-  timestamp: Timestamp;
-  avatarUrl: string;
-  unreadCount: number;
-};
-
-export type Message = {
-  id: string;
-  sender: 'user' | 'agent';
-  content: string;
-  timestamp: Timestamp;
-  avatarUrl: string;
-};
-
-export type UpsellConfig = {
-  id: string;
-  isActive: boolean;
-  upsellDelayMinutes: number;
-  upsellMessage: string;
-  createdAt?: number;
-};
-
-export type RemarketingConfig = {
-  id: string;
-  isActive: boolean;
-  days: number;
-  message: string;
-  createdAt?: number;
 };
 
 export type Settings = {
@@ -167,11 +113,26 @@ export type Settings = {
   supportFinishedMessage?: string;
   isDeliveryAutomationActive?: boolean;
   deliveryMessage?: string;
-  // Lead Messages
   isLeadAutomationActive?: boolean;
   leadInitialMessage?: string;
   leadConvertedMessage?: string;
   leadLostMessage?: string;
+};
+
+export type RemarketingConfig = {
+  id: string;
+  isActive: boolean;
+  days: number;
+  message: string;
+  createdAt?: number;
+};
+
+export type UpsellConfig = {
+  id: string;
+  isActive: boolean;
+  upsellDelayMinutes: number;
+  upsellMessage: string;
+  createdAt?: number;
 };
 
 export type Subscription = {
@@ -208,15 +169,6 @@ export type ExtractedGroup = {
   participantCount: string;
   adminPhones: string[];
   memberPhones: string[];
-};
-
-export type Estoque = {
-  id: string;
-  userId: string;
-  nome: string;
-  login: string;
-  senha: string;
-  status: 'Disponível' | 'Em Uso';
 };
 
 export type SystemAlert = {
