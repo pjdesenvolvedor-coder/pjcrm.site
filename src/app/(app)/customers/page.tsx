@@ -254,7 +254,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Senha</FormLabel><FormControl><div className="relative md:col-span-3"><Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Senha" {...field} className="pl-9" /></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>
                     )}/>
                     <FormField control={form.control} name="screen" render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Tela</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><div className="flex items-center gap-2"><Monitor className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Tela" /></div></SelectTrigger></FormControl><SelectContent>{screenOptions.map(o => <SelectItem key={o} value={o}>Tela {o}</SelectItem>)}</Select></FormItem>
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Tela</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><div className="flex items-center gap-2"><Monitor className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Tela" /></div></SelectTrigger></FormControl><SelectContent>{screenOptions.map(o => <SelectItem key={o} value={o}>Tela {o}</SelectItem>)}</SelectContent></Select></FormItem>
                     )}/>
                   </>
                 )}
@@ -278,7 +278,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                                 )}
                             />
                         </div>
-                        <span className="font-bold">:</span>
+                        <span className="font-bold text-lg">:</span>
                         <div className="relative flex-1">
                             <FormField
                                 control={form.control}
@@ -371,7 +371,8 @@ export default function CustomersPage() {
                     <TableCell className="text-right space-x-1">
                         <Button variant="outline" size="sm" onClick={() => setDialogState({ view: 'edit', client })}>Editar</Button>
                         <Button variant="ghost" size="icon" onClick={() => handleToggleSupport(client)}><LifeBuoy className={cn("h-4 w-4", client.needsSupport && "text-primary fill-primary/20")} /></Button>
-                        <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Cliente?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Não</AlertDialogCancel><AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', effectiveUserId!, 'clients', client.id))}>Sim</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Cliente?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Não</AlertDialogCancel><AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', effectiveUserId!, 'clients', client.id))}>Sim</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                     </TableCell>
                 </TableRow>
               ))}
