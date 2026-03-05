@@ -52,7 +52,6 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const leadSchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório'),
   phone: z.string().min(1, 'Número é obrigatório'),
   interestedSubscription: z.string().min(1, 'Selecione uma assinatura'),
 });
@@ -75,7 +74,7 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
 
   const form = useForm<z.infer<typeof leadSchema>>({
     resolver: zodResolver(leadSchema),
-    defaultValues: { name: '', phone: '', interestedSubscription: '' },
+    defaultValues: { phone: '', interestedSubscription: '' },
   });
 
   const onSubmit = async (values: z.infer<typeof leadSchema>) => {
@@ -83,7 +82,7 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
 
     const leadData = {
       userId: user.uid,
-      name: values.name,
+      name: values.phone, // Usamos o telefone como nome já que o campo foi removido
       phone: values.phone,
       interestedSubscription: values.interestedSubscription,
       status: 'pending',
@@ -91,12 +90,12 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
     };
 
     await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'leads'), leadData);
-    toast({ title: "Interessado Adicionado!", description: `${values.name} foi cadastrado.` });
+    toast({ title: "Interessado Adicionado!", description: `O lead ${values.phone} foi cadastrado.` });
 
     // Send Initial Message
     if (settings?.isLeadAutomationActive && settings.leadInitialMessage && settings.webhookToken) {
         let formattedMessage = settings.leadInitialMessage
-            .replace(/{cliente}/g, values.name)
+            .replace(/{cliente}/g, values.phone)
             .replace(/{telefone}/g, values.phone)
             .replace(/{assinatura_interesse}/g, values.interestedSubscription);
 
@@ -119,7 +118,6 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-        <FormField control={form.control} name="name" render={({ field }) => ( <FormItem><FormLabel>Nome do Interessado</FormLabel><FormControl><Input placeholder="Nome Completo" {...field} /></FormControl><FormMessage /></FormItem>)} />
         <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem><FormLabel>WhatsApp (DDD + Número)</FormLabel><FormControl><Input placeholder="Ex: 5511999998888" {...field} /></FormControl><FormMessage /></FormItem>)} />
         <FormField
           control={form.control}
@@ -165,7 +163,6 @@ export default function WantsToBuyPage() {
 
   const leadsQuery = useMemoFirebase(() => {
     if (!user) return null;
-    // Simplificamos a query removendo o orderBy para evitar erros de índice mascarados como permissão
     return query(collection(firestore, 'users', user.uid, 'leads'), where('status', '==', 'pending'));
   }, [firestore, user]);
 
@@ -180,7 +177,6 @@ export default function WantsToBuyPage() {
         l.phone.includes(searchTerm)
       )
       .sort((a, b) => {
-        // Ordenação manual no cliente para evitar necessidade de índices no Firestore
         const dateA = a.createdAt?.toMillis() || 0;
         const dateB = b.createdAt?.toMillis() || 0;
         return dateB - dateA;
@@ -196,7 +192,7 @@ export default function WantsToBuyPage() {
     
     toast({
         title: action === 'comprou' ? "Venda Realizada!" : "Venda Cancelada",
-        description: `O status de ${lead.name} foi atualizado.`,
+        description: `O status de ${lead.phone} foi atualizado.`,
     });
 
     // Send automated message
@@ -260,7 +256,6 @@ export default function WantsToBuyPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
                   <TableHead>WhatsApp</TableHead>
                   <TableHead>Interesse</TableHead>
                   <TableHead>Data</TableHead>
@@ -269,17 +264,16 @@ export default function WantsToBuyPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="h-24 text-center">Carregando...</TableCell></TableRow>
                 ) : filteredLeads.length > 0 ? (
                   filteredLeads.map((lead) => (
                     <TableRow key={lead.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            {lead.name}
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            {lead.phone}
                         </div>
                       </TableCell>
-                      <TableCell>{lead.phone}</TableCell>
                       <TableCell><Badge variant="outline" className="bg-blue-50">{lead.interestedSubscription}</Badge></TableCell>
                       <TableCell className="text-muted-foreground text-xs">{lead.createdAt ? format(lead.createdAt.toDate(), 'dd/MM/yy HH:mm') : '-'}</TableCell>
                       <TableCell className="text-right">
@@ -324,7 +318,7 @@ export default function WantsToBuyPage() {
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Nenhum interessado pendente.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Nenhum interessado pendente.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
