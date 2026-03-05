@@ -362,7 +362,7 @@ export default function ShotStatusProductPage() {
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Atenção</AlertTitle>
                     <AlertDescription className="text-[11px]">
-                        Ao clicar em enviar, o sistema processará um por um. O log de cada envio aparecerá em "Configurações > Logs".
+                        Ao clicar em enviar, o sistema processará um por um. O log de cada envio aparecerá em "Configurações &gt; Logs".
                     </AlertDescription>
                 </Alert>
                 
