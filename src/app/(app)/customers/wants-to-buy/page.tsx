@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PlusCircle, ShoppingCart, User, Phone, CheckCircle, XCircle, Trash2, Search, RefreshCw } from 'lucide-react';
 import { collection, query, orderBy, doc, where, serverTimestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
@@ -165,15 +165,27 @@ export default function WantsToBuyPage() {
 
   const leadsQuery = useMemoFirebase(() => {
     if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'leads'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    // Simplificamos a query removendo o orderBy para evitar erros de índice mascarados como permissão
+    return query(collection(firestore, 'users', user.uid, 'leads'), where('status', '==', 'pending'));
   }, [firestore, user]);
 
   const { data: leads, isLoading } = useCollection<Lead>(leadsQuery);
 
-  const filteredLeads = leads?.filter(l => 
-    l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    l.phone.includes(searchTerm)
-  ) || [];
+  const filteredLeads = useMemo(() => {
+    if (!leads) return [];
+    
+    return [...leads]
+      .filter(l => 
+        l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        l.phone.includes(searchTerm)
+      )
+      .sort((a, b) => {
+        // Ordenação manual no cliente para evitar necessidade de índices no Firestore
+        const dateA = a.createdAt?.toMillis() || 0;
+        const dateB = b.createdAt?.toMillis() || 0;
+        return dateB - dateA;
+      });
+  }, [leads, searchTerm]);
 
   const handleAction = async (lead: Lead, action: 'comprou' | 'nao-comprou') => {
     if (!user || !settings) return;
