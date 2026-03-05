@@ -254,7 +254,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Senha</FormLabel><FormControl><div className="relative md:col-span-3"><Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Senha" {...field} className="pl-9" /></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>
                     )}/>
                     <FormField control={form.control} name="screen" render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Tela</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><div className="flex items-center gap-2"><Monitor className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Tela" /></div></SelectTrigger></FormControl><SelectContent>{screenOptions.map(o => <SelectItem key={o} value={o}>Tela {o}</SelectItem>)}</SelectContent></Select></FormItem>
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Tela</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><div className="flex items-center gap-2"><Monitor className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Tela" /></div></SelectTrigger></FormControl><SelectContent>{screenOptions.map(o => <SelectItem key={o} value={o}>Tela {o}</SelectItem>)}</Select></FormItem>
                     )}/>
                   </>
                 )}
@@ -296,7 +296,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Obs..." className="md:col-span-3" {...field} /></FormControl></FormItem> )} />
           </TabsContent>
           <TabsContent value="pagamento" className="py-6 space-y-4">
-                <FormField control={form.control} name="subscription" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Plano *</FormLabel><Select onValueChange={(v) => { field.onChange(v); const s = subscriptions?.find(x => x.name === v); if (s) form.setValue('amountPaid', s.value); }} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{subscriptions?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></FormItem> )} />
+                <FormField control={form.control} name="subscription" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Plano *</FormLabel><Select onValueChange={(v) => { field.onChange(v); const s = subscriptions?.find(x => x.name === v); if (s) form.setValue('amountPaid', s.value); }} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{subscriptions?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></FormItem> )} />
                 <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Valor</FormLabel><div className="relative md:col-span-3"><span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span><FormControl><Input {...field} placeholder="0,00" className="pl-9" /></FormControl></div></FormItem> )} />
           </TabsContent>
         </Tabs>
@@ -348,10 +348,24 @@ export default function CustomersPage() {
         <Button size="sm" onClick={() => setDialogState({ view: 'add' })}><PlusCircle className="h-4 w-4 mr-1" />Adicionar</Button>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
-        <Card><Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Status</TableHead><TableHead>Vencimento</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={4} className="text-center">Carregando...</TableCell></TableRow> : filteredClients.map((client) => (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Plano</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Vencimento</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center">Carregando...</TableCell></TableRow>
+              ) : filteredClients.map((client) => (
                 <TableRow key={client.id} className={cn(client.needsSupport && "bg-primary/5")}>
                     <TableCell><div className='flex items-center gap-2'>{client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}{client.name}</div></TableCell>
+                    <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
                     <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell className="text-right space-x-1">
@@ -360,8 +374,10 @@ export default function CustomersPage() {
                         <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Cliente?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Não</AlertDialogCancel><AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', effectiveUserId!, 'clients', client.id))}>Sim</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                     </TableCell>
                 </TableRow>
-            ))}
-        </TableBody></Table></Card>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       </main>
       <Dialog open={dialogState.view !== 'closed'} onOpenChange={(o) => !o && setDialogState({ view: 'closed' })}>
         <DialogContent className="sm:max-w-lg">
