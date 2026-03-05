@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Lock, Unlock, Package, Trash2, Gift, CalendarDays } from 'lucide-react';
+import { Lock, Unlock, Package, Trash2, Gift, CalendarDays, UserPlus, Copy, Check } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -60,19 +60,18 @@ const permissionsSchema = z.object({
 type UserFormData = z.infer<typeof userFormSchema>;
 
 const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
-    { key: 'dashboard', label: 'Início' },
-    { key: 'customers', label: 'Clientes & Suporte' },
-    { key: 'inbox', label: 'Inbox' },
-    { key: 'automations', label: 'Automações' },
-    { key: 'groups', label: 'Grupos' },
+    { key: 'dashboard', label: 'Início (Dash)' },
+    { key: 'customers', label: 'Clientes (Todos, Leads, Suporte)' },
+    { key: 'automations', label: 'Automações (Vencimento, etc)' },
+    { key: 'groups', label: 'Grupos (JID, Extração, Agenda)' },
     { key: 'shot', label: 'Disparo em Massa' },
-    { key: 'pix', label: 'Gerar Pix' },
-    { key: 'estoque', label: 'Estoque' },
-    { key: 'zapconnect', label: 'ZapConexão' },
-    { key: 'settings', label: 'Configurações (Assinaturas, etc)' },
-    { key: 'users', label: 'Gerenciamento de Usuários' },
-    { key: 'notes', label: 'Notas' },
-    { key: 'ads', label: 'Relatório de Anúncios' },
+    { key: 'notes', label: 'Notas (Minhas Tarefas)' },
+    { key: 'ads', label: 'Relatórios (Anúncios)' },
+    { key: 'zapconnect', label: 'ZapConexão (Pareamento)' },
+    { key: 'pix', label: 'Gerar Pix (Cobrança)' },
+    { key: 'estoque', label: 'Estoque de Contas' },
+    { key: 'settings', label: 'Configurações (BMs, Assinaturas)' },
+    { key: 'users', label: 'Gerenciar Atendentes' },
 ];
 
 function UserClientCount({ userId }: { userId: string }) {
@@ -209,8 +208,8 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
         setDocumentNonBlocking(userDocRef, dataToUpdate, { merge: true });
 
         toast({
-            title: "Usuário Atualizado!",
-            description: `As permissões e assinatura de ${user.firstName} foram salvas.`
+            title: "Atendente Atualizado!",
+            description: `As permissões e menus de ${user.firstName} foram salvos.`
         });
         onFinished();
     };
@@ -219,9 +218,9 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <DialogHeader>
-                    <DialogTitle>Editar Usuário: {user.firstName} {user.lastName}</DialogTitle>
+                    <DialogTitle>Permissões: {user.firstName} {user.lastName}</DialogTitle>
                     <DialogDescription>
-                        Defina a função, permissões e data de vencimento para este usuário.
+                        Escolha quais menus este atendente poderá visualizar e usar.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -230,7 +229,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                     name="role"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Função</FormLabel>
+                            <FormLabel>Nível de Acesso</FormLabel>
                             <Select onValueChange={field.onChange} defaultValue={field.value} disabled={user.id === currentUser?.uid}>
                                 <FormControl>
                                     <SelectTrigger>
@@ -238,27 +237,27 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                                     </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    <SelectItem value="Agent">Agente</SelectItem>
-                                    <SelectItem value="Admin">Admin</SelectItem>
+                                    <SelectItem value="Agent">Atendente (Agente)</SelectItem>
+                                    <SelectItem value="Admin">Administrador (Total)</SelectItem>
                                 </SelectContent>
                             </Select>
-                            {user.id === currentUser?.uid && <p className="text-xs text-muted-foreground pt-1">Você não pode alterar sua própria função.</p>}
+                            {user.id === currentUser?.uid && <p className="text-xs text-muted-foreground pt-1">Você é o dono da conta principal.</p>}
                             <FormMessage />
                         </FormItem>
                     )}
                 />
 
                 <div>
-                    <Label>Permissões de Acesso</Label>
-                    <div className="space-y-2 rounded-md border p-4 mt-2">
+                    <Label>Menus Visíveis</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border p-4 mt-2 max-h-[300px] overflow-y-auto">
                         {permissionLabels.map(({ key, label }) => (
                             <FormField
                                 key={key}
                                 control={form.control}
                                 name={`permissions.${key}`}
                                 render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between">
-                                        <FormLabel className="font-normal">{label}</FormLabel>
+                                    <FormItem className="flex flex-row items-center justify-between space-y-0 p-2 hover:bg-muted/50 rounded-sm">
+                                        <FormLabel className="font-normal cursor-pointer text-xs">{label}</FormLabel>
                                         <FormControl>
                                             <Checkbox
                                                 checked={field.value}
@@ -273,14 +272,14 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                     </div>
                 </div>
                  <div>
-                    <Label>Assinatura</Label>
+                    <Label>Validade do Acesso</Label>
                      <div className="space-y-2 rounded-md border p-4 mt-2">
                         <FormField
                             control={form.control}
                             name="subscriptionEndDate"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel className='flex items-center gap-2'><CalendarDays/>Data de Vencimento</FormLabel>
+                                    <FormLabel className='flex items-center gap-2 text-xs'><CalendarDays className='h-3 w-3'/>Data de Vencimento</FormLabel>
                                     <FormControl>
                                         <Input
                                             placeholder="dd/mm/aaaa"
@@ -300,8 +299,8 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                                             }}
                                         />
                                     </FormControl>
-                                    <FormDescription>
-                                        Defina a data de expiração da assinatura. Deixe em branco para remover.
+                                    <FormDescription className="text-[10px]">
+                                        O atendente será bloqueado após esta data. Deixe vazio para acesso vitalício.
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>
@@ -312,7 +311,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
 
                 <DialogFooter>
                     <Button type="button" variant="ghost" onClick={onFinished}>Cancelar</Button>
-                    <Button type="submit">Salvar Alterações</Button>
+                    <Button type="submit">Salvar Permissões</Button>
                 </DialogFooter>
             </form>
         </Form>
@@ -325,6 +324,7 @@ export default function UsersPage() {
   const { firestore, user: currentUser } = useFirebase();
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const { toast } = useToast();
+  const [hasCopied, setHasCopied] = useState(false);
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -391,8 +391,19 @@ export default function UsersPage() {
   
   const handleEditFinished = () => {
     setEditingUser(null);
-    fetchUsers('initial'); // Re-fetch to show updated data
+    fetchUsers('initial');
   }
+
+  const handleCopySignupLink = () => {
+      const url = window.location.origin + '/signup';
+      navigator.clipboard.writeText(url);
+      setHasCopied(true);
+      toast({
+          title: "Link Copiado!",
+          description: "Envie este link para seu novo atendente se cadastrar."
+      });
+      setTimeout(() => setHasCopied(false), 3000);
+  };
 
   const handleGrantTrial = (userToGrant: UserProfile) => {
     if (!firestore) return;
@@ -421,11 +432,10 @@ export default function UsersPage() {
     setDocumentNonBlocking(userDocRef, dataToUpdate, { merge: true });
 
     toast({
-        title: "Teste Grátis Concedido!",
-        description: `O usuário ${userToGrant.firstName} recebeu 3 dias de teste.`
+        title: "Acesso Liberado!",
+        description: `O atendente ${userToGrant.firstName} recebeu +3 dias de acesso.`
     });
 
-    // Optimistic UI update
     setUsers(prevUsers => prevUsers.map(u =>
         u.id === userToGrant.id
             ? { ...u, ...dataToUpdate }
@@ -447,95 +457,15 @@ export default function UsersPage() {
     }
 
     const newStatus = userToToggle.status === 'blocked' ? 'active' : 'blocked';
-    
-    if (newStatus === 'blocked') {
-        // Release token logic
-        try {
-            const userSettingsRef = doc(firestore, 'users', userToToggle.id, 'settings', 'config');
-            const settingsSnap = await getDoc(userSettingsRef);
-            
-            if (settingsSnap.exists() && settingsSnap.data().webhookToken) {
-                const tokenValue = settingsSnap.data().webhookToken;
-
-                // Disconnect session
-                await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: tokenValue }),
-                });
-
-                // Release token from stock
-                const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
-                const tokenSnapshot = await getDocs(tokenQuery);
-                
-                if (!tokenSnapshot.empty) {
-                    const tokenDocRef = tokenSnapshot.docs[0].ref;
-                    const batch = writeBatch(firestore);
-                    batch.update(tokenDocRef, {
-                        status: 'available',
-                        assignedTo: null,
-                        assignedEmail: null,
-                    });
-                    batch.update(userSettingsRef, { webhookToken: null });
-                    await batch.commit();
-                }
-            }
-        } catch(e) {
-            console.error("Failed to release token on block:", e);
-            toast({
-                variant: "destructive",
-                title: "Erro ao Liberar Token",
-                description: "Não foi possível retornar o token do usuário ao estoque.",
-            });
-        }
-    } else if (newStatus === 'active' && userToToggle.subscriptionPlan) {
-        // Re-assign token on unblock
-        try {
-            const tokensRef = collection(firestore, 'tokens');
-            const q = query(tokensRef, where('status', '==', 'available'), limit(1));
-            const availableTokenSnap = await getDocs(q);
-
-            if (availableTokenSnap.empty) {
-                throw new Error('Nenhum token disponível no estoque para reatribuir.');
-            }
-
-            const tokenDoc = availableTokenSnap.docs[0];
-            const userSettingsRef = doc(firestore, 'users', userToToggle.id, 'settings', 'config');
-            
-            await runTransaction(firestore, async (transaction) => {
-                transaction.update(tokenDoc.ref, {
-                    status: 'in_use',
-                    assignedTo: userToToggle.id,
-                    assignedEmail: userToToggle.email,
-                });
-                transaction.set(userSettingsRef, { webhookToken: tokenDoc.data().value }, { merge: true });
-            });
-             toast({
-                title: "Token Reatribuído!",
-                description: `Um novo token foi atribuído para ${userToToggle.firstName}.`,
-            });
-
-        } catch (e: any) {
-            console.error("Failed to assign token on unblock:", e);
-            toast({
-                variant: "destructive",
-                title: "Erro ao Atribuir Token",
-                description: e.message || "Não foi possível atribuir um novo token do estoque.",
-            });
-        }
-    }
-
-
     const userDocRef = doc(firestore, "users", userToToggle.id);
     
     setDocumentNonBlocking(userDocRef, { status: newStatus }, { merge: true });
 
     toast({
-        title: `Usuário ${newStatus === 'blocked' ? 'Bloqueado' : 'Desbloqueado'}`,
-        description: `O acesso de ${userToToggle.firstName} foi ${newStatus === 'blocked' ? 'bloqueado' : 'restaurado'}.`,
+        title: `Atendente ${newStatus === 'blocked' ? 'Bloqueado' : 'Desbloqueado'}`,
+        description: `O acesso de ${userToToggle.firstName} foi ${newStatus === 'blocked' ? 'removido' : 'restaurado'}.`,
     });
     
-    // Optimistic UI update
     setUsers(prevUsers => prevUsers.map(u => 
         u.id === userToToggle.id ? { ...u, status: newStatus } : u
     ));
@@ -548,56 +478,26 @@ export default function UsersPage() {
         toast({
             variant: "destructive",
             title: "Ação não permitida",
-            description: "Você não pode excluir seu próprio usuário.",
+            description: "Você não pode excluir o administrador mestre.",
         });
         return;
     }
 
     try {
-        const userSettingsRef = doc(firestore, 'users', userToDelete.id, 'settings', 'config');
-        const settingsSnap = await getDoc(userSettingsRef);
-
-        if (settingsSnap.exists() && settingsSnap.data().webhookToken) {
-            const tokenValue = settingsSnap.data().webhookToken;
-
-            // Disconnect session
-            await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: tokenValue }),
-            });
-
-            // Find and release token
-            const tokenQuery = query(collection(firestore, 'tokens'), where('value', '==', tokenValue), limit(1));
-            const tokenSnapshot = await getDocs(tokenQuery);
-            if (!tokenSnapshot.empty) {
-                const tokenDocRef = tokenSnapshot.docs[0].ref;
-                await runTransaction(firestore, async (transaction) => {
-                    transaction.update(tokenDocRef, {
-                        status: 'available',
-                        assignedTo: null,
-                        assignedEmail: null,
-                    });
-                });
-            }
-        }
-        
-        // Delete the user's document
         const userDocRef = doc(firestore, "users", userToDelete.id);
         await deleteDoc(userDocRef);
 
         toast({
-            title: "Usuário Excluído",
-            description: `Os dados de ${userToDelete.firstName} foram removidos do CRM.`,
+            title: "Atendente Removido",
+            description: `Os dados de ${userToDelete.firstName} foram removidos.`,
         });
 
         fetchUsers('initial');
     } catch (e: any) {
-        console.error("Failed to delete user:", e);
         toast({
             variant: "destructive",
             title: "Erro ao Excluir",
-            description: "Não foi possível excluir o usuário. Verifique o console.",
+            description: "Não foi possível excluir o atendente.",
         });
     }
   };
@@ -606,8 +506,8 @@ export default function UsersPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Gerenciamento de Usuários"
-        description="Gerencie os usuários da sua equipe e suas permissões de acesso."
+        title="Gerenciar Atendentes"
+        description="Controle quem acessa o seu CRM e quais menus estão visíveis para eles."
       >
         <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => fetchUsers('prev')} disabled={!hasPrevPage || isLoading}>
@@ -616,25 +516,28 @@ export default function UsersPage() {
             <Button variant="outline" size="sm" onClick={() => fetchUsers('next')} disabled={!hasNextPage || isLoading}>
                 Próximo
             </Button>
-            <p className="text-sm text-muted-foreground">Novos usuários se cadastram na página de <a href="/signup" className="underline">cadastro</a>.</p>
+            <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleCopySignupLink}>
+                {hasCopied ? <Check className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                Convidar Atendente
+            </Button>
         </div>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <Card>
           <CardHeader>
-            <CardTitle>Membros da Equipe</CardTitle>
+            <CardTitle>Sua Equipe</CardTitle>
             <CardDescription>
-              Gerencie os membros da sua equipe e suas permissões.
+              Abaixo estão listados todos os atendentes cadastrados. Use o botão "Editar" para liberar menus específicos.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead>Função</TableHead>
+                  <TableHead>Atendente</TableHead>
+                  <TableHead>Nível</TableHead>
                   <TableHead>Clientes Ativos</TableHead>
-                  <TableHead>Assinatura</TableHead>
+                  <TableHead>Vencimento</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -645,7 +548,7 @@ export default function UsersPage() {
                   </TableRow>
                 )}
                 {!isLoading && users?.map((user) => (
-                  <TableRow key={user.id}>
+                  <TableRow key={user.id} className={cn(user.status === 'blocked' && "opacity-60")}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Image
@@ -653,18 +556,21 @@ export default function UsersPage() {
                           alt={user.firstName}
                           width={40}
                           height={40}
-                          className="rounded-full"
+                          className="rounded-full border"
                           data-ai-hint="person portrait"
                         />
                         <div className="font-medium">
-                          <p>{user.firstName} {user.lastName}</p>
+                          <p className='flex items-center gap-2'>
+                              {user.firstName} {user.lastName}
+                              {user.id === currentUser?.uid && <Badge variant="outline" className="text-[10px] py-0">VOCÊ</Badge>}
+                          </p>
                           <p className="text-sm text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                         <div className="flex items-center gap-2">
-                            <Badge variant={user.role === 'Admin' ? 'destructive' : 'outline'}>{user.role}</Badge>
+                            <Badge variant={user.role === 'Admin' ? 'destructive' : 'outline'}>{user.role === 'Admin' ? 'Admin' : 'Atendente'}</Badge>
                             {user.status === 'blocked' && (
                                 <Badge variant="secondary" className="border-yellow-400 bg-yellow-50 text-yellow-800">
                                     Bloqueado
@@ -679,36 +585,35 @@ export default function UsersPage() {
                       <SubscriptionCell endDate={user.subscriptionEndDate} />
                     </TableCell>
                     <TableCell className="text-right space-x-1">
-                        <Button variant="outline" size="sm" onClick={() => handleGrantTrial(user)}>
-                            <Gift className="mr-2 h-4 w-4" />
-                            Teste (+3d)
+                        <Button variant="outline" size="sm" onClick={() => handleGrantTrial(user)} className="text-xs">
+                            <Gift className="mr-1 h-3 w-3" />
+                            +3 dias
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Editar</Button>
+                        <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>Permissões</Button>
                         <Button 
                             variant={user.status === 'blocked' ? 'secondary' : 'ghost'} 
                             size="sm" 
                             onClick={() => handleToggleBlockUser(user)}
                             disabled={user.id === currentUser?.uid}
                         >
-                            {user.status === 'blocked' ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-                            {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+                            {user.status === 'blocked' ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                         </Button>
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="sm" disabled={user.id === currentUser?.uid}>
-                                    Excluir
+                                <Button variant="ghost" size="icon" disabled={user.id === currentUser?.uid} className="text-destructive">
+                                    <Trash2 className="h-4 w-4" />
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
-                                <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                <AlertDialogTitle>Remover Atendente?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Essa ação não pode ser desfeita. Isso excluirá permanentemente os dados do usuário do CRM, desconectará sua sessão e liberará seu token. O usuário NÃO poderá se cadastrar novamente com o mesmo e-mail, a menos que você o exclua manually do console de autenticação do Firebase.
+                                    Isso excluirá os dados de {user.firstName} permanentemente do seu CRM.
                                 </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDeleteUser(user)}>Sim, Excluir</AlertDialogAction>
+                                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDeleteUser(user)}>Sim, Remover</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
@@ -717,7 +622,7 @@ export default function UsersPage() {
                 ))}
                  {!isLoading && users.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={5} className="text-center">Nenhum usuário encontrado.</TableCell>
+                        <TableCell colSpan={5} className="text-center">Nenhum atendente cadastrado.</TableCell>
                     </TableRow>
                 )}
               </TableBody>

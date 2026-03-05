@@ -30,6 +30,7 @@ import {
   ShieldAlert,
   TrendingUp,
   ShoppingCart,
+  UserPlus,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -626,7 +627,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               )}
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              {permissions.users && <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users">Usuários</Link></SidebarMenuSubButton></SidebarMenuSubItem>}
+                              {permissions.users && <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>}
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
