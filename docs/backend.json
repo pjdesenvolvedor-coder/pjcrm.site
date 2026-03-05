@@ -246,6 +246,22 @@
         "phone"
       ]
     },
+    "Lead": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Lead",
+      "type": "object",
+      "description": "Represents a potential customer interested in a subscription.",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "interestedSubscription": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "converted", "lost"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "phone", "interestedSubscription", "status", "createdAt"]
+    },
     "WhatsAppConnection": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "WhatsAppConnection",
@@ -833,6 +849,26 @@
             {
               "name": "clientId",
               "description": "The unique identifier for the client."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/leads/{leadId}",
+        "definition": {
+          "entityName": "Lead",
+          "schema": {
+            "$ref": "#/backend/entities/Lead"
+          },
+          "description": "Stores potential customer leads for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "leadId",
+              "description": "The unique identifier for the lead record."
             }
           ]
         }
