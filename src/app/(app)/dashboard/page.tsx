@@ -11,7 +11,7 @@ import type { Client } from '@/lib/types';
 import { useState, useMemo } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PieChart, Pie, Cell } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import {
   ChartContainer,
   ChartLegend,
@@ -184,13 +184,13 @@ export default function DashboardPage() {
     const subscriptionData = Object.entries(subscriptionCounts).map(([name, value], index) => ({
       name: name === 'N/A' ? 'Não especificado' : name,
       value,
-      fill: `hsl(var(--chart-${index + 1}))`
+      fill: `hsl(var(--chart-${(index % 5) + 1}))`
     }));
 
     const paymentMethodData = Object.entries(paymentMethodCounts).map(([name, value], index) => ({
       name: name === 'N/A' ? 'Não especificado' : name,
       value,
-      fill: `hsl(var(--chart-${index + 1}))`
+      fill: `hsl(var(--chart-${(index % 5) + 1}))`
     }));
 
     return { stats: finalStats, subscriptionData, paymentMethodData };
@@ -349,14 +349,14 @@ export default function DashboardPage() {
         </div>
 
          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <Card>
+          <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Assinaturas</CardTitle>
               <CardDescription>Distribuição de clientes por plano</CardDescription>
             </CardHeader>
-            <CardContent className="h-[300px]">
+            <CardContent className="flex-1 min-h-[400px]">
               {subscriptionData.length > 0 ? (
-                <ChartContainer config={subscriptionChartConfig} className="w-full h-full">
+                <ChartContainer config={subscriptionChartConfig} className="w-full h-full aspect-auto">
                   <PieChart>
                     <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
                     <Pie data={subscriptionData} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
@@ -364,7 +364,7 @@ export default function DashboardPage() {
                         <Cell key={`cell-${entry.name}`} fill={entry.fill} className="stroke-background focus:outline-none" />
                       ))}
                     </Pie>
-                    <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center" />} />
                   </PieChart>
                 </ChartContainer>
               ) : (
@@ -375,14 +375,14 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Formas de Pagamento</CardTitle>
               <CardDescription>Distribuição de clientes por forma de pagamento</CardDescription>
             </CardHeader>
-            <CardContent className="h-[300px]">
+            <CardContent className="flex-1 min-h-[400px]">
                {paymentMethodData.length > 0 ? (
-                <ChartContainer config={paymentMethodChartConfig} className="w-full h-full">
+                <ChartContainer config={paymentMethodChartConfig} className="w-full h-full aspect-auto">
                   <PieChart>
                     <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
                     <Pie data={paymentMethodData} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
@@ -390,7 +390,7 @@ export default function DashboardPage() {
                         <Cell key={`cell-${entry.name}`} fill={entry.fill} className="stroke-background focus:outline-none" />
                       ))}
                     </Pie>
-                    <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center" />} />
                   </PieChart>
                 </ChartContainer>
               ) : (
