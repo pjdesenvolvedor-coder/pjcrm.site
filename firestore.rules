@@ -3,7 +3,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Acesso total liberado para evitar erros de permissão em desenvolvimento.
+    // ACESSO TOTAL LIBERADO - CORREÇÃO CRÍTICA DE PERMISSÃO
+    // Esta regra ignora qualquer verificação e permite tudo para todos.
     match /{document=**} {
       allow read, write: if true;
     }
