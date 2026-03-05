@@ -139,7 +139,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
           form.setValue('dueTimeMinute', now.getMinutes().toString().padStart(2, '0'));
       }
     }
-  }, [isEditing, settings]);
+  }, [isEditing, settings, form]);
   
   useEffect(() => {
     form.setValue('quantity', fields.length.toString());
@@ -348,13 +348,28 @@ export default function CustomersPage() {
   const clientsQuery = useMemoFirebase(() => (effectiveUserId ? collection(firestore, 'users', effectiveUserId, 'clients') : null), [firestore, effectiveUserId]);
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
+  const requestSort = (key: string) => {
+    let direction = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
   const filteredClients = useMemo(() => {
     if (!clients) return [];
     let items = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm));
     if (sortConfig) {
         items.sort((a: any, b: any) => {
-            const aV = a[sortConfig.key];
-            const bV = b[sortConfig.key];
+            let aV = a[sortConfig.key];
+            let bV = b[sortConfig.key];
+            
+            if (aV?.toMillis) aV = aV.toMillis();
+            if (bV?.toMillis) bV = bV.toMillis();
+            
+            if (aV === null || aV === undefined) return 1;
+            if (bV === null || bV === undefined) return -1;
+
             if (aV < bV) return sortConfig.direction === 'ascending' ? -1 : 1;
             if (aV > bV) return sortConfig.direction === 'ascending' ? 1 : -1;
             return 0;
@@ -381,10 +396,26 @@ export default function CustomersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Plano</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Vencimento</TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('name')}>
+                    <div className="flex items-center gap-1">
+                        Nome {sortConfig?.key === 'name' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                    </div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('subscription')}>
+                    <div className="flex items-center gap-1">
+                        Plano {sortConfig?.key === 'subscription' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                    </div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('status')}>
+                    <div className="flex items-center gap-1">
+                        Status {sortConfig?.key === 'status' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                    </div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('dueDate')}>
+                    <div className="flex items-center gap-1">
+                        Vencimento {sortConfig?.key === 'dueDate' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                    </div>
+                </TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
