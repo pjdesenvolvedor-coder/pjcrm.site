@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Users, AlertTriangle, Calendar, Clock, DollarSign } from 'lucide-react';
+import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +20,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { cn } from '@/lib/utils';
 
 
 const parseCurrency = (value?: string): number => {
@@ -58,6 +59,7 @@ export default function DashboardPage() {
       totalSales: 0,
       activePercentage: 0,
       overduePercentage: 0,
+      newClientsTodayCount: 0,
     };
 
     if (!clients) {
@@ -100,6 +102,7 @@ export default function DashboardPage() {
     let dueIn3DaysCount = 0;
     let dueIn3DaysTotal = 0;
     let totalSales = 0;
+    let newClientsTodayCount = 0;
 
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
@@ -108,6 +111,11 @@ export default function DashboardPage() {
       const amount = parseCurrency(client.amountPaid);
       const dueDate = client.dueDate ? client.dueDate.toDate() : null;
       const createdAt = client.createdAt ? client.createdAt.toDate() : null;
+
+      // Track new clients added today
+      if (createdAt && isToday(createdAt)) {
+          newClientsTodayCount++;
+      }
 
       // Main status categorization (Active vs Overdue)
       let isOverdue = false;
@@ -168,7 +176,8 @@ export default function DashboardPage() {
       dueIn3DaysTotal,
       totalSales,
       activePercentage,
-      overduePercentage
+      overduePercentage,
+      newClientsTodayCount
     };
 
     const subscriptionData = Object.entries(subscriptionCounts).map(([name, value], index) => ({
@@ -248,7 +257,16 @@ export default function DashboardPage() {
               <span className="text-sm font-medium">{stats.activePercentage.toFixed(1)}%</span>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
-              <div className="text-3xl font-bold">{stats.activeCount}</div>
+              <div className="flex items-baseline gap-2">
+                <div className="text-3xl font-bold">{stats.activeCount}</div>
+                <div className={cn(
+                    "flex items-center text-xs font-medium",
+                    stats.newClientsTodayCount >= 1 ? "text-green-600" : "text-red-600"
+                )}>
+                    <ArrowUp className="h-3 w-3 mr-0.5" />
+                    {stats.newClientsTodayCount}
+                </div>
+              </div>
               <div className="text-lg font-semibold">{formatCurrency(stats.activeTotal)}</div>
             </CardContent>
           </Card>
