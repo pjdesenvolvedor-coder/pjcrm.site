@@ -19,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from '@/table';
 import {
   Dialog,
   DialogContent,
@@ -80,20 +80,20 @@ const clientSchema = z.object({
 });
 
 function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>, onFinished: () => void }) {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
   const isEditing = !!initialData?.id;
 
   const subscriptionsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'subscriptions'), orderBy('name'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'subscriptions'), orderBy('name'));
+  }, [firestore, effectiveUserId]);
   const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return doc(firestore, 'users', effectiveUserId, 'settings', 'config');
+  }, [firestore, effectiveUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
 
@@ -125,15 +125,11 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'emails'
-  });
-  
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'emails' });
   const clientType = form.watch('clientType');
 
   useEffect(() => {
-    if (!isEditing && settings !== undefined) { // Wait for settings to be loaded (even if null)
+    if (!isEditing && settings !== undefined) {
       if (settings?.usePresetTime && settings.presetHour && settings.presetMinute) {
           form.setValue('dueTimeHour', settings.presetHour);
           form.setValue('dueTimeMinute', settings.presetMinute);
@@ -143,7 +139,6 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
           form.setValue('dueTimeMinute', now.getMinutes().toString().padStart(2, '0'));
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, settings]);
   
   useEffect(() => {
@@ -153,36 +148,27 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 6) value = value.slice(0, 6);
-  
     let formatted = value;
-    if (value.length > 2) {
-      formatted = `${value.slice(0, 2)}/${value.slice(2)}`;
-    }
-    if (value.length > 4) {
-      formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
-    }
-    
+    if (value.length > 2) formatted = `${value.slice(0, 2)}/${value.slice(2)}`;
+    if (value.length > 4) formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
     form.setValue('dueDate', formatted);
   };
 
   const onSubmit = async (values: z.infer<typeof clientSchema>) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     
     let dueDateTimestamp: Timestamp | undefined = undefined;
     if (values.dueDate && values.dueDate.length === 8) {
         const [day, month, year] = values.dueDate.split('/');
         const date = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
-
         if (!isNaN(date.getTime())) {
-            const hour = parseInt(values.dueTimeHour || '0', 10);
-            const minute = parseInt(values.dueTimeMinute || '0', 10);
-            date.setHours(hour, minute);
+            date.setHours(parseInt(values.dueTimeHour || '0', 10), parseInt(values.dueTimeMinute || '0', 10));
             dueDateTimestamp = Timestamp.fromDate(date);
         }
     }
 
-    const clientData: Omit<Client, 'id' | 'status' | 'needsSupport'> = {
-      userId: user.uid,
+    const clientData: any = {
+      userId: effectiveUserId,
       name: values.name,
       email: values.emails.map(email => email.value),
       phone: values.phone,
@@ -199,72 +185,35 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     };
 
     if (isEditing && initialData?.id) {
-        const docRef = doc(firestore, 'users', user.uid, 'clients', initialData.id);
-        
+        const docRef = doc(firestore, 'users', effectiveUserId, 'clients', initialData.id);
         let newStatus = (initialData as Client)?.status || 'Ativo';
-
-        // Only change status based on date if it's not 'Inativo'
         if (newStatus !== 'Inativo') {
-            if (dueDateTimestamp && dueDateTimestamp.toDate() > new Date()) {
-                newStatus = 'Ativo'; // If new due date is in the future, it's 'Ativo'
-            } else if (dueDateTimestamp) { // If new due date is in the past or now
-                newStatus = 'Vencido';
-            } else {
-                // No due date. It can't be vencido. So it should be Ativo.
-                newStatus = 'Ativo';
-            }
+            newStatus = (dueDateTimestamp && dueDateTimestamp.toDate() > new Date()) ? 'Ativo' : (dueDateTimestamp ? 'Vencido' : 'Ativo');
         }
-        
-        const currentSupportStatus = (initialData as Client)?.needsSupport || false;
-        setDocumentNonBlocking(docRef, { ...clientData, status: newStatus, needsSupport: currentSupportStatus }, { merge: true });
-        toast({ title: "Cliente atualizado!", description: `${values.name} foi atualizado com sucesso.` });
+        setDocumentNonBlocking(docRef, { ...clientData, status: newStatus, needsSupport: (initialData as Client)?.needsSupport || false }, { merge: true });
+        toast({ title: "Cliente atualizado!" });
     } else {
-        let newStatus: Client['status'] = 'Ativo';
-        if (dueDateTimestamp && dueDateTimestamp.toDate() <= new Date()) {
-            newStatus = 'Vencido';
-        }
-        
-        // Add document
-        await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'clients'), { 
-            ...clientData, 
-            status: newStatus, 
-            needsSupport: false,
-            createdAt: serverTimestamp(),
-            upsellSent: false
+        const newStatus = (dueDateTimestamp && dueDateTimestamp.toDate() <= new Date()) ? 'Vencido' : 'Ativo';
+        await addDocumentNonBlocking(collection(firestore, 'users', effectiveUserId, 'clients'), { 
+            ...clientData, status: newStatus, needsSupport: false, createdAt: serverTimestamp(), upsellSent: false
         });
-        
-        toast({ title: "Cliente adicionado!", description: `${values.name} foi adicionado com sucesso.` });
+        toast({ title: "Cliente adicionado!" });
 
-        // Trigger Delivery Automation if active
         if (settings?.isDeliveryAutomationActive && settings.deliveryMessage && settings.webhookToken) {
             let formattedMessage = settings.deliveryMessage
-                .replace(/{cliente}/g, values.name)
-                .replace(/{telefone}/g, values.phone)
+                .replace(/{cliente}/g, values.name).replace(/{telefone}/g, values.phone)
                 .replace(/{email}/g, values.emails.map(e => e.value).join(', '))
-                .replace(/{senha}/g, values.password || 'N/A')
-                .replace(/{tela}/g, values.screen || 'N/A')
+                .replace(/{senha}/g, values.password || 'N/A').replace(/{tela}/g, values.screen || 'N/A')
                 .replace(/{assinatura}/g, values.subscription)
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
-                .replace(/{valor}/g, values.amountPaid || '0,00')
-                .replace(/{status}/g, newStatus);
+                .replace(/{valor}/g, values.amountPaid || '0,00').replace(/{status}/g, newStatus);
 
-            try {
-                fetch('/api/send-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: formattedMessage,
-                        phoneNumber: values.phone,
-                        token: settings.webhookToken,
-                    }),
-                });
-                toast({ title: 'Automação: Mensagem de Entrega Enviada', description: `Dados de acesso enviados para ${values.name}.` });
-            } catch (e) {
-                console.error("Failed to send delivery automation message:", e);
-            }
+            fetch('/api/send-message', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: formattedMessage, phoneNumber: values.phone, token: settings.webhookToken }),
+            }).catch(console.error);
         }
     }
-
     onFinished();
   };
 
@@ -277,682 +226,116 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
             <TabsTrigger value="vencimento">Vencimento</TabsTrigger>
             <TabsTrigger value="pagamento">Pagamento</TabsTrigger>
           </TabsList>
-          <TabsContent value="dados">
-            <div className="space-y-4 py-6">
-                <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome do Cliente" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
-                <FormField control={form.control} name="telegramUser" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Usuário Telegram</FormLabel><FormControl><Input placeholder="@usuario_telegram (opcional)" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
-                <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
-                <FormField
-                    control={form.control}
-                    name="clientType"
-                    render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                            <FormLabel className="md:text-right">Tipo</FormLabel>
-                            <FormControl>
-                                <div className="md:col-span-3 flex items-center gap-2">
-                                    {clientTypes.map((type) => (
-                                        <Button
-                                            type="button"
-                                            variant={field.value === type ? 'default' : 'outline'}
-                                            key={type}
-                                            onClick={() => field.onChange(field.value === type ? undefined : type)}
-                                        >
-                                            {type}
-                                        </Button>
-                                    ))}
-                                </div>
-                            </FormControl>
-                            <FormMessage className="md:col-start-2 md:col-span-3" />
-                        </FormItem>
-                    )}
-                />
+          <TabsContent value="dados" className="py-6 space-y-4">
+                <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
+                <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="WhatsApp" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
                     <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
                     <div className="md:col-span-3 space-y-2">
                         {!clientType ? (
-                             <FormField
-                                control={form.control}
-                                name="emails.0.value"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormControl>
-                                            <Input type="email" placeholder="email@exemplo.com" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                             <FormField control={form.control} name="emails.0.value" render={({ field }) => ( <FormItem><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
                         ) : (
                             <>
-                                <ScrollArea className="h-40 w-full rounded-md border">
-                                <div className="p-4 space-y-2">
+                                <ScrollArea className="h-40 w-full rounded-md border p-4 space-y-2">
                                     {fields.map((item, index) => (
-                                        <FormField
-                                            key={item.id}
-                                            control={form.control}
-                                            name={`emails.${index}.value`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <div className="flex items-center gap-2">
-                                                        <FormControl>
-                                                            <Input type="email" placeholder="email@exemplo.com" {...field} />
-                                                        </FormControl>
-                                                        {fields.length > 1 ? (
-                                                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                                                                <X className="h-4 w-4" />
-                                                            </Button>
-                                                        ) : null}
-                                                    </div>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
+                                        <FormField key={item.id} control={form.control} name={`emails.${index}.value`} render={({ field }) => (
+                                            <FormItem><div className="flex items-center gap-2"><FormControl><Input type="email" placeholder="email" {...field} /></FormControl>{fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}</div><FormMessage /></FormItem>
+                                        )}/>
                                     ))}
-                                </div>
                                 </ScrollArea>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => append({ value: '' })}
-                                >
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Adicionar Email
-                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Email</Button>
                             </>
                         )}
                     </div>
                 </div>
-                
                 {!clientType && (
                   <>
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                          <FormLabel className="md:text-right">Senha</FormLabel>
-                          <FormControl>
-                            <div className="relative md:col-span-3">
-                              <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                              <Input placeholder="Senha de acesso" {...field} className="pl-9" />
-                            </div>
-                          </FormControl>
-                          <FormMessage className="md:col-start-2 md:col-span-3" />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="screen"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                          <FormLabel className="md:text-right">Tela</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger className="md:col-span-3">
-                                <div className="flex items-center gap-2">
-                                  <Monitor className="h-4 w-4 text-muted-foreground" />
-                                  <SelectValue placeholder="Selecione a tela" />
-                                </div>
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {screenOptions.map((opt) => (
-                                <SelectItem key={opt} value={opt}>Tela {opt}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="md:col-start-2 md:col-span-3" />
-                        </FormItem>
-                      )}
-                    />
+                    <FormField control={form.control} name="password" render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Senha</FormLabel><FormControl><div className="relative md:col-span-3"><Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Senha" {...field} className="pl-9" /></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="screen" render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Tela</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><div className="flex items-center gap-2"><Monitor className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Tela" /></div></SelectTrigger></FormControl><SelectContent>{screenOptions.map(o => <SelectItem key={o} value={o}>Tela {o}</SelectItem>)}</SelectContent></Select></FormItem>
+                    )}/>
                   </>
                 )}
-            </div>
           </TabsContent>
-          <TabsContent value="vencimento">
-            <div className="space-y-4 py-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Definir</Label><div className="md:col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 3 }), 'dd/MM/yy'))}>3 meses</Button></div></div>
-                <FormField
-                  control={form.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                      <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                        <FormLabel className="md:text-right">Data</FormLabel>
-                        <div className='md:col-span-3'>
-                           <div className="relative">
-                            <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <FormControl>
-                              <Input
-                                placeholder="dd/mm/aa"
-                                {...field}
-                                onChange={handleDateInputChange}
-                                value={field.value || ''}
-                                className="pl-9"
-                              />
-                            </FormControl>
-                          </div>
-                        </div>
-                        <FormMessage className="md:col-start-2 md:col-span-3" />
-                      </FormItem>
-                    )
-                  }
-                />
-                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Horário</Label><div className="md:col-span-3 flex items-center gap-2"><FormField control={form.control} name="dueTimeHour" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /><span>:</span><FormField control={form.control} name="dueTimeMinute" render={({ field }) => ( <FormItem><FormControl><Input {...field} className="w-20 text-center" /></FormControl></FormItem>)} /></div></div>
-                <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Adicione uma observação..." className="md:col-span-3 resize-none" {...field} /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
-            </div>
+          <TabsContent value="vencimento" className="py-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Definir</Label><div className="md:col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button></div></div>
+                <FormField control={form.control} name="dueDate" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Data</FormLabel><div className='md:col-span-3'><div className="relative"><CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><FormControl><Input placeholder="dd/mm/aa" {...field} onChange={handleDateInputChange} className="pl-9" /></FormControl></div></div></FormItem> )} />
+                <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Obs..." className="md:col-span-3" {...field} /></FormControl></FormItem> )} />
           </TabsContent>
-          <TabsContent value="pagamento">
-            <div className="space-y-4 py-6">
-                <FormField control={form.control} name="quantity" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Quantidade</FormLabel><FormControl><Input {...field} readOnly className="md:col-span-3 bg-muted" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
-                <FormField
-                  control={form.control}
-                  name="subscription"
-                  render={({ field }) => (
-                    <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                      <FormLabel className="md:text-right">Assinatura *</FormLabel>
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          const selectedSub = subscriptions?.find(s => s.name === value);
-                          if (selectedSub) {
-                            form.setValue('amountPaid', selectedSub.value, { shouldValidate: true });
-                          }
-                        }}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="md:col-span-3">
-                            <SelectValue placeholder="Selecione uma assinatura" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {subscriptions?.map((sub) => (
-                            <SelectItem key={sub.id} value={sub.name}>
-                              {sub.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage className="md:col-start-2 md:col-span-3" />
-                    </FormItem>
-                  )}
-                />
-                <FormField control={form.control} name="paymentMethod" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Meio</FormLabel><FormControl><div className="md:col-span-3 flex items-center gap-2"><Button type="button" variant={field.value === 'PIX' ? 'default' : 'outline'} onClick={() => field.onChange('PIX')}>PIX</Button><Button type="button" variant={field.value === 'Cartão' ? 'default' : 'outline'} onClick={() => field.onChange('Cartão')}>Cartão</Button><Button type="button" variant={field.value === 'Boleto' ? 'default' : 'outline'} onClick={() => field.onChange('Boleto')}>Boleto</Button></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
-                <FormField
-                  control={form.control}
-                  name="amountPaid"
-                  render={({ field }) => (
-                    <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
-                      <FormLabel className="md:text-right">Valor Pago</FormLabel>
-                      <div className="relative md:col-span-3">
-                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
-                          R$
-                        </span>
-                        <FormControl>
-                          <Input {...field} placeholder="0,00" className="pl-9 w-full" />
-                        </FormControl>
-                      </div>
-                      <FormMessage className="md:col-start-2 md:col-span-3" />
-                    </FormItem>
-                  )}
-                />
-            </div>
+          <TabsContent value="pagamento" className="py-6 space-y-4">
+                <FormField control={form.control} name="subscription" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Plano *</FormLabel><Select onValueChange={(v) => { field.onChange(v); const s = subscriptions?.find(x => x.name === v); if (s) form.setValue('amountPaid', s.value); }} defaultValue={field.value}><FormControl><SelectTrigger className="md:col-span-3"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{subscriptions?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></FormItem> )} />
+                <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Valor</FormLabel><div className="relative md:col-span-3"><span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span><FormControl><Input {...field} placeholder="0,00" className="pl-9" /></FormControl></div></FormItem> )} />
           </TabsContent>
         </Tabs>
-        <DialogFooter className='pt-4'>
-          <Button variant="ghost" type="button" onClick={onFinished}>Cancelar</Button>
-          <Button type="submit">{isEditing ? 'Salvar Alterações' : 'Salvar Cliente'}</Button>
-        </DialogFooter>
+        <DialogFooter className='pt-4'><Button variant="ghost" type="button" onClick={onFinished}>Cancelar</Button><Button type="submit">{isEditing ? 'Salvar' : 'Cadastrar'}</Button></DialogFooter>
       </form>
-    </Form>
+    </form>
   )
 }
 
-function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Client; onSend: (message: string) => void; onCancel: () => void; isSending: boolean; }) {
-  const [message, setMessage] = useState('');
-  return (
-    <>
-      <div className="py-4 space-y-2">
-        <Label htmlFor="message">Mensagem</Label>
-        <Textarea id="message" placeholder="Digite sua mensagem aqui..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[100px]" />
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={isSending}>Cancelar</Button>
-        <Button onClick={() => onSend(message)} disabled={!message.trim() || isSending}>
-            {isSending ? (
-                <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Enviando...
-                </>
-            ) : (
-                'Enviar Mensagem Agora'
-            )}
-        </Button>
-      </DialogFooter>
-    </>
-  );
-}
-
-type DialogState =
-  | { view: 'closed' }
-  | { view: 'add' }
-  | { view: 'edit'; client: Client }
-  | { view: 'sendMessage'; client: Client };
-
-type SortableKeys = 'name' | 'email' | 'status' | 'dueDate' | 'subscription';
-
 export default function CustomersPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
-
-  const [dialogState, setDialogState] = useState<DialogState>({ view: 'closed' });
-  const [isSending, setIsSending] = useState(false);
+  const [dialogState, setDialogState] = useState<any>({ view: 'closed' });
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
+  const [sortConfig, setSortConfig] = useState<any>({ key: 'name', direction: 'ascending' });
   
-  const settingsDocRef = useMemo(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
-
+  const settingsDocRef = useMemoFirebase(() => (effectiveUserId ? doc(firestore, 'users', effectiveUserId, 'settings', 'config') : null), [firestore, effectiveUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
-  const clientsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    // Remove order by from here to sort on client
-    return query(collection(firestore, 'users', user.uid, 'clients'));
-  }, [firestore, user]);
-
+  const clientsQuery = useMemoFirebase(() => (effectiveUserId ? collection(firestore, 'users', effectiveUserId, 'clients') : null), [firestore, effectiveUserId]);
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const sortedClients = useMemo(() => {
-    if (!clients) return [];
-    let sortableItems = [...clients];
-    if (sortConfig) {
-      sortableItems.sort((a, b) => {
-        const aValue = a[sortConfig.key as keyof Client];
-        const bValue = b[sortConfig.key as keyof Client];
-
-        // Handle null or undefined values to push them to the end
-        if (aValue === null || aValue === undefined) return 1;
-        if (bValue === null || bValue === undefined) return -1;
-        
-        let comparison = 0;
-
-        // Handle different data types
-        switch (sortConfig.key) {
-          case 'dueDate':
-            comparison = (aValue as Timestamp).toMillis() - (bValue as Timestamp).toMillis();
-            break;
-          case 'email':
-            // Sorting by the first email in the array
-            const aEmail = Array.isArray(aValue) ? aValue[0] || '' : String(aValue || '');
-            const bEmail = Array.isArray(bValue) ? bValue[0] || '' : String(bValue || '');
-            comparison = aEmail.localeCompare(bEmail);
-            break;
-          case 'name':
-          case 'status':
-          case 'subscription':
-            comparison = String(aValue).localeCompare(String(bValue));
-            break;
-          default:
-            // Fallback for any other keys
-            if (aValue < bValue) comparison = -1;
-            if (aValue > bValue) comparison = 1;
-        }
-        
-        return sortConfig.direction === 'ascending' ? comparison : -comparison;
-      });
-    }
-    return sortableItems;
-  }, [clients, sortConfig]);
-
   const filteredClients = useMemo(() => {
-    if (!sortedClients) return [];
-    if (!searchTerm) return sortedClients;
-
-    const lowercasedFilter = searchTerm.toLowerCase();
-
-    return sortedClients.filter((client) => {
-      const emailString = Array.isArray(client.email) ? client.email.join(' ') : client.email;
-      const dueDateString = client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '';
-
-      return (
-        client.name.toLowerCase().includes(lowercasedFilter) ||
-        client.phone.includes(lowercasedFilter) ||
-        emailString.toLowerCase().includes(lowercasedFilter) ||
-        (client.subscription && client.subscription.toLowerCase().includes(lowercasedFilter)) ||
-        (client.status && client.status.toLowerCase().includes(lowercasedFilter)) ||
-        dueDateString.includes(lowercasedFilter)
-      );
-    });
-  }, [sortedClients, searchTerm]);
-
-  const requestSort = (key: SortableKeys) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-  
-  const getSortIcon = (key: SortableKeys) => {
-    if (sortConfig?.key !== key) {
-      return <ArrowUpDown className="ml-2 h-4 w-4" />;
-    }
-    if (sortConfig.direction === 'ascending') {
-      return <ArrowUp className="ml-2 h-4 w-4" />;
-    }
-    return <ArrowDown className="ml-2 h-4 w-4" />;
-  };
-
-  const handleToggleSupport = async (client: Client) => {
-    if (!user || !settings) return;
-    const newSupportStatus = !client.needsSupport;
-    const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
-    
-    setDocumentNonBlocking(docRef, { needsSupport: newSupportStatus }, { merge: true });
-    
-    toast({
-        title: `Suporte ${newSupportStatus ? 'marcado' : 'desmarcado'}`,
-        description: `O cliente ${client.name} foi atualizado.`,
-    });
-
-    // Send automated message if active
-    if (settings.isSupportAutomationActive && settings.webhookToken) {
-        const messageTemplate = newSupportStatus ? settings.supportStartedMessage : settings.supportFinishedMessage;
-        
-        if (messageTemplate) {
-            let formattedMessage = messageTemplate
-                .replace(/{cliente}/g, client.name)
-                .replace(/{telefone}/g, client.phone)
-                .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : client.email)
-                .replace(/{assinatura}/g, client.subscription || '')
-                .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '')
-                .replace(/{valor}/g, client.amountPaid || '0,00')
-                .replace(/{tela}/g, client.screen || 'N/A')
-                .replace(/{status}/g, client.status);
-
-            try {
-                await fetch('/api/send-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: formattedMessage,
-                        phoneNumber: client.phone,
-                        token: settings.webhookToken,
-                    }),
-                });
-                toast({ title: 'Automação: Mensagem Enviada', description: `Mensagem de suporte enviada para ${client.name}.` });
-            } catch (e) {
-                console.error("Failed to send support automation message:", e);
-            }
-        }
-    }
-  };
-
-
-  const openDialog = (view: 'add' | 'edit' | 'sendMessage', client?: Client) => {
-    if (view === 'edit' && client) {
-      setDialogState({ view: 'edit', client });
-    } else if (view === 'sendMessage' && client) {
-      setDialogState({ view: 'sendMessage', client });
-    } else {
-      setDialogState({ view: 'add' });
-    }
-  };
-
-  const closeDialogAndClear = () => {
-    setDialogState({ view: 'closed' });
-  };
-
-  const onFormFinished = () => {
-    closeDialogAndClear();
-  };
-  
-  const handleDeleteClient = (client: Client) => {
-    if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'clients', client.id);
-    deleteDocumentNonBlocking(docRef);
-    toast({
-      title: 'Cliente Excluído',
-      description: `O cliente ${client.name} foi removido.`,
-    });
-  };
-
-  const handleSendMessage = async (message: string) => {
-    if (dialogState.view !== 'sendMessage') return;
-
-    if (!settings?.webhookToken) {
-        toast({
-            variant: "destructive",
-            title: "Token não configurado",
-            description: "Por favor, configure seu token de webhook na página de Configurações.",
+    if (!clients) return [];
+    let items = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm));
+    if (sortConfig) {
+        items.sort((a: any, b: any) => {
+            const aV = a[sortConfig.key];
+            const bV = b[sortConfig.key];
+            if (aV < bV) return sortConfig.direction === 'ascending' ? -1 : 1;
+            if (aV > bV) return sortConfig.direction === 'ascending' ? 1 : -1;
+            return 0;
         });
-        return;
     }
+    return items;
+  }, [clients, searchTerm, sortConfig]);
 
-    setIsSending(true);
-
-    try {
-        const response = await fetch('/api/send-message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message,
-                phoneNumber: dialogState.client.phone,
-                token: settings.webhookToken,
-            }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Falha ao enviar mensagem.');
-        }
-
-        toast({
-            title: "Mensagem Enviada!",
-            description: `Sua mensagem foi enviada para ${dialogState.client.name}.`,
-        });
-        closeDialogAndClear();
-
-    } catch (error: any) {
-        console.error("Failed to send message:", error);
-        toast({
-            variant: "destructive",
-            title: "Erro ao Enviar",
-            description: error.message || "Não foi possível enviar a mensagem.",
-        });
-    } finally {
-        setIsSending(false);
-    }
-  };
-
-  const getStatusVariant = (status: 'Ativo' | 'Inativo' | 'Vencido') => {
-    switch (status) {
-      case 'Ativo': return 'default';
-      case 'Inativo': return 'secondary';
-      case 'Vencido': return 'destructive';
-      default: return 'outline';
-    }
-  };
-
-  const getDialogContent = () => {
-    switch (dialogState.view) {
-        case 'add':
-            return (
-                <>
-                    <DialogHeader>
-                        <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-                        <DialogDescription>
-                            Preencha os detalhes do cliente abaixo.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <ClientForm onFinished={onFormFinished} />
-                </>
-            );
-        case 'edit':
-            return (
-                <>
-                    <DialogHeader>
-                        <DialogTitle>Editar Cliente</DialogTitle>
-                        <DialogDescription>
-                            Atualize os detalhes do cliente abaixo.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <ClientForm initialData={dialogState.client} onFinished={onFormFinished} />
-                </>
-            );
-        case 'sendMessage':
-            return (
-                <>
-                    <DialogHeader>
-                        <DialogTitle>Enviar Mensagem para {dialogState.client.name}</DialogTitle>
-                        <DialogDescription>
-                            Digite a mensagem que você deseja enviar para o número {dialogState.client.phone}.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <SendMessageDialog client={dialogState.client} onSend={handleSendMessage} onCancel={closeDialogAndClear} isSending={isSending} />
-                </>
-            );
-        case 'closed':
-            return null;
-    }
+  const handleToggleSupport = (client: Client) => {
+    if (!effectiveUserId) return;
+    const ref = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
+    setDocumentNonBlocking(ref, { needsSupport: !client.needsSupport }, { merge: true });
+    toast({ title: `Suporte ${!client.needsSupport ? 'marcado' : 'desmarcado'}` });
   };
 
   return (
     <div className="flex flex-col h-full">
-      <PageHeader
-        title="Todos os Clientes"
-        description="Gerencie seus clientes aqui."
-      >
-        <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Pesquisar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
-            />
-        </div>
-        <Button size="sm" className="gap-1" onClick={() => openDialog('add')}>
-          <PlusCircle className="h-4 w-4" />
-          Adicionar Cliente
-        </Button>
+      <PageHeader title="Todos os Clientes">
+        <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[320px]" /></div>
+        <Button size="sm" onClick={() => setDialogState({ view: 'add' })}><PlusCircle className="h-4 w-4 mr-1" />Adicionar</Button>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <Button variant="ghost" size="sm" onClick={() => requestSort('name')} className="-ml-3 h-8 data-[state=open]:bg-accent">
-                        Nome
-                        {getSortIcon('name')}
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                    <Button variant="ghost" size="sm" onClick={() => requestSort('email')} className="-ml-3 h-8 data-[state=open]:bg-accent">
-                        Email
-                        {getSortIcon('email')}
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                    <Button variant="ghost" size="sm" onClick={() => requestSort('status')} className="-ml-3 h-8 data-[state=open]:bg-accent">
-                        Status
-                        {getSortIcon('status')}
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                     <Button variant="ghost" size="sm" onClick={() => requestSort('dueDate')} className="-ml-3 h-8 data-[state=open]:bg-accent">
-                        Vencimento
-                        {getSortIcon('dueDate')}
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                     <Button variant="ghost" size="sm" onClick={() => requestSort('subscription')} className="-ml-3 h-8 data-[state=open]:bg-accent">
-                        Assinatura
-                        {getSortIcon('subscription')}
-                    </Button>
-                  </TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+        <Card><Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Status</TableHead><TableHead>Vencimento</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
+            {isLoading ? <TableRow><TableCell colSpan={4} className="text-center">Carregando...</TableCell></TableRow> : filteredClients.map((client) => (
+                <TableRow key={client.id} className={cn(client.needsSupport && "bg-primary/5")}>
+                    <TableCell><div className='flex items-center gap-2'>{client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}{client.name}</div></TableCell>
+                    <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
+                    <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="sm" onClick={() => setDialogState({ view: 'edit', client })}>Editar</Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleToggleSupport(client)}><LifeBuoy className={cn("h-4 w-4", client.needsSupport && "text-primary fill-primary/20")} /></Button>
+                        <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Cliente?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Não</AlertDialogCancel><AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', effectiveUserId!, 'clients', client.id))}>Sim</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                    </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
-                ) : filteredClients && filteredClients.length > 0 ? (
-                  filteredClients.map((client) => (
-                    <TableRow key={client.id} data-state={client.needsSupport ? 'selected' : ''}>
-                      <TableCell className="font-medium">
-                        <div className='flex items-center gap-2'>
-                          {client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}
-                          {client.name}
-                        </div>
-                      </TableCell>
-                      <TableCell>{Array.isArray(client.email) ? client.email.join(', ') : client.email}</TableCell>
-                      <TableCell><Badge variant={getStatusVariant(client.status)} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{client.status}</Badge></TableCell>
-                      <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
-                      <TableCell>{client.subscription}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => openDialog('edit', client)}>
-                               Editar
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => openDialog('sendMessage', client)}>
-                                <MessageSquare className="h-4 w-4" />
-                            </Button>
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" onClick={() => handleToggleSupport(client)}>
-                                            <LifeBuoy className={cn("h-4 w-4", client.needsSupport && "text-primary fill-primary/20")} />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Marcar/Desmarcar Suporte</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                    <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Essa ação não pode ser desfeita. Isso removerá permanentemente o cliente.
-                                    </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteClient(client)}>Excluir</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum cliente encontrado.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+            ))}
+        </TableBody></Table></Card>
       </main>
-
-      <Dialog open={dialogState.view !== 'closed'} onOpenChange={(isOpen) => !isOpen && closeDialogAndClear()}>
+      <Dialog open={dialogState.view !== 'closed'} onOpenChange={(o) => !o && setDialogState({ view: 'closed' })}>
         <DialogContent className="sm:max-w-lg">
-            {getDialogContent()}
+            <DialogHeader><DialogTitle>{dialogState.view === 'add' ? 'Novo Cliente' : 'Editar Cliente'}</DialogTitle></DialogHeader>
+            <ClientForm initialData={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
         </DialogContent>
       </Dialog>
     </div>

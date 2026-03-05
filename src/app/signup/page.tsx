@@ -1,14 +1,15 @@
+
 'use client';
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { MessageSquare, User, Mail, Lock } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, Suspense } from "react";
+import { MessageSquare, Mail, Lock } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp, getDoc } from "firebase/firestore";
 import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
@@ -27,36 +28,24 @@ const signupSchema = z.object({
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
 });
 
-const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
-      <path fill="#4285F4" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12 s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20 s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-      <path fill="#34A853" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12 s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20 s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" display="none" />
-      <path fill="#FBBC05" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657 C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-      <path fill="#EB4335" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36 c-5.223,0-9.655-3.454-11.297-8.181l-6.571,4.819C9.656,39.663,16.318,44,24,44z" />
-      <path fill="#4285F4" d="M43.611,20.083H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238 C42.02,35.846,44,30.138,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-    </svg>
-);
-
-export default function SignupPage() {
+function SignupForm() {
   const auth = useAuth();
   const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  const ref = searchParams.get('ref');
 
   const form = useForm<z.infer<typeof signupSchema>>({
     resolver: zodResolver(signupSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      password: "",
-    },
+    defaultValues: { firstName: "", lastName: "", email: "", password: "" },
   });
 
   useEffect(() => {
     if (!isUserLoading && user) {
-      router.push('/subscription');
+      router.push('/dashboard');
     }
   }, [user, isUserLoading, router]);
 
@@ -65,60 +54,48 @@ export default function SignupPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       const firebaseUser = userCredential.user;
       
-      await updateProfile(firebaseUser, {
-        displayName: `${values.firstName} ${values.lastName}`
-      });
+      await updateProfile(firebaseUser, { displayName: `${values.firstName} ${values.lastName}` });
 
       const userDocRef = doc(firestore, "users", firebaseUser.uid);
       
+      // Default permissions for new accounts
       const defaultPermissions: UserPermissions = {
         dashboard: true, customers: false, inbox: false, automations: false,
         groups: false, shot: false, zapconnect: false, settings: false, users: false,
+        attendants: false, notes: true, ads: false, pix: false, usage: false, estoque: false,
       };
 
-      setDocumentNonBlocking(userDocRef, {
+      const profileData: any = {
         id: firebaseUser.uid,
         firstName: values.firstName,
         lastName: values.lastName,
         email: firebaseUser.email,
         createdAt: serverTimestamp(),
-        role: "Agent", 
+        role: ref ? "Agent" : "User", // If invited, it's an agent
+        parentId: ref || null, // Link to owner
         permissions: defaultPermissions,
         avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`,
         status: 'active',
-      }, { merge: true });
+      };
 
-      toast({
-        title: "Conta criada com sucesso!",
-        description: "Redirecionando para a escolha de planos...",
-      });
-      // The useEffect will handle redirection
+      // If it's an attendant, copy parent's plan info (placeholder logic)
+      if (ref) {
+          const parentDoc = await getDoc(doc(firestore, "users", ref));
+          if (parentDoc.exists()) {
+              profileData.subscriptionPlan = parentDoc.data().subscriptionPlan;
+              profileData.subscriptionEndDate = parentDoc.data().subscriptionEndDate;
+          }
+      }
+
+      setDocumentNonBlocking(userDocRef, profileData, { merge: true });
+
+      toast({ title: "Conta criada!", description: "Bem-vindo ao sistema." });
     } catch (error) {
       console.error(error);
-      let description = "Ocorreu um erro desconhecido.";
-      if (error instanceof FirebaseError) {
-        if (error.code === 'auth/email-already-in-use') {
-          description = "Este email já está em uso.";
-        } else {
-          description = "Ocorreu um erro ao tentar criar a conta.";
-        }
-      }
-      toast({
-        variant: "destructive",
-        title: "Falha no cadastro",
-        description,
-      });
+      toast({ variant: "destructive", title: "Falha no cadastro" });
     }
   };
 
-  const handleGoogleLogin = () => {
-    // TODO: Implement Google Sign-In
-    toast({
-        title: "Em breve!",
-        description: "O login com Google ainda não foi implementado.",
-    });
-  }
-  
   if (isUserLoading || user) {
     return (
         <div className="flex h-screen w-screen items-center justify-center bg-background">
@@ -135,108 +112,53 @@ export default function SignupPage() {
       <Card className="mx-auto w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-4">
            <div className="flex items-center justify-center gap-2">
-            <Image
-              src="https://i.imgur.com/sgoiuiz.png"
-              alt="EMPREENDIMENTOS Logo"
-              width={40}
-              height={40}
-              className="h-10 w-10"
-              data-ai-hint="logo"
-            />
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200">EMPREENDIMENTOS</h1>
+            <Image src="https://i.imgur.com/sgoiuiz.png" alt="Logo" width={40} height={40} className="h-10 w-10" />
+            <h1 className="text-3xl font-bold">EMPREENDIMENTOS</h1>
           </div>
           <div>
-            <CardTitle className="text-2xl font-semibold">Criar uma conta</CardTitle>
-            <CardDescription className="text-gray-500 dark:text-gray-400 pt-1">
-              Insira seus dados para criar seu acesso ao CRM.
+            <CardTitle className="text-2xl font-semibold">
+                {ref ? "Cadastro de Atendente" : "Criar sua Conta"}
+            </CardTitle>
+            <CardDescription className="pt-1">
+              {ref ? "Você foi convidado para trabalhar nesta equipe." : "Insira seus dados para começar."}
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome</FormLabel>
-                      <FormControl>
-                          <Input placeholder="Seu nome" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Sobrenome</FormLabel>
-                      <FormControl>
-                          <Input placeholder="Seu sobrenome" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>E-mail</FormLabel>
-                    <FormControl>
-                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                        <Input
-                          type="email"
-                          placeholder="m@example.com"
-                          className="pl-10"
-                          {...field}
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Senha</FormLabel>
-                    <FormControl>
-                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                        <Input type="password" placeholder="••••••••" className="pl-10" {...field} />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Criando conta...' : 'Criar conta'}
-              </Button>
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="firstName" render={({ field }) => (
+                        <FormItem><FormLabel>Nome</FormLabel><FormControl><Input placeholder="Ex: João" {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="lastName" render={({ field }) => (
+                        <FormItem><FormLabel>Sobrenome</FormLabel><FormControl><Input placeholder="Ex: Silva" {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                </div>
+                <FormField control={form.control} name="email" render={({ field }) => (
+                    <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input placeholder="m@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem>
+                )}/>
+                <FormField control={form.control} name="password" render={({ field }) => (
+                    <FormItem><FormLabel>Senha</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} /></FormControl><FormMessage /></FormItem>
+                )}/>
+                <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+                    {form.formState.isSubmitting ? 'Processando...' : 'Finalizar Cadastro'}
+                </Button>
             </form>
           </Form>
-
-           <Button variant="outline" className="w-full mt-4" onClick={handleGoogleLogin}>
-              <GoogleIcon className="mr-2 h-5 w-5" />
-              Login com Google
-          </Button>
-          
           <div className="mt-6 text-center text-sm">
-            Já tem uma conta?{" "}
-            <Link href="/login" className="font-medium text-primary hover:underline">
-              Fazer login
-            </Link>
+            Já tem conta? <Link href="/login" className="font-medium text-primary hover:underline">Fazer login</Link>
           </div>
         </CardContent>
       </Card>
     </div>
   )
+}
+
+export default function SignupPage() {
+    return (
+        <Suspense fallback={<div>Carregando...</div>}>
+            <SignupForm />
+        </Suspense>
+    );
 }

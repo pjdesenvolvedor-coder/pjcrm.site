@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Mail,
-  LayoutDashboard,
   UserCircle,
   LogOut,
   Zap,
@@ -16,21 +15,18 @@ import {
   Users,
   Bot,
   Send,
-  CreditCard,
   ChevronRight,
   Settings as SettingsIcon,
   Contact,
   Package,
   LifeBuoy,
-  Warehouse,
-  AlertTriangle,
+  ShieldAlert,
+  TrendingUp,
+  UserPlus,
   StickyNote,
   Briefcase,
   Activity,
-  ShieldAlert,
-  TrendingUp,
-  ShoppingCart,
-  UserPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -75,7 +71,6 @@ import { Badge } from "@/components/ui/badge";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, collection, query, where } from 'firebase/firestore';
 import type { UserProfile, Settings, Client, Lead } from '@/lib/types';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
@@ -163,8 +158,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
-  const { firestore } = useFirebase();
-  const { user, isUserLoading } = useUser();
+  const { firestore, effectiveUserId, userProfile, isUserLoading } = useFirebase();
+  const { user } = useUser();
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const { toast } = useToast();
   
@@ -178,31 +173,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const [showExpiredOverlay, setShowExpiredOverlay] = useState(false);
 
-  const userDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid);
-  },[firestore, user]);
-  
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
-  
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return doc(firestore, 'users', effectiveUserId, 'settings', 'config');
+  }, [firestore, effectiveUserId]);
 
   const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
 
   const supportClientsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'clients'), where('needsSupport', '==', true));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'clients'), where('needsSupport', '==', true));
+  }, [firestore, effectiveUserId]);
 
   const { data: supportClients } = useCollection<Client>(supportClientsQuery);
 
   const pendingLeadsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'leads'), where('status', '==', 'pending'));
-  }, [firestore, user]);
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users', effectiveUserId, 'leads'), where('status', '==', 'pending'));
+  }, [firestore, effectiveUserId]);
   const { data: pendingLeads } = useCollection<Lead>(pendingLeadsQuery);
 
   const supportCount = supportClients?.length ?? 0;
@@ -219,6 +207,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         zapconnect: false,
         settings: false,
         users: false,
+        attendants: false,
         estoque: false,
         notes: false,
         ads: false,
@@ -314,14 +303,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, isUserLoading, router]);
 
   useEffect(() => {
-    if (!isProfileLoading && userProfile && !userProfile.subscriptionPlan && userProfile.role !== 'Admin') {
+    if (!isUserLoading && userProfile && !userProfile.subscriptionPlan && userProfile.role === 'User') {
         router.push('/subscription');
     }
-  }, [userProfile, isProfileLoading, router]);
+  }, [userProfile, isUserLoading, router]);
 
   useEffect(() => {
     if (
-      !isProfileLoading &&
+      !isUserLoading &&
       userProfile &&
       userProfile.role !== 'Admin' &&
       userProfile.subscriptionEndDate &&
@@ -331,10 +320,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } else {
       setShowExpiredOverlay(false);
     }
-  }, [userProfile, isProfileLoading]);
+  }, [userProfile, isUserLoading]);
 
 
-  if (isUserLoading || !user || isProfileLoading) {
+  if (isUserLoading || !user || !userProfile) {
     return (
         <div className="flex h-screen w-screen items-center justify-center">
             <div className="flex flex-col items-center gap-4">
@@ -458,6 +447,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
+      {showExpiredOverlay && <ExpirationOverlay />}
       {userProfile?.status === 'blocked' && <BlockedOverlay />}
       <SystemAlert />
       <Sidebar variant="sidebar" collapsible="icon">
@@ -606,33 +596,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </DialogTrigger>
               )}
 
-              {(permissions.settings || permissions.users) && (
-                <SidebarMenuItem>
-                  <Collapsible>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
-                              <div className="flex items-center gap-2"><SettingsIcon /><span>Configurações</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                              {userProfile?.role === 'Admin' && (
-                                <>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage"><Activity />Uso do Firebase</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                </>
-                              )}
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              {permissions.users && <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>}
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
+              <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                        <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
+                            <div className="flex items-center gap-2"><SettingsIcon /><span>Configurações</span></div>
+                            <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                        </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <SidebarMenuSub>
+                            {userProfile?.role === 'Admin' && (
+                              <>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users"><Users />Usuários do Sistema</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage"><Activity />Uso do Firebase</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              </>
+                            )}
+                            {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                            )}
+                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm">
                 <DialogHeader className="p-6 border-b"><DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle></DialogHeader>

@@ -11,6 +11,7 @@ export type UserPermissions = {
   zapconnect: boolean;
   settings: boolean;
   users: boolean;
+  attendants: boolean; // Permission to manage own attendants
   estoque: boolean;
   notes: boolean;
   ads: boolean;
@@ -24,7 +25,8 @@ export type UserProfile = {
   lastName: string;
   email: string;
   createdAt: Timestamp;
-  role: 'Admin' | 'Agent';
+  role: 'Admin' | 'User' | 'Agent'; // Admin: System, User: Owner, Agent: Attendant
+  parentId?: string | null; // UID of the owner who created this attendant
   avatarUrl?: string;
   permissions?: Partial<UserPermissions>;
   subscriptionPlan?: 'basic' | 'pro' | null;
