@@ -29,6 +29,8 @@ import {
   AlertTriangle,
   ClipboardList,
   Clock,
+  List,
+  Filter,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -524,7 +526,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.groups && (
                 <SidebarMenuItem>
-                  <Collapsible>
+                  <Collapsible defaultOpen={pathname.startsWith('/groups')}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Grupos">
                               <div className="flex items-center gap-2"><Users /><span>Grupos</span></div>
@@ -544,9 +546,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.shot && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/shot'} tooltip="Disparo">
-                    <Link href="/shot"><Send /><span>Disparo</span></Link>
-                  </SidebarMenuButton>
+                  <Collapsible defaultOpen={pathname.startsWith('/shot')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Disparo">
+                              <div className="flex items-center gap-2"><Send /><span>Disparo</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/list'}><Link href="/shot/list"><List className="h-4 w-4" /><span>Lista</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/status-product'}><Link href="/shot/status-product"><Filter className="h-4 w-4" /><span>Status - Produto</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
                 </SidebarMenuItem>
               )}
 
