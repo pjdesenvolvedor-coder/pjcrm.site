@@ -76,14 +76,17 @@ function SignupForm() {
         permissions: defaultPermissions,
         avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`,
         status: 'active',
+        subscriptionPlan: null,
+        subscriptionEndDate: null,
       };
 
-      // If it's an attendant, copy parent's plan info (placeholder logic)
+      // If it's an attendant, copy parent's plan info
       if (ref) {
           const parentDoc = await getDoc(doc(firestore, "users", ref));
           if (parentDoc.exists()) {
-              profileData.subscriptionPlan = parentDoc.data().subscriptionPlan;
-              profileData.subscriptionEndDate = parentDoc.data().subscriptionEndDate;
+              const parentData = parentDoc.data();
+              profileData.subscriptionPlan = parentData.subscriptionPlan ?? null;
+              profileData.subscriptionEndDate = parentData.subscriptionEndDate ?? null;
           }
       }
 
