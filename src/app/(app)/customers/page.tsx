@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -262,6 +262,37 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
           <TabsContent value="vencimento" className="py-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Definir</Label><div className="md:col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button></div></div>
                 <FormField control={form.control} name="dueDate" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Data</FormLabel><div className='md:col-span-3'><div className="relative"><CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><FormControl><Input placeholder="dd/mm/aa" {...field} onChange={handleDateInputChange} className="pl-9" /></FormControl></div></div></FormItem> )} />
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                    <FormLabel className="md:text-right">Horário</FormLabel>
+                    <div className="md:col-span-3 flex items-center gap-2">
+                        <div className="relative flex-1">
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <FormField
+                                control={form.control}
+                                name="dueTimeHour"
+                                render={({ field }) => (
+                                    <FormControl>
+                                        <Input {...field} placeholder="HH" className="pl-9 text-center" maxLength={2} />
+                                    </FormControl>
+                                )}
+                            />
+                        </div>
+                        <span className="font-bold">:</span>
+                        <div className="relative flex-1">
+                            <FormField
+                                control={form.control}
+                                name="dueTimeMinute"
+                                render={({ field }) => (
+                                    <FormControl>
+                                        <Input {...field} placeholder="MM" className="text-center" maxLength={2} />
+                                    </FormControl>
+                                )}
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4"><FormLabel className="md:text-right md:pt-2">Notas</FormLabel><FormControl><Textarea placeholder="Obs..." className="md:col-span-3" {...field} /></FormControl></FormItem> )} />
           </TabsContent>
           <TabsContent value="pagamento" className="py-6 space-y-4">

@@ -28,6 +28,7 @@ import {
   Activity,
   AlertTriangle,
   ClipboardList,
+  Clock,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -619,7 +620,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 </>
                               )}
                               {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <>
+                                    <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                    <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets"><Clock />Horários Padrão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  </>
                               )}
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs"><ClipboardList />Logs de Envio</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
