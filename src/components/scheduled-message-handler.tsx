@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -11,9 +12,6 @@ export function ScheduledMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const processingRef = useRef(new Set<string>());
-    const quotaExceededRef = useRef<boolean>(false);
-    const lastErrorTimeRef = useRef<number>(0);
-    const ERROR_THROTTLE_MS = 300000; // 5 minutos
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -37,12 +35,6 @@ export function ScheduledMessageHandler() {
 
     useEffect(() => {
         const checkScheduledMessages = () => {
-            if (quotaExceededRef.current) {
-                const now = Date.now();
-                if (now - lastErrorTimeRef.current < ERROR_THROTTLE_MS) return;
-                quotaExceededRef.current = false;
-            }
-
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
             }
@@ -53,7 +45,7 @@ export function ScheduledMessageHandler() {
 
             const now = new Date();
             const token = settings.webhookToken;
-            const STALE_TIMEOUT_MS = 5 * 60 * 1000;
+            const STALE_TIMEOUT_MS = 2 * 60 * 1000;
 
             const processMessage = async (msg: ScheduledMessage) => {
                 if (processingRef.current.has(msg.id)) return;
@@ -119,13 +111,7 @@ export function ScheduledMessageHandler() {
                     }
 
                 } catch (error: any) {
-                    const isQuota = error.message?.includes("Quota exceeded") || error.code === 'resource-exhausted';
-                    if (isQuota) {
-                        quotaExceededRef.current = true;
-                        lastErrorTimeRef.current = Date.now();
-                    } else if (!error.message.includes("already being processed") && !error.message.includes("not due yet") && !error.message.includes("deleted")) {
-                        console.error("Scheduled message error:", error);
-                    }
+                    // Ignored silent checks
                 } finally {
                     processingRef.current.delete(msg.id);
                 }
@@ -136,8 +122,8 @@ export function ScheduledMessageHandler() {
             }
         };
         
-        // Intervalo de 2 minutos para economia
-        const intervalId = setInterval(checkScheduledMessages, 2 * 60 * 1000);
+        // Verificação a cada 30 segundos (Máxima Precisão para Agendamentos)
+        const intervalId = setInterval(checkScheduledMessages, 30 * 1000);
         checkScheduledMessages();
         return () => clearInterval(intervalId);
 

@@ -9,13 +9,12 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DELAY_BETWEEN_MESSAGES = 6000;
+const DELAY_BETWEEN_MESSAGES = 3000;
 
 export function UpsellMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const isProcessing = useRef(false);
-    const quotaExceededUntilRef = useRef<number>(0);
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -38,7 +37,7 @@ export function UpsellMessageHandler() {
 
     useEffect(() => {
         const processUpsellQueue = async () => {
-             if (isProcessing.current || Date.now() < quotaExceededUntilRef.current) return;
+             if (isProcessing.current) return;
 
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
@@ -56,7 +55,6 @@ export function UpsellMessageHandler() {
             const processUpsellForClient = async (client: Client, upsell: UpsellConfig) => {
                 if (!client.createdAt) return;
                 
-                // New logic: Only send to clients created AFTER the upsell rule was created
                 if (upsell.createdAt && client.createdAt.toMillis() < upsell.createdAt) {
                     return;
                 }
@@ -107,14 +105,11 @@ export function UpsellMessageHandler() {
                     await sleep(DELAY_BETWEEN_MESSAGES);
 
                 } catch (error: any) {
-                    if (error.message.includes("quota exceeded") || error.code === 'resource-exhausted') {
-                        quotaExceededUntilRef.current = Date.now() + 600000;
-                    }
+                    // Error ignored
                 }
             };
             
             for (const client of activeClients) {
-                if (Date.now() < quotaExceededUntilRef.current) break;
                 for (const upsell of activeUpsells) {
                     await processUpsellForClient(client, upsell);
                 }
@@ -123,8 +118,8 @@ export function UpsellMessageHandler() {
             isProcessing.current = false;
         };
 
-        // Verificação a cada 5 minutos
-        const intervalId = setInterval(processUpsellQueue, 5 * 60 * 1000);
+        // Verificação a cada 1 minuto
+        const intervalId = setInterval(processUpsellQueue, 1 * 60 * 1000);
         processUpsellQueue();
         return () => clearInterval(intervalId);
 

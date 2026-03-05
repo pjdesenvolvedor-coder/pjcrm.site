@@ -9,13 +9,12 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DELAY_MS = 6000;
+const DELAY_MS = 3000; // Reduzido para 3s entre envios
 
 export function DueDateMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const isProcessing = useRef(false);
-    const quotaExceededUntilRef = useRef<number>(0);
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -38,8 +37,7 @@ export function DueDateMessageHandler() {
 
     useEffect(() => {
         const checkAndProcessOverdueClients = async () => {
-            const nowTime = Date.now();
-            if (isProcessing.current || nowTime < quotaExceededUntilRef.current) return;
+            if (isProcessing.current) return;
 
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
@@ -95,15 +93,11 @@ export function DueDateMessageHandler() {
                     });
 
                 } catch (error: any) {
-                    if (error.message.includes("quota exceeded") || error.code === 'resource-exhausted') {
-                        // Pausa por 10 minutos em caso de cota
-                        quotaExceededUntilRef.current = Date.now() + 600000;
-                    }
+                    // Logs removidos para manter o foco
                 }
             };
             
             for (const client of overdueClients) {
-                if (Date.now() < quotaExceededUntilRef.current) break;
                 await processClient(client);
                 await sleep(DELAY_MS);
             }
@@ -111,8 +105,8 @@ export function DueDateMessageHandler() {
             isProcessing.current = false;
         };
 
-        // Verificação a cada 5 minutos para economia
-        const intervalId = setInterval(checkAndProcessOverdueClients, 5 * 60 * 1000);
+        // Verificação a cada 1 minuto (Alta Precisão)
+        const intervalId = setInterval(checkAndProcessOverdueClients, 1 * 60 * 1000);
         checkAndProcessOverdueClients();
         return () => clearInterval(intervalId);
 

@@ -9,13 +9,12 @@ import { useToast } from '@/hooks/use-toast';
 import { format, differenceInDays } from 'date-fns';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DELAY_BETWEEN_MESSAGES = 6000;
+const DELAY_BETWEEN_MESSAGES = 3000;
 
 export function RemarketingMessageHandler() {
     const { firestore, user } = useFirebase();
     const { toast } = useToast();
     const isProcessing = useRef(false);
-    const quotaExceededUntilRef = useRef<number>(0);
 
     const settingsDocRef = useMemoFirebase(() => {
         if (!user) return null;
@@ -37,7 +36,7 @@ export function RemarketingMessageHandler() {
 
     useEffect(() => {
         const processRemarketingQueue = async () => {
-            if (isProcessing.current || Date.now() < quotaExceededUntilRef.current) return;
+            if (isProcessing.current) return;
 
             if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
                 return;
@@ -60,7 +59,6 @@ export function RemarketingMessageHandler() {
                 
                 if (!startDate || !client.createdAt) return;
                 
-                // Safety filter: Only for clients created AFTER the rule was created
                 if (config.createdAt && client.createdAt.toMillis() < config.createdAt) {
                     return;
                 }
@@ -77,7 +75,6 @@ export function RemarketingMessageHandler() {
                         const clientDoc = await transaction.get(clientDocRef);
                         if (!clientDoc.exists()) throw new Error("deleted");
                         
-                        // Check logic: if it's due date remarketing, client MUST be Vencido
                         if (type === 'duedate' && clientDoc.data().status !== 'Vencido') {
                             throw new Error("client no longer overdue");
                         }
@@ -117,15 +114,11 @@ export function RemarketingMessageHandler() {
                     await sleep(DELAY_BETWEEN_MESSAGES);
 
                 } catch (error: any) {
-                    if (error.message?.includes("quota exceeded") || error.code === 'resource-exhausted') {
-                        quotaExceededUntilRef.current = Date.now() + 600000;
-                    }
+                    // Error ignored
                 }
             };
             
             for (const client of clients) {
-                if (Date.now() < quotaExceededUntilRef.current) break;
-
                 for (const config of activeSignupRemarketings) {
                     await processRemarketingForClient(client, config, 'signup');
                 }
@@ -140,7 +133,8 @@ export function RemarketingMessageHandler() {
             isProcessing.current = false;
         };
 
-        const intervalId = setInterval(processRemarketingQueue, 10 * 60 * 1000);
+        // Verificação a cada 2 minutos
+        const intervalId = setInterval(processRemarketingQueue, 2 * 60 * 1000);
         processRemarketingQueue();
         return () => clearInterval(intervalId);
 
