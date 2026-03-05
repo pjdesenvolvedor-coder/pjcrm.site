@@ -19,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/table';
+} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -271,7 +271,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         </Tabs>
         <DialogFooter className='pt-4'><Button variant="ghost" type="button" onClick={onFinished}>Cancelar</Button><Button type="submit">{isEditing ? 'Salvar' : 'Cadastrar'}</Button></DialogFooter>
       </form>
-    </form>
+    </Form>
   )
 }
 
