@@ -10,8 +10,7 @@ import { format, differenceInDays } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const STANDARD_DELAY = 3000;
-const BULK_DELAY = 30000;
+const MANDATORY_DELAY = 30000; // 30 seconds
 
 export function RemarketingMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -54,7 +53,6 @@ export function RemarketingMessageHandler() {
             isProcessing.current = true;
             const now = new Date();
             
-            // Gather all possible tasks first to check for bulk
             const tasks: { client: Client, config: RemarketingConfig, type: 'signup' | 'duedate' }[] = [];
             for (const client of clients) {
                 for (const config of activeSignupRemarketings) {
@@ -84,10 +82,10 @@ export function RemarketingMessageHandler() {
                 return;
             }
 
-            const useBulkDelay = tasks.length >= 50;
-            const currentDelay = useBulkDelay ? BULK_DELAY : STANDARD_DELAY;
+            // Regra: Se tem mais de 1 tarefa, delay de 30s entre elas
+            const currentDelay = tasks.length > 1 ? MANDATORY_DELAY : 0;
 
-            const processTask = async (task: typeof tasks[0]) => {
+            const processTask = async (task: typeof tasks[0], isLast: boolean) => {
                 const { client, config, type } = task;
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
                 const logRef = collection(firestore, 'users', user.uid, 'logs');
@@ -143,7 +141,7 @@ export function RemarketingMessageHandler() {
                             delayApplied: currentDelay / 1000,
                             timestamp: serverTimestamp(),
                         });
-                        toast({ title: `Remarketing Enviado!`, description: `Enviado para ${client.name}.` });
+                        toast({ title: `Remarketing OK`, description: `Enviado para ${client.name}.` });
                     } else {
                         addDocumentNonBlocking(logRef, {
                             userId: user.uid,
@@ -156,19 +154,21 @@ export function RemarketingMessageHandler() {
                         });
                     }
 
-                    await sleep(currentDelay);
+                    if (!isLast && currentDelay > 0) {
+                        await sleep(currentDelay);
+                    }
 
                 } catch (error: any) {}
             };
             
-            for (const task of tasks) {
-                await processTask(task);
+            for (let i = 0; i < tasks.length; i++) {
+                await processTask(tasks[i], i === tasks.length - 1);
             }
             
             isProcessing.current = false;
         };
 
-        const intervalId = setInterval(processRemarketingQueue, 2 * 60 * 1000);
+        const intervalId = setInterval(processRemarketingQueue, 60000); // Check every minute
         processRemarketingQueue();
         return () => clearInterval(intervalId);
 

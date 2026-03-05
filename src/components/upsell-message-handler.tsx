@@ -10,8 +10,7 @@ import { format } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const STANDARD_DELAY = 3000;
-const BULK_DELAY = 30000;
+const MANDATORY_DELAY = 30000; // 30 seconds
 
 export function UpsellMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -74,10 +73,10 @@ export function UpsellMessageHandler() {
                 return;
             }
 
-            const useBulkDelay = tasks.length >= 50;
-            const currentDelay = useBulkDelay ? BULK_DELAY : STANDARD_DELAY;
+            // Regra: Se tem mais de 1 tarefa, delay de 30s entre elas
+            const currentDelay = tasks.length > 1 ? MANDATORY_DELAY : 0;
 
-            const processTask = async (task: typeof tasks[0]) => {
+            const processTask = async (task: typeof tasks[0], isLast: boolean) => {
                 const { client, upsell } = task;
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
                 const logRef = collection(firestore, 'users', user.uid, 'logs');
@@ -132,7 +131,7 @@ export function UpsellMessageHandler() {
                             delayApplied: currentDelay / 1000,
                             timestamp: serverTimestamp(),
                         });
-                        toast({ title: "UPSELL Enviado!", description: `A oferta foi enviada para ${client.name}.` });
+                        toast({ title: "Upsell OK", description: `Enviado para ${client.name}.` });
                     } else {
                         addDocumentNonBlocking(logRef, {
                             userId: user.uid,
@@ -145,19 +144,21 @@ export function UpsellMessageHandler() {
                         });
                     }
 
-                    await sleep(currentDelay);
+                    if (!isLast && currentDelay > 0) {
+                        await sleep(currentDelay);
+                    }
 
                 } catch (error: any) {}
             };
             
-            for (const task of tasks) {
-                await processTask(task);
+            for (let i = 0; i < tasks.length; i++) {
+                await processTask(tasks[i], i === tasks.length - 1);
             }
             
             isProcessing.current = false;
         };
 
-        const intervalId = setInterval(processUpsellQueue, 1 * 60 * 1000);
+        const intervalId = setInterval(processUpsellQueue, 60000); // Check every minute
         processUpsellQueue();
         return () => clearInterval(intervalId);
 

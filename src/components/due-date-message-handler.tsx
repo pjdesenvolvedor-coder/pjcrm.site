@@ -10,8 +10,7 @@ import { format } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const STANDARD_DELAY = 3000;
-const BULK_DELAY = 30000; // 30 seconds for bulk
+const MANDATORY_DELAY = 30000; // 30 seconds
 
 export function DueDateMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -56,10 +55,10 @@ export function DueDateMessageHandler() {
 
             isProcessing.current = true;
             
-            const useBulkDelay = overdueClients.length >= 50;
-            const currentDelay = useBulkDelay ? BULK_DELAY : STANDARD_DELAY;
+            // Regra: Se tem mais de 1, aplica 30s de delay entre cada um
+            const currentDelay = overdueClients.length > 1 ? MANDATORY_DELAY : 0;
 
-            const processClient = async (client: Client) => {
+            const processClient = async (client: Client, isLast: boolean) => {
                 const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
                 const logRef = collection(firestore, 'users', user.uid, 'logs');
 
@@ -72,7 +71,6 @@ export function DueDateMessageHandler() {
                         transaction.update(clientDocRef, { status: 'Vencido' });
                     });
 
-                    // Add log entry: Starting
                     addDocumentNonBlocking(logRef, {
                         userId: user.uid,
                         type: 'Vencimento',
@@ -116,8 +114,8 @@ export function DueDateMessageHandler() {
                         });
                         
                         toast({
-                            title: "Mensagem de Vencimento Enviada!",
-                            description: `A mensagem foi enviada para ${client.name}.`,
+                            title: "Vencimento Enviado",
+                            description: `${client.name} processado.`,
                         });
                     } else {
                          addDocumentNonBlocking(logRef, {
@@ -131,20 +129,23 @@ export function DueDateMessageHandler() {
                         });
                     }
 
+                    if (!isLast && currentDelay > 0) {
+                        await sleep(currentDelay);
+                    }
+
                 } catch (error: any) {
-                    // Logs removidos para manter o foco
+                    // Silently fail transaction errors (already processed)
                 }
             };
             
-            for (const client of overdueClients) {
-                await processClient(client);
-                await sleep(currentDelay);
+            for (let i = 0; i < overdueClients.length; i++) {
+                await processClient(overdueClients[i], i === overdueClients.length - 1);
             }
             
             isProcessing.current = false;
         };
 
-        const intervalId = setInterval(checkAndProcessOverdueClients, 1 * 60 * 1000);
+        const intervalId = setInterval(checkAndProcessOverdueClients, 60000); // Check every minute
         checkAndProcessOverdueClients();
         return () => clearInterval(intervalId);
 

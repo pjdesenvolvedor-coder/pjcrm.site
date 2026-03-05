@@ -10,7 +10,7 @@ import { addDays } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const BULK_DELAY = 30000;
+const MANDATORY_DELAY = 30000; // 30 seconds
 
 export function ScheduledMessageHandler() {
     const { firestore, user } = useFirebase();
@@ -61,10 +61,10 @@ export function ScheduledMessageHandler() {
 
             if (dueMessages.length === 0) return;
 
-            const useBulkDelay = dueMessages.length >= 50;
-            const currentDelay = useBulkDelay ? BULK_DELAY : 0;
+            // Regra: Se tem mais de 1 mensagem pendente, delay de 30s entre elas
+            const currentDelay = dueMessages.length > 1 ? MANDATORY_DELAY : 0;
 
-            const processMessage = async (msg: ScheduledMessage) => {
+            const processMessage = async (msg: ScheduledMessage, isLast: boolean) => {
                 if (processingRef.current.has(msg.id)) return;
                 
                 const messageDocRef = doc(firestore, 'users', user.uid, 'scheduled_messages', msg.id);
@@ -152,12 +152,12 @@ export function ScheduledMessageHandler() {
                     } else {
                         setDocumentNonBlocking(messageDocRef, { status: 'Sent', claimedAt: null }, { merge: true });
                         toast({
-                            title: "Agendamento Enviado!",
-                            description: `Mensagem enviada com sucesso para o grupo.`,
+                            title: "Grupo Processado",
+                            description: `Mensagem enviada com sucesso.`,
                         });
                     }
 
-                    if (currentDelay > 0) {
+                    if (!isLast && currentDelay > 0) {
                         await sleep(currentDelay);
                     }
 
@@ -167,12 +167,12 @@ export function ScheduledMessageHandler() {
                 }
             };
             
-            for (const msg of dueMessages) {
-                await processMessage(msg);
+            for (let i = 0; i < dueMessages.length; i++) {
+                await processMessage(dueMessages[i], i === dueMessages.length - 1);
             }
         };
         
-        const intervalId = setInterval(checkScheduledMessages, 30 * 1000);
+        const intervalId = setInterval(checkScheduledMessages, 30000); // Check every 30 seconds
         checkScheduledMessages();
         return () => clearInterval(intervalId);
 

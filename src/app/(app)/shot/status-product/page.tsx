@@ -34,7 +34,7 @@ const availableVariables = [
     "{status}"
 ];
 
-export default function ShotStatusProductPage() {
+export function ShotStatusProductPage() {
   const { toast } = useToast();
   const { firestore, effectiveUserId } = useFirebase();
   const { user } = useUser();
@@ -42,7 +42,7 @@ export default function ShotStatusProductPage() {
   const [message, setMessage] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedSubscription, setSelectedSubscription] = useState<string>('all');
-  const [delay, setDelay] = useState([10]); // default 10 seconds
+  const [delay, setDelay] = useState([30]); // default 30 seconds for safety
   const [isSending, setIsSending] = useState(false);
   const [progress, setProgress] = useState(0);
   const [sendingStatus, setSendingStatus] = useState<string>('');
@@ -105,8 +105,8 @@ export default function ShotStatusProductPage() {
     setProgress(0);
     const total = filteredClients.length;
     
-    // Logic: If 50 or more, delay is forced to 30s. Otherwise use slider value.
-    const actualDelay = total >= 50 ? 30 : delay[0];
+    // Regra: Se tem mais de 1, delay obrigatório de 30s.
+    const actualDelay = total > 1 ? 30 : 0;
     const delayMs = actualDelay * 1000;
 
     const logRef = collection(firestore, 'users', effectiveUserId!, 'logs');
@@ -176,7 +176,7 @@ export default function ShotStatusProductPage() {
         setProgress(Math.round(((i + 1) / total) * 100));
 
         // Sleep if not the last one
-        if (i < total - 1) {
+        if (i < total - 1 && actualDelay > 0) {
             await sleep(delayMs);
         }
       }
@@ -293,7 +293,7 @@ export default function ShotStatusProductPage() {
                         <div className="flex items-center justify-between">
                             <Label className="text-base font-semibold">Segundos por envio</Label>
                             <span className="font-bold text-lg text-primary">
-                                {filteredClients.length >= 50 ? "30s (Fixo)" : `${delay[0]}s`}
+                                {filteredClients.length > 1 ? "30s (Obrigatório)" : `${delay[0]}s`}
                             </span>
                         </div>
                         <Slider
@@ -302,13 +302,13 @@ export default function ShotStatusProductPage() {
                             step={1}
                             value={delay}
                             onValueChange={setDelay}
-                            disabled={isSending || filteredClients.length >= 50}
+                            disabled={isSending || filteredClients.length > 1}
                         />
-                        {filteredClients.length >= 50 ? (
+                        {filteredClients.length > 1 ? (
                             <Alert className="bg-blue-50 border-blue-200">
                                 <Info className="h-4 w-4 text-blue-600" />
                                 <AlertDescription className="text-blue-700 text-[10px]">
-                                    Para listas com 50+ clientes, o delay de 30s é obrigatório para sua segurança.
+                                    Para listas com mais de 1 cliente, o delay de 30s é ativado automaticamente para sua segurança.
                                 </AlertDescription>
                             </Alert>
                         ) : (
@@ -362,7 +362,7 @@ export default function ShotStatusProductPage() {
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Atenção</AlertTitle>
                     <AlertDescription className="text-[11px]">
-                        Ao clicar em enviar, o sistema processará um por um. O log de cada envio aparecerá em "Configurações &gt; Logs".
+                        O sistema aplicará um delay de 30 segundos entre cada cliente para proteger sua conta. Acompanhe o progresso em Configurações &gt; Logs.
                     </AlertDescription>
                 </Alert>
                 
@@ -391,3 +391,5 @@ export default function ShotStatusProductPage() {
     </div>
   );
 }
+
+export default ShotStatusProductPage;
