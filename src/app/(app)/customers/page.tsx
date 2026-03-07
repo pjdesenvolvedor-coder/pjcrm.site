@@ -338,7 +338,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 function RenewDialog({ client, onFinished }: { client: Client, onFinished: () => void }) {
     const { firestore, effectiveUserId } = useFirebase();
     const { toast } = useToast();
-    const [selectedEmail, setSelectedPlan] = useState(client.email[0] || '');
+    const [emails, setEmails] = useState(client.email.join(', '));
+    const [amount, setAmount] = useState(client.amountPaid || '0,00');
     const [period, setPeriod] = useState('1'); // 1 mes
 
     const handleRenewAction = () => {
@@ -350,6 +351,8 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
         
         setDocumentNonBlocking(clientDocRef, {
             status: 'Ativo',
+            email: emails.split(',').map(e => e.trim()).filter(Boolean),
+            amountPaid: amount,
             dueDate: Timestamp.fromDate(newDueDate),
             createdAt: serverTimestamp(), // Faz aparecer na seta de ativos do dia
         }, { merge: true });
@@ -362,15 +365,24 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
         <div className="space-y-6 pt-4">
             <div className="space-y-4">
                 <div className="space-y-2">
-                    <Label>E-mail em uso</Label>
-                    <Select value={selectedEmail} onValueChange={setSelectedPlan}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Selecione o e-mail" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {client.email.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                    <Label>E-mails em uso (Separe por vírgula se houver mais de um)</Label>
+                    <Input 
+                        value={emails} 
+                        onChange={(e) => setEmails(e.target.value)} 
+                        placeholder="email@exemplo.com" 
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label>Valor da Renovação (R$)</Label>
+                    <div className="relative">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span>
+                        <Input 
+                            value={amount} 
+                            onChange={(e) => setAmount(e.target.value)} 
+                            placeholder="0,00" 
+                            className="pl-9"
+                        />
+                    </div>
                 </div>
                 <div className="space-y-2">
                     <Label>Período de Renovação</Label>
@@ -388,7 +400,7 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
                 <Button variant="ghost" onClick={onFinished}>Cancelar</Button>
                 <Button onClick={handleRenewAction} className="gap-2">
                     <RotateCw className="h-4 w-4" />
-                    Renovar Agora
+                    Confirmar Renovação
                 </Button>
             </DialogFooter>
         </div>
