@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -335,6 +335,66 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   )
 }
 
+function RenewDialog({ client, onFinished }: { client: Client, onFinished: () => void }) {
+    const { firestore, effectiveUserId } = useFirebase();
+    const { toast } = useToast();
+    const [selectedEmail, setSelectedPlan] = useState(client.email[0] || '');
+    const [period, setPeriod] = useState('1'); // 1 mes
+
+    const handleRenewAction = () => {
+        if (!effectiveUserId) return;
+        const clientDocRef = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
+        
+        // Novo vencimento: Hoje + 30 dias
+        const newDueDate = add(new Date(), { months: 1 });
+        
+        setDocumentNonBlocking(clientDocRef, {
+            status: 'Ativo',
+            dueDate: Timestamp.fromDate(newDueDate),
+            createdAt: serverTimestamp(), // Faz aparecer na seta de ativos do dia
+        }, { merge: true });
+
+        toast({ title: "Cliente Renovado!", description: `Acesso estendido por 1 mês para ${client.name}.` });
+        onFinished();
+    };
+
+    return (
+        <div className="space-y-6 pt-4">
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label>E-mail em uso</Label>
+                    <Select value={selectedEmail} onValueChange={setSelectedPlan}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecione o e-mail" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {client.email.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Período de Renovação</Label>
+                    <Select value={period} onValueChange={setPeriod}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecione o período" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">1 Mês</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="ghost" onClick={onFinished}>Cancelar</Button>
+                <Button onClick={handleRenewAction} className="gap-2">
+                    <RotateCw className="h-4 w-4" />
+                    Renovar Agora
+                </Button>
+            </DialogFooter>
+        </div>
+    );
+}
+
 export default function CustomersPage() {
   const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
@@ -429,6 +489,10 @@ export default function CustomersPage() {
                     <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="sm" onClick={() => setDialogState({ view: 'renew', client })} className="gap-1 border-green-200 text-green-700 hover:bg-green-50">
+                            <RotateCw className="h-3 w-3" />
+                            Renovar
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => setDialogState({ view: 'edit', client })}>Editar</Button>
                         <Button variant="ghost" size="icon" onClick={() => handleToggleSupport(client)}><LifeBuoy className={cn("h-4 w-4", client.needsSupport && "text-primary fill-primary/20")} /></Button>
                         <AlertDialog>
@@ -442,8 +506,18 @@ export default function CustomersPage() {
       </main>
       <Dialog open={dialogState.view !== 'closed'} onOpenChange={(o) => !o && setDialogState({ view: 'closed' })}>
         <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>{dialogState.view === 'add' ? 'Novo Cliente' : 'Editar Cliente'}</DialogTitle></DialogHeader>
-            <ClientForm initialData={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
+            <DialogHeader>
+                <DialogTitle>
+                    {dialogState.view === 'add' && 'Novo Cliente'}
+                    {dialogState.view === 'edit' && 'Editar Cliente'}
+                    {dialogState.view === 'renew' && `Renovar: ${dialogState.client?.name}`}
+                </DialogTitle>
+            </DialogHeader>
+            {dialogState.view === 'renew' ? (
+                <RenewDialog client={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
+            ) : (
+                <ClientForm initialData={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
+            )}
         </DialogContent>
       </Dialog>
     </div>
