@@ -542,9 +542,37 @@ export default function CustomersPage() {
 
   const handleToggleSupport = (client: Client) => {
     if (!effectiveUserId) return;
+    const newSupportState = !client.needsSupport;
     const ref = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
-    setDocumentNonBlocking(ref, { needsSupport: !client.needsSupport }, { merge: true });
-    toast({ title: `Suporte ${!client.needsSupport ? 'marcado' : 'desmarcado'}` });
+    setDocumentNonBlocking(ref, { needsSupport: newSupportState }, { merge: true });
+    toast({ title: `Suporte ${newSupportState ? 'marcado' : 'desmarcado'}` });
+
+    // Envio de Mensagem Automática
+    if (settings?.isSupportAutomationActive && settings.webhookToken) {
+        const messageTemplate = newSupportState ? settings.supportStartedMessage : settings.supportFinishedMessage;
+        if (messageTemplate) {
+            let formattedMessage = messageTemplate
+                .replace(/{cliente}/g, client.name)
+                .replace(/{telefone}/g, client.phone)
+                .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : client.email)
+                .replace(/{assinatura}/g, client.subscription || '')
+                .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : 'N/A')
+                .replace(/{valor}/g, client.amountPaid || '0,00')
+                .replace(/{senha}/g, client.password || 'N/A')
+                .replace(/{tela}/g, client.screen || 'N/A')
+                .replace(/{status}/g, client.status);
+
+            fetch('/api/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: formattedMessage,
+                    phoneNumber: client.phone,
+                    token: settings.webhookToken,
+                }),
+            }).catch(e => console.error("Falha na automação de suporte:", e));
+        }
+    }
   };
 
   const handleSendMessage = async (message: string) => {
