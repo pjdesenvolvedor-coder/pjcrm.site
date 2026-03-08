@@ -258,6 +258,38 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
             <TabsTrigger value="pagamento">Pagamento</TabsTrigger>
           </TabsList>
           <TabsContent value="dados" className="py-6 space-y-4">
+                <FormField
+                    control={form.control}
+                    name="clientType"
+                    render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                            <FormLabel className="md:text-right">Tipo</FormLabel>
+                            <div className="md:col-span-3 flex gap-2">
+                                <Button 
+                                    type="button" 
+                                    variant={!field.value ? "default" : "outline"} 
+                                    size="sm" 
+                                    className="flex-1 md:flex-none"
+                                    onClick={() => {
+                                        field.onChange(undefined);
+                                        form.setValue('emails', [{ value: '' }]);
+                                    }}
+                                >
+                                    Individual
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    variant={field.value === "PACOTE" ? "default" : "outline"} 
+                                    size="sm" 
+                                    className="flex-1 md:flex-none"
+                                    onClick={() => field.onChange("PACOTE")}
+                                >
+                                    Pacote / Revenda
+                                </Button>
+                            </div>
+                        </FormItem>
+                    )}
+                />
                 <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="WhatsApp" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
@@ -360,16 +392,21 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => (
                   <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
                     <FormLabel className="md:text-right">Forma *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="md:col-span-3">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {paymentMethods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="md:col-span-3 flex flex-wrap gap-2">
+                        {paymentMethods.map(m => (
+                            <Button
+                                key={m}
+                                type="button"
+                                variant={field.value === m ? "default" : "outline"}
+                                size="sm"
+                                className="flex-1 md:flex-none"
+                                onClick={() => field.onChange(m)}
+                            >
+                                {m}
+                            </Button>
+                        ))}
+                    </div>
+                    <FormMessage className="md:col-start-2 md:col-span-3" />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Valor</FormLabel><div className="relative md:col-span-3"><span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span><FormControl><Input {...field} placeholder="0,00" className="pl-9" /></FormControl></div></FormItem> )} />
