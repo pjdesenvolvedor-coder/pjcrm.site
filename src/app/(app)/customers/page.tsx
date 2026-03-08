@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -78,6 +78,37 @@ const clientSchema = z.object({
   paymentMethod: z.enum(paymentMethods).optional(),
   amountPaid: z.string().optional(),
 });
+
+function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Client; onSend: (message: string) => void; onCancel: () => void; isSending: boolean; }) {
+  const [message, setMessage] = useState('');
+  return (
+    <div className="space-y-4">
+      <DialogHeader>
+          <DialogTitle>Enviar Mensagem para {client.name}</DialogTitle>
+          <DialogDescription>
+              Digite a mensagem que você deseja enviar para o número {client.phone}.
+          </DialogDescription>
+      </DialogHeader>
+      <div className="py-2 space-y-2">
+        <Label htmlFor="message">Sua Mensagem</Label>
+        <Textarea 
+            id="message" 
+            placeholder="Olá {cliente}, como posso ajudar?..." 
+            value={message} 
+            onChange={(e) => setMessage(e.target.value)} 
+            className="min-h-[120px]" 
+        />
+        <p className="text-[10px] text-muted-foreground">Nota: Tags manuais como {"{cliente}"} não funcionam neste envio direto.</p>
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel} disabled={isSending}>Cancelar</Button>
+        <Button onClick={() => onSend(message)} disabled={!message.trim() || isSending}>
+            {isSending ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Enviando...</> : <><Send className="mr-2 h-4 w-4" />Enviar Agora</>}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
 
 function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>, onFinished: () => void }) {
   const { firestore, effectiveUserId } = useFirebase();
@@ -326,6 +357,21 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                     </Select>
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="paymentMethod" render={({ field }) => (
+                  <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                    <FormLabel className="md:text-right">Forma *</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="md:col-span-3">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {paymentMethods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Valor</FormLabel><div className="relative md:col-span-3"><span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span><FormControl><Input {...field} placeholder="0,00" className="pl-9" /></FormControl></div></FormItem> )} />
           </TabsContent>
         </Tabs>
@@ -413,6 +459,7 @@ export default function CustomersPage() {
   const [dialogState, setDialogState] = useState<any>({ view: 'closed' });
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<any>({ key: 'name', direction: 'ascending' });
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   
   const settingsDocRef = useMemoFirebase(() => (effectiveUserId ? doc(firestore, 'users', effectiveUserId, 'settings', 'config') : null), [firestore, effectiveUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
@@ -430,7 +477,13 @@ export default function CustomersPage() {
 
   const filteredClients = useMemo(() => {
     if (!clients) return [];
-    let items = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm));
+    let items = clients.filter(c => {
+        const search = searchTerm.toLowerCase();
+        const emailsStr = Array.isArray(c.email) ? c.email.join(' ') : (c.email || '');
+        return c.name.toLowerCase().includes(search) || 
+               c.phone.includes(search) || 
+               emailsStr.toLowerCase().includes(search);
+    });
     if (sortConfig) {
         items.sort((a: any, b: any) => {
             let aV = a[sortConfig.key];
@@ -457,10 +510,58 @@ export default function CustomersPage() {
     toast({ title: `Suporte ${!client.needsSupport ? 'marcado' : 'desmarcado'}` });
   };
 
+  const handleSendMessage = async (message: string) => {
+    if (!dialogState.client || !effectiveUserId) return;
+
+    if (!settings?.webhookToken) {
+        toast({
+            variant: "destructive",
+            title: "Token não configurado",
+            description: "Por favor, configure seu token de webhook na página de Configurações.",
+        });
+        return;
+    }
+
+    setIsSendingMessage(true);
+
+    try {
+        const response = await fetch('/api/send-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message,
+                phoneNumber: dialogState.client.phone,
+                token: settings.webhookToken,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha ao enviar mensagem.');
+        }
+
+        toast({
+            title: "Mensagem Enviada!",
+            description: `Sua mensagem foi enviada para ${dialogState.client.name}.`,
+        });
+        setDialogState({ view: 'closed' });
+
+    } catch (error: any) {
+        console.error("Failed to send message:", error);
+        toast({
+            variant: "destructive",
+            title: "Erro ao Enviar",
+            description: error.message || "Não foi possível enviar a mensagem.",
+        });
+    } finally {
+        setIsSendingMessage(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="Todos os Clientes">
-        <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[320px]" /></div>
+        <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar por nome, tel ou e-mail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[320px]" /></div>
         <Button size="sm" onClick={() => setDialogState({ view: 'add' })}><PlusCircle className="h-4 w-4 mr-1" />Adicionar</Button>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
@@ -473,6 +574,7 @@ export default function CustomersPage() {
                         Nome {sortConfig?.key === 'name' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
                     </div>
                 </TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('subscription')}>
                     <div className="flex items-center gap-1">
                         Plano {sortConfig?.key === 'subscription' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
@@ -493,14 +595,18 @@ export default function CustomersPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center">Carregando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center">Carregando...</TableCell></TableRow>
               ) : filteredClients.map((client) => (
                 <TableRow key={client.id} className={cn(client.needsSupport && "bg-primary/5")}>
                     <TableCell><div className='flex items-center gap-2'>{client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}{client.name}</div></TableCell>
+                    <TableCell><div className="text-xs text-muted-foreground max-w-[180px] truncate">{Array.isArray(client.email) ? client.email[0] : client.email}</div></TableCell>
                     <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
                     <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => setDialogState({ view: 'message', client })}>
+                            <MessageSquare className="h-4 w-4" />
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => setDialogState({ view: 'renew', client })} className="gap-1 border-green-200 text-green-700 hover:bg-green-50">
                             <RotateCw className="h-3 w-3" />
                             Renovar
@@ -523,12 +629,22 @@ export default function CustomersPage() {
                     {dialogState.view === 'add' && 'Novo Cliente'}
                     {dialogState.view === 'edit' && 'Editar Cliente'}
                     {dialogState.view === 'renew' && `Renovar: ${dialogState.client?.name}`}
+                    {dialogState.view === 'message' && 'Iniciar Conversa'}
                 </DialogTitle>
             </DialogHeader>
-            {dialogState.view === 'renew' ? (
+            {dialogState.view === 'renew' && (
                 <RenewDialog client={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
-            ) : (
+            )}
+            {(dialogState.view === 'add' || dialogState.view === 'edit') && (
                 <ClientForm initialData={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
+            )}
+            {dialogState.view === 'message' && (
+                <SendMessageDialog 
+                    client={dialogState.client} 
+                    onSend={handleSendMessage} 
+                    onCancel={() => setDialogState({ view: 'closed' })} 
+                    isSending={isSendingMessage} 
+                />
             )}
         </DialogContent>
       </Dialog>
