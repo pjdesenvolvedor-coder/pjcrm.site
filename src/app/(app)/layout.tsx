@@ -33,6 +33,7 @@ import {
   Filter,
   Database,
   Trash2,
+  FileText,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -580,6 +581,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton asChild isActive={pathname === '/db-cleaner/duplicates'}>
                                         <Link href="/db-cleaner/duplicates"><Trash2 className="h-4 w-4" /><span>Duplicadas</span></Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/db-cleaner/returns'}>
+                                        <Link href="/db-cleaner/returns"><FileText className="h-4 w-4" /><span>Retorno</span></Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                           </SidebarMenuSub>
