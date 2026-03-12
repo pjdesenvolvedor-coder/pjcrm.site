@@ -1,6 +1,42 @@
 
 {
   "entities": {
+    "SavedCleanedDb": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SavedCleanedDb",
+      "type": "object",
+      "description": "Represents a cleaned database list saved by the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the saved list."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns this list."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name given to the saved list."
+        },
+        "content": {
+          "type": "string",
+          "description": "The cleaned text content."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the list was saved.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "content",
+        "createdAt"
+      ]
+    },
     "BusinessManager": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "BusinessManager",
@@ -90,35 +126,13 @@
           "description": "The role of the user.",
           "enum": [
             "Admin",
-            "Agent"
+            "Agent",
+            "User"
           ]
         },
         "permissions": {
           "type": "object",
-          "description": "Defines user access to different app sections.",
-          "properties": {
-            "dashboard": {
-              "type": "boolean"
-            },
-            "customers": {
-              "type": "boolean"
-            },
-            "inbox": {
-              "type": "boolean"
-            },
-            "automations": {
-              "type": "boolean"
-            },
-            "zapconnect": {
-              "type": "boolean"
-            },
-            "settings": {
-              "type": "boolean"
-            },
-            "users": {
-              "type": "boolean"
-            }
-          }
+          "description": "Defines user access to different app sections."
         },
         "subscriptionPlan": {
           "type": "string",
@@ -232,10 +246,6 @@
           "type": "string",
           "format": "date-time",
           "description": "When the client was added to the system."
-        },
-        "upsellSent": {
-          "type": "boolean",
-          "description": "Whether the upsell message has been sent to this client."
         }
       },
       "required": [
@@ -492,62 +502,6 @@
         "webhookToken": {
           "type": "string",
           "description": "Authentication token for webhook requests."
-        },
-        "presetHour": {
-          "type": "string",
-          "description": "The preset hour for new client due dates."
-        },
-        "presetMinute": {
-          "type": "string",
-          "description": "The preset minute for new client due dates."
-        },
-        "usePresetTime": {
-          "type": "boolean",
-          "description": "Flag to determine if the preset time should be used."
-        },
-        "isDueDateMessageActive": {
-          "type": "boolean",
-          "description": "Flag to enable or disable the automatic due date message."
-        },
-        "dueDateMessage": {
-          "type": "string",
-          "description": "The message template to be sent when a subscription is due."
-        },
-        "isPostDueDateRemarketingActive": {
-          "type": "boolean",
-          "description": "Flag to enable or disable post-due-date remarketing messages."
-        },
-        "postDueDateRemarketingDays": {
-          "type": "number",
-          "description": "Number of days after due date to send the remarketing message."
-        },
-        "postDueDateRemarketingMessage": {
-          "type": "string",
-          "description": "The remarketing message template for overdue clients."
-        },
-        "isPostSignupRemarketingActive": {
-          "type": "boolean",
-          "description": "Flag to enable or disable post-signup remarketing messages."
-        },
-        "postSignupRemarketingDays": {
-          "type": "number",
-          "description": "Number of days after signup to send the remarketing message."
-        },
-        "postSignupRemarketingMessage": {
-          "type": "string",
-          "description": "The remarketing message template for new clients."
-        },
-        "isUpsellActive": {
-          "type": "boolean",
-          "description": "Flag to enable or disable the automated upsell message."
-        },
-        "upsellDelayMinutes": {
-          "type": "number",
-          "description": "Number of minutes to wait after client creation before sending upsell."
-        },
-        "upsellMessage": {
-          "type": "string",
-          "description": "The upsell message template."
         }
       }
     },
@@ -754,7 +708,7 @@
       "properties": {
         "instanceId": {
           "type": "string",
-          "description": "Unique identifier for the alert instance. Changes when the alert message is updated."
+          "description": "Unique identifier for the alert instance."
         },
         "message": {
           "type": "string",
@@ -762,7 +716,7 @@
         },
         "isActive": {
           "type": "boolean",
-          "description": "Whether the alert is currently active and should be displayed."
+          "description": "Whether the alert is currently active."
         },
         "updatedAt": {
           "type": "string",
@@ -797,6 +751,26 @@
   },
   "firestore": {
     "structure": [
+      {
+        "path": "/users/{userId}/cleaned_dbs/{dbId}",
+        "definition": {
+          "entityName": "SavedCleanedDb",
+          "schema": {
+            "$ref": "#/backend/entities/SavedCleanedDb"
+          },
+          "description": "Stores cleaned database lists for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "dbId",
+              "description": "The unique identifier for the saved DB list."
+            }
+          ]
+        }
+      },
        {
         "path": "/users/{userId}/notes/{noteId}",
         "definition": {
@@ -804,7 +778,7 @@
           "schema": {
             "$ref": "#/backend/entities/Note"
           },
-          "description": "Stores notes for each user's kanban board. Ownership is enforced via the path `/users/{userId}`.",
+          "description": "Stores notes for each user's kanban board.",
           "params": [
             {
               "name": "userId",
@@ -824,7 +798,7 @@
           "schema": {
             "$ref": "#/backend/entities/UserProfile"
           },
-          "description": "Stores user profile information. The collection is path-based, so ownership is implicitly tied to the {userId} in the path.",
+          "description": "Stores user profile information.",
           "params": [
             {
               "name": "userId",
@@ -840,7 +814,7 @@
           "schema": {
             "$ref": "#/backend/entities/Client"
           },
-          "description": "Stores clients for each user. Ownership is enforced via the path `/users/{userId}`.",
+          "description": "Stores clients for each user.",
           "params": [
             {
               "name": "userId",
@@ -880,7 +854,7 @@
           "schema": {
             "$ref": "#/backend/entities/WhatsAppConnection"
           },
-          "description": "Stores WhatsApp connection details for each user.  Ownership is enforced via the path `/users/{userId}`.",
+          "description": "Stores WhatsApp connection details for each user.",
           "params": [
             {
               "name": "userId",
@@ -900,7 +874,7 @@
           "schema": {
             "$ref": "#/backend/entities/AutomatedMessageWorkflow"
           },
-          "description": "Stores automated message workflows defined by each user. Ownership is enforced via the path `/users/{userId}`.",
+          "description": "Stores automated message workflows defined by each user.",
           "params": [
             {
               "name": "userId",
@@ -964,7 +938,7 @@
           "schema": {
             "$ref": "#/backend/entities/MessageAnalytics"
           },
-          "description": "Stores message analytics data.  Security rules must validate the attributes of the document itself. There is no ownership enforced in the current structure.",
+          "description": "Stores message analytics data.",
           "params": [
             {
               "name": "analyticsId",
@@ -980,7 +954,7 @@
           "schema": {
             "$ref": "#/backend/entities/AIResponseSuggestion"
           },
-          "description": "Stores AI-powered response suggestions.  Security rules must validate the attributes of the document itself. There is no ownership enforced in the current structure.",
+          "description": "Stores AI-powered response suggestions.",
           "params": [
             {
               "name": "suggestionId",
@@ -996,7 +970,7 @@
           "schema": {
             "$ref": "#/backend/entities/Settings"
           },
-          "description": "Stores user-specific settings, typically as a singleton document.",
+          "description": "Stores user-specific settings.",
           "params": [
             {
               "name": "userId",
@@ -1004,7 +978,7 @@
             },
             {
               "name": "settingsId",
-              "description": "A fixed ID for the settings document, e.g., 'config'."
+              "description": "A fixed ID for the settings document."
             }
           ]
         }
@@ -1016,7 +990,7 @@
           "schema": {
             "$ref": "#/backend/entities/Subscription"
           },
-          "description": "Stores subscription plans created by each user. Ownership is enforced via the path `/users/{userId}`.",
+          "description": "Stores subscription plans created by each user.",
           "params": [
             {
               "name": "userId",
@@ -1036,7 +1010,7 @@
           "schema": {
             "$ref": "#/backend/entities/ScheduledMessage"
           },
-          "description": "Stores messages scheduled by each user for groups. Ownership is enforced via the path `/users/{userId}`.",
+          "description": "Stores messages scheduled by each user for groups.",
           "params": [
             {
               "name": "userId",
@@ -1112,11 +1086,11 @@
           "schema": {
             "$ref": "#/backend/entities/SystemAlert"
           },
-          "description": "Stores the current system-wide alert. Should be treated as a singleton document (e.g., with a doc ID of 'current').",
+          "description": "Stores the current system-wide alert.",
           "params": [
             {
               "name": "alertDocId",
-              "description": "The unique identifier for the alert document (e.g., 'current')."
+              "description": "The unique identifier for the alert document."
             }
           ]
         }
@@ -1153,7 +1127,6 @@
           ]
         }
       }
-    ],
-    "reasoning": "The Firestore data structure is designed to support the ZapConnect SaaS platform, prioritizing security, scalability, and debuggability as per the core design principles.  Authorization Independence is achieved through path-based ownership for user data and denormalization where collaborative access is needed. This eliminates the need for `get()` calls in security rules, enabling atomic operations.\\n\\nThe design adheres to Structural Segregation by ensuring collections contain documents with similar security requirements. User-specific data is stored under the `/users/{userId}` path, while shared data, if any, would use membership maps and denormalization. Rules-are-not-filters (QAPs) is achieved by having homogeneous security postures within each collection. For instance, each document in `/users/{userId}/whatsapp_connections` has the same ownership security rule.\\n\\nThe structure uses consistent access modeling. Private user data is stored under path-based ownership (`/users/{userId}/...`). Collaborative data would leverage membership maps if the SaaS platform evolves to include sharing features. Data clarity is maintained with explicit state modeling (if applicable in future features), predictable schemas, and radical consistency in naming conventions.\\n\\nSince the request mentions that all rules must be removed to prevent errors, the data structure is prepared without considering authorization rules. Authorization Independence is achieved by ensuring all data relating to an entity is contained within that entity's document or subcollection and not relying on outside documents. Each collection follows a homogeneous security posture. In collaborative contexts (which are not described in the provided entities, but anticipated by the structure), membership maps would be denormalized to eliminate dependency on parent documents. This approach ensures that list operations are secure, as rules only need to validate the existence or attributes of the documents being listed, not related parent documents."
+    ]
   }
 }

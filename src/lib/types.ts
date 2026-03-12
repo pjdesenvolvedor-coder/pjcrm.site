@@ -18,6 +18,7 @@ export type UserPermissions = {
   pix: boolean;
   usage: boolean;
   logs: boolean;
+  dbCleaner: boolean;
 };
 
 export type UserProfile = {
@@ -198,4 +199,12 @@ export type BusinessManager = {
   id: string;
   userId: string;
   name: string;
+};
+
+export type SavedCleanedDb = {
+  id: string;
+  userId: string;
+  name: string;
+  content: string;
+  createdAt: Timestamp;
 };

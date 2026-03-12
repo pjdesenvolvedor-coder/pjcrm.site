@@ -31,6 +31,8 @@ import {
   Clock,
   List,
   Filter,
+  Database,
+  Trash2,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -218,6 +220,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         pix: false,
         usage: false,
         logs: false,
+        dbCleaner: true,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -557,6 +560,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/list'}><Link href="/shot/list"><List className="h-4 w-4" /><span>Lista</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/status-product'}><Link href="/shot/status-product"><Filter className="h-4 w-4" /><span>Status - Produto</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.dbCleaner && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/db-cleaner')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Limpador de DB">
+                              <div className="flex items-center gap-2"><Database /><span>Limpador de DB</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/db-cleaner/duplicates'}>
+                                        <Link href="/db-cleaner/duplicates"><Trash2 className="h-4 w-4" /><span>Duplicadas</span></Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
