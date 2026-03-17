@@ -68,7 +68,7 @@ const clientSchema = z.object({
   phone: z.string().min(1, 'Número é obrigatório'),
   clientType: z.enum(clientTypes).optional(),
   deliveryMethod: z.enum(deliveryMethods).default("credentials"),
-  emails: z.array(z.object({ value: z.string().email('Email inválido') })).min(1, { message: 'Pelo menos um email é obrigatório.'}),
+  emails: z.array(z.object({ value: z.string().optional() })).optional(),
   password: z.string().optional(),
   screen: z.string().optional(),
   accessLink: z.string().optional(),
@@ -80,6 +80,27 @@ const clientSchema = z.object({
   subscription: z.string().min(1, 'Assinatura é obrigatória'),
   paymentMethod: z.enum(paymentMethods).optional(),
   amountPaid: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.deliveryMethod === 'credentials') {
+        if (!data.emails || data.emails.length === 0 || !data.emails[0].value) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Pelo menos um e-mail é obrigatório.",
+                path: ["emails"],
+            });
+        } else {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            data.emails.forEach((e, idx) => {
+                if (e.value && !emailRegex.test(e.value)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: "Email inválido",
+                        path: ["emails", idx, "value"],
+                    });
+                }
+            });
+        }
+    }
 });
 
 function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Client; onSend: (message: string) => void; onCancel: () => void; isSending: boolean; }) {
@@ -204,10 +225,14 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         }
     }
 
+    const emailList = (values.deliveryMethod === 'credentials' && values.emails) 
+        ? values.emails.map(email => email.value).filter(Boolean) as string[]
+        : [];
+
     const clientData: any = {
       userId: effectiveUserId,
       name: values.name,
-      email: values.emails.map(email => email.value),
+      email: emailList,
       phone: values.phone,
       password: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.password || null) : null,
       screen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.screen || null) : null,
@@ -217,7 +242,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       clientType: values.clientType ?? null,
       dueDate: dueDateTimestamp ?? null,
       notes: values.notes ?? null,
-      quantity: values.emails.length,
+      quantity: emailList.length || 1,
       subscription: values.subscription,
       paymentMethod: values.paymentMethod ?? null,
       amountPaid: values.amountPaid ?? null,
@@ -245,7 +270,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
                 .replace(/{cliente}/g, values.name).replace(/{telefone}/g, values.phone)
-                .replace(/{email}/g, values.emails.map(e => e.value).join(', '))
+                .replace(/{email}/g, emailList.join(', '))
                 .replace(/{senha}/g, values.password || 'N/A').replace(/{tela}/g, values.screen || 'N/A')
                 .replace(/{link}/g, values.accessLink || 'N/A')
                 .replace(/{assinatura}/g, values.subscription)
@@ -337,25 +362,27 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="WhatsApp" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 
-                <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
-                    <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
-                    <div className="md:col-span-3 space-y-2">
-                        {!clientType ? (
-                             <FormField control={form.control} name="emails.0.value" render={({ field }) => ( <FormItem><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                        ) : (
-                            <>
-                                <ScrollArea className="h-40 w-full rounded-md border p-4 space-y-2">
-                                    {fields.map((item, index) => (
-                                        <FormField key={item.id} control={form.control} name={`emails.${index}.value`} render={({ field }) => (
-                                            <FormItem><div className="flex items-center gap-2"><FormControl><Input type="email" placeholder="email" {...field} /></FormControl>{fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}</div><FormMessage /></FormItem>
-                                        )}/>
-                                    ))}
-                                </ScrollArea>
-                                <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Email</Button>
-                            </>
-                        )}
+                {deliveryMethod !== 'link' && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
+                        <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
+                        <div className="md:col-span-3 space-y-2">
+                            {!clientType ? (
+                                <FormField control={form.control} name="emails.0.value" render={({ field }) => ( <FormItem><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            ) : (
+                                <>
+                                    <ScrollArea className="h-40 w-full rounded-md border p-4 space-y-2">
+                                        {fields.map((item, index) => (
+                                            <FormField key={item.id} control={form.control} name={`emails.${index}.value`} render={({ field }) => (
+                                                <FormItem><div className="flex items-center gap-2"><FormControl><Input type="email" placeholder="email" {...field} /></FormControl>{fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}</div><FormMessage /></FormItem>
+                                            )}/>
+                                        ))}
+                                    </ScrollArea>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Email</Button>
+                                </>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {deliveryMethod === 'credentials' && !clientType && (
                   <>
