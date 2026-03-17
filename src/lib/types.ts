@@ -63,6 +63,8 @@ export type Client = {
   phone: string;
   password?: string | null;
   screen?: string | null;
+  accessLink?: string | null;
+  deliveryMethod?: 'credentials' | 'link' | null;
   dueDate?: Timestamp | null;
   status: 'Ativo' | 'Inativo' | 'Vencido';
   telegramUser?: string | null;
@@ -114,6 +116,8 @@ export type Settings = {
   supportFinishedMessage?: string;
   isDeliveryAutomationActive?: boolean;
   deliveryMessage?: string;
+  isDeliveryLinkAutomationActive?: boolean;
+  deliveryLinkMessage?: string;
   isLeadAutomationActive?: boolean;
   leadInitialMessage?: string;
   leadConvertedMessage?: string;

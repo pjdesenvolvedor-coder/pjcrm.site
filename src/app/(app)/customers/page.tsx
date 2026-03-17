@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2 } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -60,15 +60,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
 const screenOptions = ["1", "2", "3", "4", "5", "6", "7"] as const;
+const deliveryMethods = ["credentials", "link"] as const;
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   telegramUser: z.string().optional(),
   phone: z.string().min(1, 'Número é obrigatório'),
   clientType: z.enum(clientTypes).optional(),
+  deliveryMethod: z.enum(deliveryMethods).default("credentials"),
   emails: z.array(z.object({ value: z.string().email('Email inválido') })).min(1, { message: 'Pelo menos um email é obrigatório.'}),
   password: z.string().optional(),
   screen: z.string().optional(),
+  accessLink: z.string().optional(),
   dueDate: z.string().optional(),
   dueTimeHour: z.string().optional(),
   dueTimeMinute: z.string().optional(),
@@ -142,9 +145,11 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       telegramUser: initialData?.telegramUser || '',
       phone: initialData?.phone || '',
       clientType: initialData?.clientType || undefined,
+      deliveryMethod: initialData?.deliveryMethod || "credentials",
       emails: defaultEmails,
       password: initialData?.password || '',
       screen: initialData?.screen || '',
+      accessLink: initialData?.accessLink || '',
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
       dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
@@ -158,6 +163,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'emails' });
   const clientType = form.watch('clientType');
+  const deliveryMethod = form.watch('deliveryMethod');
 
   useEffect(() => {
     if (!isEditing && settings !== undefined) {
@@ -203,8 +209,10 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       name: values.name,
       email: values.emails.map(email => email.value),
       phone: values.phone,
-      password: values.clientType ? null : (values.password || null),
-      screen: values.screen || null,
+      password: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.password || null) : null,
+      screen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.screen || null) : null,
+      accessLink: values.deliveryMethod === 'link' ? (values.accessLink || null) : null,
+      deliveryMethod: values.deliveryMethod,
       telegramUser: values.telegramUser ?? null,
       clientType: values.clientType ?? null,
       dueDate: dueDateTimestamp ?? null,
@@ -230,11 +238,16 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         });
         toast({ title: "Cliente adicionado!" });
 
-        if (settings?.isDeliveryAutomationActive && settings.deliveryMessage && settings.webhookToken) {
-            let formattedMessage = settings.deliveryMessage
+        // Automated Delivery
+        const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
+        const deliveryMessageTemplate = values.deliveryMethod === 'credentials' ? settings?.deliveryMessage : settings?.deliveryLinkMessage;
+
+        if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
+            let formattedMessage = deliveryMessageTemplate
                 .replace(/{cliente}/g, values.name).replace(/{telefone}/g, values.phone)
                 .replace(/{email}/g, values.emails.map(e => e.value).join(', '))
                 .replace(/{senha}/g, values.password || 'N/A').replace(/{tela}/g, values.screen || 'N/A')
+                .replace(/{link}/g, values.accessLink || 'N/A')
                 .replace(/{assinatura}/g, values.subscription)
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
                 .replace(/{valor}/g, values.amountPaid || '0,00').replace(/{status}/g, newStatus);
@@ -290,8 +303,40 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         </FormItem>
                     )}
                 />
+                
+                <FormField
+                    control={form.control}
+                    name="deliveryMethod"
+                    render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4 border-y py-2 border-dashed">
+                            <FormLabel className="md:text-right font-bold text-xs uppercase">Entrega por</FormLabel>
+                            <div className="md:col-span-3 flex gap-2">
+                                <Button 
+                                    type="button" 
+                                    variant={field.value === 'credentials' ? "default" : "outline"} 
+                                    size="sm" 
+                                    className="flex-1 h-8 text-xs gap-1"
+                                    onClick={() => field.onChange("credentials")}
+                                >
+                                    <Key className="h-3 w-3" /> Email / Senha
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    variant={field.value === 'link' ? "default" : "outline"} 
+                                    size="sm" 
+                                    className="flex-1 h-8 text-xs gap-1"
+                                    onClick={() => field.onChange("link")}
+                                >
+                                    <Link2 className="h-3 w-3" /> Link de Acesso
+                                </Button>
+                            </div>
+                        </FormItem>
+                    )}
+                />
+
                 <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="WhatsApp" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
+                
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
                     <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
                     <div className="md:col-span-3 space-y-2">
@@ -311,7 +356,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         )}
                     </div>
                 </div>
-                {!clientType && (
+
+                {deliveryMethod === 'credentials' && !clientType && (
                   <>
                     <FormField control={form.control} name="password" render={({ field }) => (
                         <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Senha</FormLabel><FormControl><div className="relative md:col-span-3"><Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Senha" {...field} className="pl-9" /></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>
@@ -335,6 +381,21 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         </FormItem>
                     )}/>
                   </>
+                )}
+
+                {deliveryMethod === 'link' && (
+                    <FormField control={form.control} name="accessLink" render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                            <FormLabel className="md:text-right">Link de Acesso</FormLabel>
+                            <FormControl>
+                                <div className="relative md:col-span-3">
+                                    <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="https://..." {...field} className="pl-9" />
+                                </div>
+                            </FormControl>
+                            <FormMessage className="md:col-start-2 md:col-span-3" />
+                        </FormItem>
+                    )}/>
                 )}
           </TabsContent>
           <TabsContent value="vencimento" className="py-6 space-y-4">
@@ -560,6 +621,7 @@ export default function CustomersPage() {
                 .replace(/{valor}/g, client.amountPaid || '0,00')
                 .replace(/{senha}/g, client.password || 'N/A')
                 .replace(/{tela}/g, client.screen || 'N/A')
+                .replace(/{link}/g, client.accessLink || 'N/A')
                 .replace(/{status}/g, client.status);
 
             fetch('/api/send-message', {

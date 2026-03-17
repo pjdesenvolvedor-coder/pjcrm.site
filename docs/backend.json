@@ -199,6 +199,15 @@
             "REVENDA"
           ]
         },
+        "deliveryMethod": {
+          "type": "string",
+          "enum": ["credentials", "link"],
+          "description": "How the access was delivered."
+        },
+        "accessLink": {
+          "type": "string",
+          "description": "The access URL provided to the client."
+        },
         "dueDate": {
           "type": "string",
           "description": "The due date for the client's subscription.",
