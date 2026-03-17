@@ -1,6 +1,6 @@
 'use client';
 
-import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
+import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +20,10 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 
 
 const parseCurrency = (value?: string): number => {
@@ -44,7 +48,7 @@ export default function DashboardPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const { stats, subscriptionData, paymentMethodData } = useMemo(() => {
+  const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
       activeCount: 0,
       activeTotal: 0,
@@ -62,7 +66,7 @@ export default function DashboardPage() {
     };
 
     if (!clients) {
-      return { stats: baseStats, subscriptionData: [], paymentMethodData: [] };
+      return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [] };
     }
 
     const now = new Date();
@@ -104,6 +108,9 @@ export default function DashboardPage() {
     let newClientsTodayCount = 0;
     let expiredTodayCount = 0;
 
+    const dueTodayList: Client[] = [];
+    const dueIn3DaysList: Client[] = [];
+
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
 
@@ -141,10 +148,12 @@ export default function DashboardPage() {
         if (isToday(dueDate) && dueDate > now) {
           dueTodayCount++;
           dueTodayTotal += amount;
+          dueTodayList.push(client);
         } 
         else if (isWithinInterval(dueDate, { start: addDays(today, 1), end: threeDaysFromNow })) {
           dueIn3DaysCount++;
           dueIn3DaysTotal += amount;
+          dueIn3DaysList.push(client);
         }
       }
       
@@ -192,7 +201,7 @@ export default function DashboardPage() {
       fill: `hsl(var(--chart-${(index % 5) + 1}))`
     }));
 
-    return { stats: finalStats, subscriptionData, paymentMethodData };
+    return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList };
 
   }, [clients, period]);
   
@@ -300,6 +309,35 @@ export default function DashboardPage() {
                 <Calendar className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Vencem Hoje</CardTitle>
               </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-yellow-100 dark:hover:bg-yellow-900/50">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="end">
+                  <div className="p-4 border-b bg-muted/30">
+                    <h4 className="font-semibold text-sm">Vencimentos de Hoje</h4>
+                  </div>
+                  <ScrollArea className="h-72">
+                    <div className="p-2">
+                      {dueTodayList.length > 0 ? (
+                        dueTodayList.map(c => (
+                          <div key={c.id} className="flex items-center justify-between p-2 hover:bg-muted rounded-md text-xs">
+                            <div className="flex flex-col">
+                                <span className="font-medium">{c.name}</span>
+                                <span className="text-[10px] text-muted-foreground">{c.phone}</span>
+                            </div>
+                            <Badge variant="outline" className="text-[9px] px-1.5">{c.subscription}</Badge>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-muted-foreground p-4 text-xs italic">Nenhum vencimento para hoje.</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
               <div className="text-3xl font-bold">{stats.dueTodayCount}</div>
@@ -312,6 +350,35 @@ export default function DashboardPage() {
                 <Clock className="h-5 w-5" />
                 <CardTitle className="text-sm font-medium">Vencem em 3 Dias</CardTitle>
               </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-100 dark:hover:bg-blue-900/50">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="end">
+                  <div className="p-4 border-b bg-muted/30">
+                    <h4 className="font-semibold text-sm">Vencimentos em 3 Dias</h4>
+                  </div>
+                  <ScrollArea className="h-72">
+                    <div className="p-2">
+                      {dueIn3DaysList.length > 0 ? (
+                        dueIn3DaysList.map(c => (
+                          <div key={c.id} className="flex items-center justify-between p-2 hover:bg-muted rounded-md text-xs">
+                            <div className="flex flex-col">
+                                <span className="font-medium">{c.name}</span>
+                                <span className="text-[10px] text-muted-foreground">{c.phone}</span>
+                            </div>
+                            <Badge variant="outline" className="text-[9px] px-1.5">{c.subscription}</Badge>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-muted-foreground p-4 text-xs italic">Nenhum vencimento previsto.</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
             </CardHeader>
             <CardContent className="flex items-end justify-between p-4">
               <div className="text-3xl font-bold">{stats.dueIn3DaysCount}</div>
