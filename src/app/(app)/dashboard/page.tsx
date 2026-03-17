@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
@@ -253,7 +252,7 @@ export default function DashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-green-50 dark:bg-green-950/50 rounded-t-lg text-green-700 dark:text-green-400">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                <CardTitle className="text-sm font-medium">Ativos</CardTitle>
+                <CardTitle className="text-sm font-medium">Assinaturas Ativas</CardTitle>
               </div>
               <span className="text-sm font-medium">{stats.activePercentage.toFixed(1)}%</span>
             </CardHeader>
