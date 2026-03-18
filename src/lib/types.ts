@@ -80,6 +80,8 @@ export type Client = {
   upsellSent?: boolean;
   sentUpsellIds?: string[];
   sentRemarketingIds?: string[];
+  agentId?: string;
+  agentName?: string;
 };
 
 export type MessageLog = {

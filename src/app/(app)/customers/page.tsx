@@ -175,7 +175,8 @@ function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Cl
 }
 
 function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>, onFinished: () => void }) {
-  const { firestore, effectiveUserId } = useFirebase();
+  const { firestore, effectiveUserId, userProfile } = useFirebase();
+  const { user } = useUser();
   const { toast } = useToast();
   const isEditing = !!initialData?.id;
 
@@ -254,7 +255,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   };
 
   const onSubmit = async (values: z.infer<typeof clientSchema>) => {
-    if (!effectiveUserId) return;
+    if (!effectiveUserId || !user) return;
     
     let dueDateTimestamp: Timestamp | undefined = undefined;
     if (values.dueDate && values.dueDate.length === 8) {
@@ -288,6 +289,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       subscription: values.subscription,
       paymentMethod: values.paymentMethod ?? null,
       amountPaid: values.amountPaid ?? null,
+      agentId: user.uid,
+      agentName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Sistema',
     };
 
     if (isEditing && initialData?.id) {
@@ -584,14 +587,15 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 }
 
 function RenewDialog({ client, onFinished }: { client: Client, onFinished: () => void }) {
-    const { firestore, effectiveUserId } = useFirebase();
+    const { firestore, effectiveUserId, userProfile } = useFirebase();
+    const { user } = useUser();
     const { toast } = useToast();
     const [emails, setEmails] = useState(client.email.join(', '));
     const [amount, setAmount] = useState(client.amountPaid || '0,00');
     const [period, setPeriod] = useState('1');
 
     const handleRenewAction = () => {
-        if (!effectiveUserId) return;
+        if (!effectiveUserId || !user) return;
         const clientDocRef = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
         
         const newDueDate = add(new Date(), { months: 1 });
@@ -602,6 +606,8 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
             amountPaid: amount,
             dueDate: Timestamp.fromDate(newDueDate),
             createdAt: serverTimestamp(),
+            agentId: user.uid,
+            agentName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Sistema',
         }, { merge: true });
 
         toast({ title: "Cliente Renovado!", description: `Acesso estendido por 1 mês para ${client.name}.` });

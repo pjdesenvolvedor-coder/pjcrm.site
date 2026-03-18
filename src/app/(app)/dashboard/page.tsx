@@ -1,6 +1,7 @@
+
 'use client';
 
-import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye } from 'lucide-react';
+import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye, Trophy, Medal } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,6 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
 const parseCurrency = (value?: string): number => {
@@ -48,7 +50,7 @@ export default function DashboardPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
+  const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList, agentRanking } = useMemo(() => {
     const baseStats = {
       activeCount: 0,
       activeTotal: 0,
@@ -66,7 +68,7 @@ export default function DashboardPage() {
     };
 
     if (!clients) {
-      return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [] };
+      return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [], agentRanking: [] };
     }
 
     const now = new Date();
@@ -113,6 +115,7 @@ export default function DashboardPage() {
 
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
+    const agentsMap: Record<string, { id: string, name: string, activeCount: number, revenue: number }> = {};
 
     clients.forEach(client => {
       const amount = parseCurrency(client.amountPaid);
@@ -142,6 +145,15 @@ export default function DashboardPage() {
       } else if (client.status === 'Ativo') {
           activeCount++;
           activeTotal += amount;
+
+          // Aggregating for Agent Ranking
+          const agentId = client.agentId || 'legacy';
+          const agentName = client.agentName || 'Sistema / Antigo';
+          if (!agentsMap[agentId]) {
+              agentsMap[agentId] = { id: agentId, name: agentName, activeCount: 0, revenue: 0 };
+          }
+          agentsMap[agentId].activeCount += 1;
+          agentsMap[agentId].revenue += amount;
       }
 
       if (dueDate) {
@@ -201,7 +213,12 @@ export default function DashboardPage() {
       fill: `hsl(var(--chart-${(index % 5) + 1}))`
     }));
 
-    return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList };
+    // Sorting and Filtering Agent Ranking (Only those with > 1 active client)
+    const agentRanking = Object.values(agentsMap)
+        .filter(a => a.activeCount > 1)
+        .sort((a, b) => b.activeCount - a.activeCount);
+
+    return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList, agentRanking };
 
   }, [clients, period]);
   
@@ -386,32 +403,87 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-        <div className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                    <CardTitle>Total de Vendas</CardTitle>
-                    <p className="text-sm text-muted-foreground">Receita total no período selecionado (Baseado na data de cadastro).</p>
-                </div>
-                <Select value={period} onValueChange={setPeriod}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Selecione o período" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="today">Hoje</SelectItem>
-                        <SelectItem value="this-week">Esta Semana</SelectItem>
-                        <SelectItem value="this-month">Este Mês</SelectItem>
-                        <SelectItem value="this-year">Este Ano</SelectItem>
-                    </SelectContent>
-                </Select>
-            </CardHeader>
-            <CardContent>
-                <div className="flex items-center gap-2">
-                    <DollarSign className="h-10 w-10 text-green-500" />
-                    <p className="text-5xl font-bold">{formatCurrency(stats.totalSales)}</p>
-                </div>
-            </CardContent>
-          </Card>
+
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-2">
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Total de Vendas</CardTitle>
+                        <p className="text-sm text-muted-foreground">Receita total no período selecionado (Baseado na data de cadastro).</p>
+                    </div>
+                    <Select value={period} onValueChange={setPeriod}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Selecione o período" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="today">Hoje</SelectItem>
+                            <SelectItem value="this-week">Esta Semana</SelectItem>
+                            <SelectItem value="this-month">Este Mês</SelectItem>
+                            <SelectItem value="this-year">Este Ano</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center gap-2">
+                        <DollarSign className="h-10 w-10 text-green-500" />
+                        <p className="text-5xl font-bold">{formatCurrency(stats.totalSales)}</p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="flex flex-col shadow-lg border-primary/20">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-yellow-500" />
+                        Ranking de Performance
+                    </CardTitle>
+                    <CardDescription>Atendentes com mais de 1 cliente ativo.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1">
+                    <ScrollArea className="h-[200px]">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="hover:bg-transparent border-b">
+                                    <TableHead className="w-12">Pos</TableHead>
+                                    <TableHead>Nome</TableHead>
+                                    <TableHead className="text-center">Ativos</TableHead>
+                                    <TableHead className="text-right">Fat. Ativo</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {agentRanking.map((agent, index) => (
+                                    <TableRow key={agent.id} className="group transition-colors">
+                                        <TableCell className="font-bold py-3 text-center">
+                                            {index === 0 && <Trophy className="h-5 w-5 text-yellow-500 mx-auto" />}
+                                            {index === 1 && <Medal className="h-5 w-5 text-slate-400 mx-auto" />}
+                                            {index === 2 && <Medal className="h-5 w-5 text-orange-600 mx-auto" />}
+                                            {index > 2 && `${index + 1}º`}
+                                        </TableCell>
+                                        <TableCell className="py-3">
+                                            <span className="font-medium text-sm block truncate max-w-[100px]">{agent.name}</span>
+                                        </TableCell>
+                                        <TableCell className="text-center py-3">
+                                            <Badge variant="secondary" className="font-bold">{agent.activeCount}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right py-3">
+                                            <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                                {formatCurrency(agent.revenue)}
+                                            </span>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {agentRanking.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8 italic text-xs">
+                                            Nenhum atendente no ranking ainda.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </ScrollArea>
+                </CardContent>
+            </Card>
         </div>
 
          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
