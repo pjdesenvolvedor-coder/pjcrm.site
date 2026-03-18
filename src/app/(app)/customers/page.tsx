@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -71,6 +71,7 @@ const clientSchema = z.object({
   emails: z.array(z.object({ value: z.string().optional() })).optional(),
   password: z.string().optional(),
   screen: z.string().optional(),
+  pinScreen: z.string().optional(),
   accessLink: z.string().optional(),
   dueDate: z.string().optional(),
   dueTimeHour: z.string().optional(),
@@ -81,7 +82,6 @@ const clientSchema = z.object({
   paymentMethod: z.enum(paymentMethods).optional(),
   amountPaid: z.string().optional(),
 }).superRefine((data, ctx) => {
-    // Obrigatoriedade do email apenas se for entrega por dados
     if (data.deliveryMethod === 'credentials') {
         if (!data.emails || data.emails.length === 0 || !data.emails[0].value) {
             ctx.addIssue({
@@ -92,7 +92,6 @@ const clientSchema = z.object({
         }
     }
 
-    // Validação de formato sempre que algo for digitado
     if (data.emails) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         data.emails.forEach((e, idx) => {
@@ -174,6 +173,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       emails: defaultEmails,
       password: initialData?.password || '',
       screen: initialData?.screen || '',
+      pinScreen: initialData?.pinScreen || '',
       accessLink: initialData?.accessLink || '',
       dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
       dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
@@ -240,6 +240,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       phone: values.phone,
       password: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.password || null) : null,
       screen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.screen || null) : null,
+      pinScreen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.pinScreen || null) : null,
       accessLink: values.deliveryMethod === 'link' ? (values.accessLink || null) : null,
       deliveryMethod: values.deliveryMethod,
       telegramUser: values.telegramUser ?? null,
@@ -267,7 +268,6 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         });
         toast({ title: "Cliente adicionado!" });
 
-        // Automated Delivery
         const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
         const deliveryMessageTemplate = values.deliveryMethod === 'credentials' ? settings?.deliveryMessage : settings?.deliveryLinkMessage;
 
@@ -276,6 +276,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 .replace(/{cliente}/g, values.name).replace(/{telefone}/g, values.phone)
                 .replace(/{email}/g, emailList.join(', '))
                 .replace(/{senha}/g, values.password || 'N/A').replace(/{tela}/g, values.screen || 'N/A')
+                .replace(/{pin_tela}/g, values.pinScreen || 'N/A')
                 .replace(/{link}/g, values.accessLink || 'N/A')
                 .replace(/{assinatura}/g, values.subscription)
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
@@ -411,6 +412,18 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                           </Select>
                         </FormItem>
                     )}/>
+                    <FormField control={form.control} name="pinScreen" render={({ field }) => (
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
+                            <FormLabel className="md:text-right">PIN Tela</FormLabel>
+                            <FormControl>
+                                <div className="relative md:col-span-3">
+                                    <ShieldEllipsis className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="PIN (Opcional)" {...field} className="pl-9" />
+                                </div>
+                            </FormControl>
+                            <FormMessage className="md:col-start-2 md:col-span-3" />
+                        </FormItem>
+                    )}/>
                   </>
                 )}
 
@@ -515,13 +528,12 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
     const { toast } = useToast();
     const [emails, setEmails] = useState(client.email.join(', '));
     const [amount, setAmount] = useState(client.amountPaid || '0,00');
-    const [period, setPeriod] = useState('1'); // 1 mes
+    const [period, setPeriod] = useState('1');
 
     const handleRenewAction = () => {
         if (!effectiveUserId) return;
         const clientDocRef = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
         
-        // Novo vencimento: Hoje + 30 dias
         const newDueDate = add(new Date(), { months: 1 });
         
         setDocumentNonBlocking(clientDocRef, {
@@ -529,7 +541,7 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
             email: emails.split(',').map(e => e.trim()).filter(Boolean),
             amountPaid: amount,
             dueDate: Timestamp.fromDate(newDueDate),
-            createdAt: serverTimestamp(), // Faz aparecer na seta de ativos do dia
+            createdAt: serverTimestamp(),
         }, { merge: true });
 
         toast({ title: "Cliente Renovado!", description: `Acesso estendido por 1 mês para ${client.name}.` });
@@ -639,7 +651,6 @@ export default function CustomersPage() {
     setDocumentNonBlocking(ref, { needsSupport: newSupportState }, { merge: true });
     toast({ title: `Suporte ${newSupportState ? 'marcado' : 'desmarcado'}` });
 
-    // Envio de Mensagem Automática
     if (settings?.isSupportAutomationActive && settings.webhookToken) {
         const messageTemplate = newSupportState ? settings.supportStartedMessage : settings.supportFinishedMessage;
         if (messageTemplate) {
@@ -652,6 +663,7 @@ export default function CustomersPage() {
                 .replace(/{valor}/g, client.amountPaid || '0,00')
                 .replace(/{senha}/g, client.password || 'N/A')
                 .replace(/{tela}/g, client.screen || 'N/A')
+                .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                 .replace(/{link}/g, client.accessLink || 'N/A')
                 .replace(/{status}/g, client.status);
 

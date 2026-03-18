@@ -33,6 +33,7 @@ const availableVariables = [
     "{email}", 
     "{senha}", 
     "{tela}",
+    "{pin_tela}",
     "{assinatura}", 
     "{vencimento}", 
     "{valor}", 
@@ -157,7 +158,7 @@ export default function DeliveryCredentialsPage() {
                         <CardDescription className="mb-2">Use as variáveis abaixo para incluir os dados de acesso.</CardDescription>
                         <FormControl>
                             <Textarea
-                            placeholder="Olá {cliente}, aqui estão seus dados de acesso:&#10;E-mail: {email}&#10;Senha: {senha}&#10;Tela: {tela}"
+                            placeholder="Olá {cliente}, aqui estão seus dados de acesso:&#10;E-mail: {email}&#10;Senha: {senha}&#10;Tela: {tela}&#10;PIN: {pin_tela}"
                             className="min-h-48"
                             {...field}
                             />

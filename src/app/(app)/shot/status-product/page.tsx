@@ -21,6 +21,7 @@ import { format } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const MANDATORY_DELAY = 30000; // 30 seconds
 
 const availableVariables = [
     "{cliente}", 
@@ -28,6 +29,7 @@ const availableVariables = [
     "{email}", 
     "{senha}", 
     "{tela}",
+    "{pin_tela}",
     "{assinatura}", 
     "{vencimento}", 
     "{valor}", 
@@ -47,28 +49,24 @@ export function ShotStatusProductPage() {
   const [progress, setProgress] = useState(0);
   const [sendingStatus, setSendingStatus] = useState<string>('');
 
-  // Load Settings
   const settingsDocRef = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
     return doc(firestore, 'users', effectiveUserId, 'settings', 'config');
   }, [firestore, effectiveUserId]);
   const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
 
-  // Load Subscriptions
   const subscriptionsQuery = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
     return query(collection(firestore, 'users', effectiveUserId, 'subscriptions'), orderBy('name'));
   }, [firestore, effectiveUserId]);
   const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
-  // Load Clients
   const clientsQuery = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
     return collection(firestore, 'users', effectiveUserId, 'clients');
   }, [firestore, effectiveUserId]);
   const { data: clients, isLoading: isLoadingClients } = useCollection<Client>(clientsQuery);
 
-  // Filtering Logic
   const filteredClients = useMemo(() => {
     if (!clients) return [];
     return clients.filter(client => {
@@ -105,9 +103,7 @@ export function ShotStatusProductPage() {
     setProgress(0);
     const total = filteredClients.length;
     
-    // Regra: Se tem mais de 1, delay obrigatório de 30s.
-    const actualDelay = total > 1 ? 30 : 0;
-    const delayMs = actualDelay * 1000;
+    const actualDelay = total > 1 ? MANDATORY_DELAY : 0;
 
     const logRef = collection(firestore, 'users', effectiveUserId!, 'logs');
 
@@ -116,7 +112,6 @@ export function ShotStatusProductPage() {
         const client = filteredClients[i];
         setSendingStatus(`Enviando para ${client.name} (${i + 1}/${total})...`);
 
-        // Replace Tags
         let formattedMessage = message
             .replace(/{cliente}/g, client.name)
             .replace(/{telefone}/g, client.phone)
@@ -126,20 +121,19 @@ export function ShotStatusProductPage() {
             .replace(/{valor}/g, client.amountPaid || '0,00')
             .replace(/{senha}/g, client.password || 'N/A')
             .replace(/{tela}/g, client.screen || 'N/A')
+            .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
             .replace(/{status}/g, client.status);
 
-        // Add Log: Sending
         addDocumentNonBlocking(logRef, {
             userId: effectiveUserId,
             type: 'Disparo',
             clientName: client.name,
             target: client.phone,
             status: 'Enviando',
-            delayApplied: actualDelay,
+            delayApplied: actualDelay / 1000,
             timestamp: serverTimestamp(),
         });
 
-        // Send Individual Message
         const response = await fetch('/api/send-message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -157,7 +151,7 @@ export function ShotStatusProductPage() {
                 clientName: client.name,
                 target: client.phone,
                 status: 'Enviado',
-                delayApplied: actualDelay,
+                delayApplied: actualDelay / 1000,
                 timestamp: serverTimestamp(),
             });
         } else {
@@ -167,17 +161,15 @@ export function ShotStatusProductPage() {
                 clientName: client.name,
                 target: client.phone,
                 status: 'Erro',
-                delayApplied: actualDelay,
+                delayApplied: actualDelay / 1000,
                 timestamp: serverTimestamp(),
             });
         }
 
-        // Update Progress
         setProgress(Math.round(((i + 1) / total) * 100));
 
-        // Sleep if not the last one
         if (i < total - 1 && actualDelay > 0) {
-            await sleep(delayMs);
+            await sleep(actualDelay);
         }
       }
 
@@ -227,7 +219,6 @@ export function ShotStatusProductPage() {
             )}
 
             <div className="grid md:grid-cols-2 gap-6">
-                {/* Filters Card */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
@@ -280,7 +271,6 @@ export function ShotStatusProductPage() {
                     </CardContent>
                 </Card>
 
-                {/* Delay Card */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
@@ -308,7 +298,7 @@ export function ShotStatusProductPage() {
                             <Alert className="bg-blue-50 border-blue-200">
                                 <Info className="h-4 w-4 text-blue-600" />
                                 <AlertDescription className="text-blue-700 text-[10px]">
-                                    Para listas com mais de 1 cliente, o delay de 30s é ativado automaticamente para sua segurança.
+                                    Sempre que houver 2 ou mais clientes, o delay de 30s é ativado automaticamente para sua segurança.
                                 </AlertDescription>
                             </Alert>
                         ) : (
@@ -320,7 +310,6 @@ export function ShotStatusProductPage() {
                 </Card>
             </div>
 
-            {/* Message Card */}
             <Card className="shadow-lg border-primary/20">
               <CardHeader>
                 <CardTitle className="text-2xl">Escrever Mensagem</CardTitle>
@@ -362,7 +351,7 @@ export function ShotStatusProductPage() {
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Atenção</AlertTitle>
                     <AlertDescription className="text-[11px]">
-                        O sistema aplicará um delay de 30 segundos entre cada cliente para proteger sua conta. Acompanhe o progresso em Configurações &gt; Logs.
+                        Ao clicar em enviar, o sistema processará um por um. O log de cada envio aparecerá em "Configurações {'>'} Logs".
                     </AlertDescription>
                 </Alert>
                 

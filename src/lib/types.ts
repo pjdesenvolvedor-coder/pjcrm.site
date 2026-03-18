@@ -63,6 +63,7 @@ export type Client = {
   phone: string;
   password?: string | null;
   screen?: string | null;
+  pinScreen?: string | null;
   accessLink?: string | null;
   deliveryMethod?: 'credentials' | 'link' | null;
   dueDate?: Timestamp | null;

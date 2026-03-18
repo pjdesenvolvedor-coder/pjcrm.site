@@ -73,7 +73,6 @@ export function UpsellMessageHandler() {
                 return;
             }
 
-            // Regra: Se tem mais de 1 tarefa, delay de 30s entre elas
             const currentDelay = tasks.length > 1 ? MANDATORY_DELAY : 0;
 
             const processTask = async (task: typeof tasks[0], isLast: boolean) => {
@@ -109,6 +108,7 @@ export function UpsellMessageHandler() {
                         .replace(/{valor}/g, client.amountPaid || '0,00')
                         .replace(/{senha}/g, client.password || 'N/A')
                         .replace(/{tela}/g, client.screen || 'N/A')
+                        .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                         .replace(/{status}/g, client.status);
 
                     const response = await fetch('/api/send-message', {

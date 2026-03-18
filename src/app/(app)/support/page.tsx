@@ -88,7 +88,6 @@ export default function SupportPage() {
         description: `O cliente ${client.name} foi removido da lista de suporte.`,
     });
 
-    // Envio de Mensagem Automática
     if (settings.isSupportAutomationActive && settings.webhookToken && settings.supportFinishedMessage) {
         let formattedMessage = settings.supportFinishedMessage
             .replace(/{cliente}/g, client.name)
@@ -99,6 +98,8 @@ export default function SupportPage() {
             .replace(/{valor}/g, client.amountPaid || '0,00')
             .replace(/{senha}/g, client.password || 'N/A')
             .replace(/{tela}/g, client.screen || 'N/A')
+            .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
+            .replace(/{link}/g, client.accessLink || 'N/A')
             .replace(/{status}/g, client.status);
 
         try {

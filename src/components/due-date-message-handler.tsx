@@ -55,7 +55,6 @@ export function DueDateMessageHandler() {
 
             isProcessing.current = true;
             
-            // Regra: Se tem mais de 1, aplica 30s de delay entre cada um
             const currentDelay = overdueClients.length > 1 ? MANDATORY_DELAY : 0;
 
             const processClient = async (client: Client, isLast: boolean) => {
@@ -90,6 +89,7 @@ export function DueDateMessageHandler() {
                         .replace(/{valor}/g, client.amountPaid || '0,00')
                         .replace(/{senha}/g, client.password || 'N/A')
                         .replace(/{tela}/g, client.screen || 'N/A')
+                        .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                         .replace(/{status}/g, 'Vencido');
 
                     const response = await fetch('/api/send-message', {
@@ -134,7 +134,6 @@ export function DueDateMessageHandler() {
                     }
 
                 } catch (error: any) {
-                    // Silently fail transaction errors (already processed)
                 }
             };
             
