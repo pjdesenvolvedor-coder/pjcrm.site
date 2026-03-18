@@ -4,13 +4,13 @@ import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, orderBy, doc, collectionGroup } from 'firebase/firestore';
+import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where, collectionGroup } from 'firebase/firestore';
 import type { Client, UserProfile } from '@/lib/types';
 import { useState, useMemo, useEffect } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
 import {
   ChartContainer,
   ChartLegend,
@@ -39,15 +39,12 @@ const formatCurrency = (value: number): string => {
 };
 
 export default function DashboardPage() {
-  const { firestore, effectiveUserId, userProfile } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const [period, setPeriod] = useState('this-month');
-  
-  const isAdmin = userProfile?.role === 'Admin';
 
-  // BUSCA GLOBAL DE CLIENTES: Necessária para o Ranking de todos os usuários
+  // BUSCA GLOBAL DE CLIENTES: Apenas para calcular o Ranking dos Top 3 Donos de Conta
   const allClientsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    // Buscamos todos os clientes do sistema para calcular o Ranking Global
     return query(collectionGroup(firestore, 'clients'));
   }, [firestore]);
 
@@ -61,48 +58,33 @@ export default function DashboardPage() {
   
   const { data: allOwners } = useCollection<UserProfile>(ownersQuery);
 
-  // FILTRO DE CLIENTES LOCAIS: Para os cards de estatísticas e gráficos
+  // FILTRO DE CLIENTES PRIVADOS: Para os cards de estatísticas e gráficos
+  // Importante: Mesmo o Admin vê apenas os SEUS dados aqui.
   const filteredClients = useMemo(() => {
     if (!allClients) return [];
-    if (isAdmin) return allClients; // Admin vê tudo nos cards também
-    // Usuários e Atendentes veem apenas os dados da própria equipe nos cards
     return allClients.filter(c => c.userId === effectiveUserId);
-  }, [allClients, isAdmin, effectiveUserId]);
+  }, [allClients, effectiveUserId]);
 
-  // Lógica do Ranking Global (Donos de Conta)
+  // Lógica do Ranking Global (Donos de Conta) - Visível para todos
   const rankingData = useMemo(() => {
     if (!allClients || !allOwners) return [];
 
     const stats: Record<string, { count: number; revenue: number; name: string }> = {};
 
-    // Inicializa a lista com todos os donos de conta encontrados
     allOwners.forEach(owner => {
         stats[owner.id] = { count: 0, revenue: 0, name: `${owner.firstName} ${owner.lastName}` };
     });
 
-    // Processa TODOS os clientes do sistema para o ranking global
     allClients.forEach(client => {
       if (client.status !== 'Ativo') return;
-
-      // O ranking é sempre baseado no DONO DA CONTA (userId)
       const participantId = client.userId;
       const revenue = parseCurrency(client.amountPaid);
-
-      if (!participantId) return;
-
-      if (!stats[participantId]) {
-        stats[participantId] = { 
-            count: 0, 
-            revenue: 0, 
-            name: client.agentName || 'Dono de Conta'
-        };
-      }
+      if (!participantId || !stats[participantId]) return;
 
       stats[participantId].count += 1;
       stats[participantId].revenue += revenue;
     });
 
-    // Converte para array, ordena por performance e pega os Top 3
     return Object.entries(stats)
       .map(([id, s]) => ({ id, ...s }))
       .filter(s => s.count > 0)
@@ -314,9 +296,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <PageHeader
-        title={isAdmin ? "Painel do Sistema (Global)" : "Início"}
-      />
+      <PageHeader title="Início" />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
