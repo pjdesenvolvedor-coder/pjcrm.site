@@ -55,6 +55,7 @@ const permissionsSchema = z.object({
   notes: z.boolean().default(false),
   ads: z.boolean().default(false),
   pix: z.boolean().default(false),
+  dbCleaner: z.boolean().default(false),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -72,16 +73,18 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'estoque', label: 'Estoque de Contas' },
     { key: 'settings', label: 'Configurações (BMs, Assinaturas)' },
     { key: 'users', label: 'Gerenciar Atendentes' },
+    { key: 'dbCleaner', label: 'Limpador de DB' },
 ];
 
-function UserClientCount({ userId }: { userId: string }) {
+function UserClientCount({ userId, adminId }: { userId: string, adminId: string }) {
   const { firestore } = useFirebase();
   
   const clientsQuery = useMemoFirebase(() => {
-    if (!firestore || !userId) return null;
-    const clientsRef = collection(firestore, 'users', userId, 'clients');
-    return query(clientsRef, where('status', '==', 'Ativo'));
-  }, [firestore, userId]);
+    if (!firestore || !adminId || !userId) return null;
+    const clientsRef = collection(firestore, 'users', adminId, 'clients');
+    // Filtra clientes cujo agentId é o atendente e o status é Ativo
+    return query(clientsRef, where('agentId', '==', userId), where('status', '==', 'Ativo'));
+  }, [firestore, adminId, userId]);
 
   const { data: activeClients, isLoading } = useCollection(clientsQuery);
 
@@ -93,7 +96,7 @@ function UserClientCount({ userId }: { userId: string }) {
 }
 
 const userFormSchema = z.object({
-  role: z.enum(['Admin', 'Agent']),
+  role: z.enum(['Admin', 'Agent', 'User']),
   permissions: permissionsSchema,
   subscriptionEndDate: z.string().optional(),
 });
@@ -147,7 +150,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
     const form = useForm<UserFormData>({
         resolver: zodResolver(userFormSchema),
         defaultValues: {
-            role: user.role,
+            role: user.role as any,
             permissions: {
                 dashboard: user.permissions?.dashboard ?? true,
                 customers: user.permissions?.customers ?? false,
@@ -162,6 +165,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 notes: user.permissions?.notes ?? false,
                 ads: user.permissions?.ads ?? false,
                 pix: user.permissions?.pix ?? false,
+                dbCleaner: user.permissions?.dbCleaner ?? false,
             },
             subscriptionEndDate: user.subscriptionEndDate ? format(user.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
         },
@@ -186,11 +190,11 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
             : data.permissions;
         
         const dataToUpdate: {
-            role: 'Admin' | 'Agent';
+            role: 'Admin' | 'Agent' | 'User';
             permissions: UserPermissions;
             subscriptionEndDate?: Timestamp | null;
         } = { 
-            role: data.role,
+            role: data.role as any,
             permissions: finalPermissions as UserPermissions,
         };
 
@@ -239,6 +243,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                                 <SelectContent>
                                     <SelectItem value="Agent">Atendente (Agente)</SelectItem>
                                     <SelectItem value="Admin">Administrador (Total)</SelectItem>
+                                    <SelectItem value="User">Usuário Comum</SelectItem>
                                 </SelectContent>
                             </Select>
                             {user.id === currentUser?.uid && <p className="text-xs text-muted-foreground pt-1">Você é o dono da conta principal.</p>}
@@ -321,7 +326,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
 const PAGE_SIZE_USERS = 15;
 
 export default function UsersPage() {
-  const { firestore, user: currentUser } = useFirebase();
+  const { firestore, user: currentUser, effectiveUserId } = useFirebase();
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const { toast } = useToast();
   const [hasCopied, setHasCopied] = useState(false);
@@ -579,7 +584,7 @@ export default function UsersPage() {
                         </div>
                     </TableCell>
                     <TableCell>
-                      <UserClientCount userId={user.id} />
+                      <UserClientCount userId={user.id} adminId={effectiveUserId} />
                     </TableCell>
                     <TableCell>
                       <SubscriptionCell endDate={user.subscriptionEndDate} />

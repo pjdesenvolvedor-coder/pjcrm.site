@@ -60,8 +60,9 @@ export default function DashboardPage() {
       // Consideramos apenas clientes ativos no ranking
       if (client.status !== 'Ativo') return;
 
-      const id = client.agentId || 'sistema';
-      const name = client.agentName || 'Sistema / Admin';
+      // Se não tiver agentId (clientes antigos), atribuímos ao dono da conta (effectiveUserId)
+      const id = client.agentId || effectiveUserId;
+      const name = client.agentName || 'Administrador';
       const revenue = parseCurrency(client.amountPaid);
 
       if (!agentStats[id]) {
@@ -76,7 +77,7 @@ export default function DashboardPage() {
       .map(([id, stats]) => ({ id, ...stats }))
       .filter(a => a.count >= 1) // Mostra quem tem 1 ou mais clientes ativos
       .sort((a, b) => b.count - a.count || b.revenue - a.revenue);
-  }, [clients]);
+  }, [clients, effectiveUserId]);
 
   const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
@@ -438,7 +439,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="flex items-center gap-2">
-                        <DollarSign className="h-10 w-10 text-green-500" />
+                        < DollarSign className="h-10 w-10 text-green-500" />
                         <p className="text-5xl font-bold">{formatCurrency(stats.totalSales)}</p>
                     </div>
                 </CardContent>
