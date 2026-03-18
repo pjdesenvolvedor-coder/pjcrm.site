@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
-import type { Client } from '@/lib/types';
-import { useState, useMemo } from 'react';
+import { collection, query, where, orderBy } from 'firebase/firestore';
+import type { Client, UserProfile } from '@/lib/types';
+import { useState, useMemo, useEffect } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
-const parseCurrency = (value?: string): number => {
+const parseCurrency = (value?: string | null): number => {
   if (!value) return 0;
   const cleanedValue = value.toString().replace(/\./g, '').replace(',', '.');
   const number = parseFloat(cleanedValue);
@@ -38,9 +38,72 @@ const formatCurrency = (value: number): string => {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
+/**
+ * Componente para renderizar uma linha do ranking para um atendente específico.
+ * Ele busca os dados de forma isolada para garantir precisão com a lista de usuários.
+ */
+function AgentRankRow({ agent, index }: { agent: UserProfile, index: number }) {
+    const { firestore } = useFirebase();
+    
+    // Busca clientes ativos do atendente em sua própria coleção
+    const clientsQuery = useMemoFirebase(() => {
+        if (!firestore || !agent.id) return null;
+        return query(
+            collection(firestore, 'users', agent.id, 'clients'),
+            where('status', '==', 'Ativo')
+        );
+    }, [firestore, agent.id]);
+
+    const { data: activeClients, isLoading } = useCollection<Client>(clientsQuery);
+
+    if (isLoading) return <TableRow><TableCell colSpan={4}><Skeleton className="h-8 w-full" /></TableCell></TableRow>;
+    
+    const count = activeClients?.length ?? 0;
+    if (count < 1) return null; // Só mostra se tiver +1 cliente ativo
+
+    const revenue = activeClients?.reduce((acc, c) => acc + parseCurrency(c.amountPaid), 0) ?? 0;
+
+    return (
+        <TableRow key={agent.id} className="group transition-colors">
+            <TableCell className="font-bold py-3 text-center">
+                {index === 0 && <Trophy className="h-5 w-5 text-yellow-500 mx-auto" />}
+                {index === 1 && <Medal className="h-5 w-5 text-slate-400 mx-auto" />}
+                {index === 2 && <Medal className="h-5 w-5 text-orange-600 mx-auto" />}
+                {index > 2 && `${index + 1}º`}
+            </TableCell>
+            <TableCell className="py-3">
+                <span className="font-medium text-sm block truncate max-w-[120px]">
+                    {agent.firstName} {agent.lastName}
+                </span>
+            </TableCell>
+            <TableCell className="text-center py-3">
+                <Badge variant="secondary" className="font-bold">{count}</Badge>
+            </TableCell>
+            <TableCell className="text-right py-3">
+                <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                    {formatCurrency(revenue)}
+                </span>
+            </TableCell>
+        </TableRow>
+    );
+}
+
 export default function DashboardPage() {
-  const { firestore, effectiveUserId } = useFirebase();
+  const { firestore, effectiveUserId, user } = useFirebase();
   const [period, setPeriod] = useState('this-month');
+
+  // Busca lista de todos os usuários (para o ranking)
+  const usersQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return query(collection(firestore, 'users'), orderBy('firstName'));
+  }, [firestore]);
+  const { data: allUsers } = useCollection<UserProfile>(usersQuery);
+
+  // Filtra apenas usuários que pertencem a este "time" (ou a si mesmo)
+  const teamMembers = useMemo(() => {
+      if (!allUsers || !user) return [];
+      return allUsers.filter(u => u.id === user.uid || u.parentId === user.uid);
+  }, [allUsers, user]);
 
   const clientsQuery = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
@@ -49,7 +112,7 @@ export default function DashboardPage() {
 
   const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
 
-  const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList, agentRanking } = useMemo(() => {
+  const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
       activeCount: 0,
       activeTotal: 0,
@@ -67,7 +130,7 @@ export default function DashboardPage() {
     };
 
     if (!clients) {
-      return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [], agentRanking: [] };
+      return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [] };
     }
 
     const now = new Date();
@@ -114,7 +177,6 @@ export default function DashboardPage() {
 
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
-    const agentsMap: Record<string, { id: string, name: string, activeCount: number, revenue: number }> = {};
 
     clients.forEach(client => {
       const amount = parseCurrency(client.amountPaid);
@@ -144,15 +206,6 @@ export default function DashboardPage() {
       } else if (client.status === 'Ativo') {
           activeCount++;
           activeTotal += amount;
-
-          // Aggregating for Agent Ranking
-          const agentId = client.agentId || 'legacy';
-          const agentName = client.agentName || 'Sistema / Antigo';
-          if (!agentsMap[agentId]) {
-              agentsMap[agentId] = { id: agentId, name: agentName, activeCount: 0, revenue: 0 };
-          }
-          agentsMap[agentId].activeCount += 1;
-          agentsMap[agentId].revenue += amount;
       }
 
       if (dueDate) {
@@ -212,12 +265,7 @@ export default function DashboardPage() {
       fill: `hsl(var(--chart-${(index % 5) + 1}))`
     }));
 
-    // Sorting and Filtering Agent Ranking (Show anyone with at least 1 active client)
-    const agentRanking = Object.values(agentsMap)
-        .filter(a => a.activeCount >= 1)
-        .sort((a, b) => b.activeCount - a.activeCount);
-
-    return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList, agentRanking };
+    return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList };
 
   }, [clients, period]);
   
@@ -450,28 +498,10 @@ export default function DashboardPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {agentRanking.map((agent, index) => (
-                                    <TableRow key={agent.id} className="group transition-colors">
-                                        <TableCell className="font-bold py-3 text-center">
-                                            {index === 0 && <Trophy className="h-5 w-5 text-yellow-500 mx-auto" />}
-                                            {index === 1 && <Medal className="h-5 w-5 text-slate-400 mx-auto" />}
-                                            {index === 2 && <Medal className="h-5 w-5 text-orange-600 mx-auto" />}
-                                            {index > 2 && `${index + 1}º`}
-                                        </TableCell>
-                                        <TableCell className="py-3">
-                                            <span className="font-medium text-sm block truncate max-w-[100px]">{agent.name}</span>
-                                        </TableCell>
-                                        <TableCell className="text-center py-3">
-                                            <Badge variant="secondary" className="font-bold">{agent.activeCount}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right py-3">
-                                            <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                                {formatCurrency(agent.revenue)}
-                                            </span>
-                                        </TableCell>
-                                    </TableRow>
+                                {teamMembers.map((member, index) => (
+                                    <AgentRankRow key={member.id} agent={member} index={index} />
                                 ))}
-                                {agentRanking.length === 0 && (
+                                {teamMembers.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={4} className="text-center text-muted-foreground py-8 italic text-xs">
                                             Nenhum atendente no ranking ainda.
