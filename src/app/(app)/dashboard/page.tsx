@@ -45,51 +45,48 @@ export default function DashboardPage() {
   
   const isAdmin = userProfile?.role === 'Admin';
 
-  // For Admins, fetch ALL clients in the system. For others, silo by team.
-  const clientsQuery = useMemoFirebase(() => {
+  // BUSCA GLOBAL DE CLIENTES: Necessária para o Ranking de todos os usuários
+  const allClientsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    if (isAdmin) {
-        // Global query for all clients in the system using collectionGroup
-        return query(collectionGroup(firestore, 'clients'));
-    }
-    if (!effectiveUserId) return null;
-    return query(collection(firestore, 'users', effectiveUserId, 'clients'));
-  }, [firestore, effectiveUserId, isAdmin]);
+    // Buscamos todos os clientes do sistema para calcular o Ranking Global
+    return query(collectionGroup(firestore, 'clients'));
+  }, [firestore]);
 
-  const { data: clients, isLoading: isLoadingClients } = useCollection<Client>(clientsQuery);
+  const { data: allClients, isLoading: isLoadingClients } = useCollection<Client>(allClientsQuery);
 
-  // For Admins: Fetch all primary account holders (Users) to identify them in the ranking.
-  // For others: Fetch only team members (Agents) of the current boss.
-  const teamQuery = useMemoFirebase(() => {
+  // BUSCA GLOBAL DE DONOS DE CONTA: Necessária para identificar os nomes no Ranking
+  const ownersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    if (isAdmin) {
-        return query(collection(firestore, 'users'), where('role', 'in', ['User', 'Admin']));
-    }
-    if (!effectiveUserId) return null;
-    return query(collection(firestore, 'users'), where('parentId', '==', effectiveUserId));
-  }, [firestore, effectiveUserId, isAdmin]);
+    return query(collection(firestore, 'users'), where('role', 'in', ['User', 'Admin']));
+  }, [firestore]);
   
-  const { data: teamMembers } = useCollection<UserProfile>(teamQuery);
+  const { data: allOwners } = useCollection<UserProfile>(ownersQuery);
 
-  // Lógica do Ranking consolidada
+  // FILTRO DE CLIENTES LOCAIS: Para os cards de estatísticas e gráficos
+  const filteredClients = useMemo(() => {
+    if (!allClients) return [];
+    if (isAdmin) return allClients; // Admin vê tudo nos cards também
+    // Usuários e Atendentes veem apenas os dados da própria equipe nos cards
+    return allClients.filter(c => c.userId === effectiveUserId);
+  }, [allClients, isAdmin, effectiveUserId]);
+
+  // Lógica do Ranking Global (Donos de Conta)
   const rankingData = useMemo(() => {
-    if (!clients) return [];
+    if (!allClients || !allOwners) return [];
 
     const stats: Record<string, { count: number; revenue: number; name: string }> = {};
 
-    // Initialize participants list from the users fetched
-    teamMembers?.forEach(m => {
-        stats[m.id] = { count: 0, revenue: 0, name: `${m.firstName} ${m.lastName}` };
+    // Inicializa a lista com todos os donos de conta encontrados
+    allOwners.forEach(owner => {
+        stats[o.id] = { count: 0, revenue: 0, name: `${owner.firstName} ${owner.lastName}` };
     });
 
-    // Process clients to aggregate statistics
-    clients.forEach(client => {
+    // Processa TODOS os clientes do sistema para o ranking global
+    allClients.forEach(client => {
       if (client.status !== 'Ativo') return;
 
-      // DETERMINAÇÃO DO CRÉDITO:
-      // Se for Visão Global (Admin): o ranking é de "USUÁRIOS" (os donos das contas/bosses). Usamos userId.
-      // Se for Visão de Equipe (User/Agent): o ranking é de "ATENDENTES" (os membros da equipe). Usamos agentId.
-      const participantId = isAdmin ? client.userId : (client.agentId || effectiveUserId);
+      // O ranking é sempre baseado no DONO DA CONTA (userId)
+      const participantId = client.userId;
       const revenue = parseCurrency(client.amountPaid);
 
       if (!participantId) return;
@@ -98,7 +95,7 @@ export default function DashboardPage() {
         stats[participantId] = { 
             count: 0, 
             revenue: 0, 
-            name: (isAdmin ? (client.agentName || 'Dono de Conta') : (client.agentName || 'Atendente'))
+            name: client.agentName || 'Dono de Conta'
         };
       }
 
@@ -106,13 +103,13 @@ export default function DashboardPage() {
       stats[participantId].revenue += revenue;
     });
 
-    // Convert to array, sort by performance and take top 3
+    // Converte para array, ordena por performance e pega os Top 3
     return Object.entries(stats)
       .map(([id, s]) => ({ id, ...s }))
-      .filter(s => s.count > 0) // Only show those with results
+      .filter(s => s.count > 0)
       .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
       .slice(0, 3);
-  }, [clients, teamMembers, effectiveUserId, isAdmin]);
+  }, [allClients, allOwners]);
 
   const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
@@ -131,7 +128,7 @@ export default function DashboardPage() {
       expiredTodayCount: 0,
     };
 
-    if (!clients) {
+    if (!filteredClients) {
       return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [] };
     }
 
@@ -180,7 +177,7 @@ export default function DashboardPage() {
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
 
-    clients.forEach(client => {
+    filteredClients.forEach(client => {
       const amount = parseCurrency(client.amountPaid);
       const dueDate = client.dueDate ? client.dueDate.toDate() : null;
       const createdAt = client.createdAt ? client.createdAt.toDate() : null;
@@ -235,7 +232,7 @@ export default function DashboardPage() {
       paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
     });
 
-    const totalClients = clients.length;
+    const totalClients = filteredClients.length;
     const activePercentage = totalClients > 0 ? (activeCount / totalClients) * 100 : 0;
     const overduePercentage = totalClients > 0 ? (overdueCount / totalClients) * 100 : 0;
         
@@ -269,7 +266,7 @@ export default function DashboardPage() {
 
     return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList };
 
-  }, [clients, period]);
+  }, [filteredClients, period]);
   
   const subscriptionChartConfig = useMemo(() => {
     if (!subscriptionData) return {};
@@ -458,7 +455,7 @@ export default function DashboardPage() {
                 <CardHeader className="flex flex-row items-center justify-between">
                     <div>
                         <CardTitle>Total de Vendas</CardTitle>
-                        <p className="text-sm text-muted-foreground">Receita total no período selecionado (Baseado na data de cadastro).</p>
+                        <p className="text-sm text-muted-foreground">Receita total no período selecionado (Baseado na sua equipe).</p>
                     </div>
                     <Select value={period} onValueChange={setPeriod}>
                         <SelectTrigger className="w-[180px]">
@@ -484,12 +481,10 @@ export default function DashboardPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Trophy className="h-5 w-5 text-yellow-500" />
-                        {isAdmin ? "Ranking Global: Donos de Conta" : "Top 3 Atendentes"}
+                        Ranking Global: Donos de Conta
                     </CardTitle>
                     <CardDescription>
-                        {isAdmin 
-                            ? "Performance baseada em todas as assinaturas do sistema." 
-                            : "Performance baseada em clientes ativos da sua equipe."}
+                        Performance baseada em todas as assinaturas do sistema.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1">
@@ -544,7 +539,7 @@ export default function DashboardPage() {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Assinaturas</CardTitle>
-              <CardDescription>Distribuição de clientes por plano</CardDescription>
+              <CardDescription>Distribuição de clientes por plano (Sua Equipe)</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 min-h-[400px]">
               {subscriptionData.length > 0 ? (
@@ -570,7 +565,7 @@ export default function DashboardPage() {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Formas de Pagamento</CardTitle>
-              <CardDescription>Distribuição de clientes por forma de pagamento</CardDescription>
+              <CardDescription>Distribuição de clientes por forma de pagamento (Sua Equipe)</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 min-h-[400px]">
                {paymentMethodData.length > 0 ? (
