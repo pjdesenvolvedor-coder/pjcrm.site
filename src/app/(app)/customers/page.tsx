@@ -81,25 +81,29 @@ const clientSchema = z.object({
   paymentMethod: z.enum(paymentMethods).optional(),
   amountPaid: z.string().optional(),
 }).superRefine((data, ctx) => {
+    // Obrigatoriedade do email apenas se for entrega por dados
     if (data.deliveryMethod === 'credentials') {
         if (!data.emails || data.emails.length === 0 || !data.emails[0].value) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Pelo menos um e-mail é obrigatório.",
+                message: "Pelo menos um e-mail é obrigatório para entrega de dados.",
                 path: ["emails"],
             });
-        } else {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            data.emails.forEach((e, idx) => {
-                if (e.value && !emailRegex.test(e.value)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: "Email inválido",
-                        path: ["emails", idx, "value"],
-                    });
-                }
-            });
         }
+    }
+
+    // Validação de formato sempre que algo for digitado
+    if (data.emails) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        data.emails.forEach((e, idx) => {
+            if (e.value && !emailRegex.test(e.value)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Email inválido",
+                    path: ["emails", idx, "value"],
+                });
+            }
+        });
     }
 });
 
@@ -225,7 +229,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         }
     }
 
-    const emailList = (values.deliveryMethod === 'credentials' && values.emails) 
+    const emailList = values.emails 
         ? values.emails.map(email => email.value).filter(Boolean) as string[]
         : [];
 
@@ -362,27 +366,27 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="name" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Nome *</FormLabel><FormControl><Input placeholder="Nome" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Número *</FormLabel><FormControl><Input placeholder="WhatsApp" {...field} className="md:col-span-3" /></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>)} />
                 
-                {deliveryMethod !== 'link' && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
-                        <FormLabel className="md:text-right md:pt-2">Emails *</FormLabel>
-                        <div className="md:col-span-3 space-y-2">
-                            {!clientType ? (
-                                <FormField control={form.control} name="emails.0.value" render={({ field }) => ( <FormItem><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                            ) : (
-                                <>
-                                    <ScrollArea className="h-40 w-full rounded-md border p-4 space-y-2">
-                                        {fields.map((item, index) => (
-                                            <FormField key={item.id} control={form.control} name={`emails.${index}.value`} render={({ field }) => (
-                                                <FormItem><div className="flex items-center gap-2"><FormControl><Input type="email" placeholder="email" {...field} /></FormControl>{fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}</div><FormMessage /></FormItem>
-                                            )}/>
-                                        ))}
-                                    </ScrollArea>
-                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Email</Button>
-                                </>
-                            )}
-                        </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
+                    <FormLabel className="md:text-right md:pt-2">
+                        Emails {deliveryMethod === 'credentials' && '*'}
+                    </FormLabel>
+                    <div className="md:col-span-3 space-y-2">
+                        {!clientType ? (
+                            <FormField control={form.control} name="emails.0.value" render={({ field }) => ( <FormItem><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                        ) : (
+                            <>
+                                <ScrollArea className="h-40 w-full rounded-md border p-4 space-y-2">
+                                    {fields.map((item, index) => (
+                                        <FormField key={item.id} control={form.control} name={`emails.${index}.value`} render={({ field }) => (
+                                            <FormItem><div className="flex items-center gap-2"><FormControl><Input type="email" placeholder="email" {...field} /></FormControl>{fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}</div><FormMessage /></FormItem>
+                                        )}/>
+                                    ))}
+                                </ScrollArea>
+                                <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Email</Button>
+                            </>
+                        )}
                     </div>
-                )}
+                </div>
 
                 {deliveryMethod === 'credentials' && !clientType && (
                   <>
