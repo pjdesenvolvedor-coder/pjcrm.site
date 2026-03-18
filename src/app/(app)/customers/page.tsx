@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
@@ -63,10 +64,16 @@ const deliveryMethods = ["credentials", "link"] as const;
 
 // Helper to format CPF or Email
 const formatEmailOrCPF = (value: string) => {
+    // Se o valor contém letras ou o símbolo @, ignoramos a formatação de CPF
+    // Isso permite e-mails com números (ex: joao123@gmail.com)
+    if (/[a-zA-Z@]/.test(value)) {
+        return value;
+    }
+
     const cleanValue = value.replace(/\D/g, '');
     
-    // If it looks like a CPF (only numbers)
-    if (cleanValue.length > 0 && /^\d+$/.test(cleanValue)) {
+    // Só aplica máscara se o que sobrar forem apenas números e não tiver cara de e-mail
+    if (cleanValue.length > 0) {
         let formatted = cleanValue;
         if (cleanValue.length > 3) formatted = `${cleanValue.slice(0, 3)}.${cleanValue.slice(3)}`;
         if (cleanValue.length > 6) formatted = `${cleanValue.slice(0, 3)}.${cleanValue.slice(3, 6)}.${cleanValue.slice(6)}`;
@@ -74,7 +81,6 @@ const formatEmailOrCPF = (value: string) => {
         return formatted.slice(0, 14);
     }
     
-    // Otherwise return as is (email or mixed)
     return value;
 };
 
