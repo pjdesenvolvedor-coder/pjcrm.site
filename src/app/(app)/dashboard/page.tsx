@@ -1,13 +1,13 @@
 'use client';
 
-import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye, Trophy, Medal } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, collectionGroup } from 'firebase/firestore';
-import type { Client, UserProfile } from '@/lib/types';
-import { useState, useMemo, useEffect } from 'react';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
+import type { Client } from '@/lib/types';
+import { useState, useMemo } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PieChart, Pie, Cell } from "recharts";
@@ -24,8 +24,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-
 
 const parseCurrency = (value?: string | null): number => {
   if (!value) return 0;
@@ -42,55 +40,13 @@ export default function DashboardPage() {
   const { firestore, effectiveUserId } = useFirebase();
   const [period, setPeriod] = useState('this-month');
 
-  // BUSCA GLOBAL DE CLIENTES: Apenas para calcular o Ranking dos Top 3 Donos de Conta
-  const allClientsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collectionGroup(firestore, 'clients'));
-  }, [firestore]);
+  // BUSCA APENAS CLIENTES DA CONTA ATUAL (PRIVACIDADE TOTAL)
+  const clientsQuery = useMemoFirebase(() => {
+    if (!firestore || !effectiveUserId) return null;
+    return collection(firestore, 'users', effectiveUserId, 'clients');
+  }, [firestore, effectiveUserId]);
 
-  const { data: allClients, isLoading: isLoadingClients } = useCollection<Client>(allClientsQuery);
-
-  // BUSCA GLOBAL DE DONOS DE CONTA: Necessária para identificar os nomes no Ranking
-  const ownersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'users'), where('role', 'in', ['User', 'Admin']));
-  }, [firestore]);
-  
-  const { data: allOwners } = useCollection<UserProfile>(ownersQuery);
-
-  // FILTRO DE CLIENTES PRIVADOS: Para os cards de estatísticas e gráficos
-  // Importante: Mesmo o Admin vê apenas os SEUS dados aqui.
-  const filteredClients = useMemo(() => {
-    if (!allClients) return [];
-    return allClients.filter(c => c.userId === effectiveUserId);
-  }, [allClients, effectiveUserId]);
-
-  // Lógica do Ranking Global (Donos de Conta) - Visível para todos
-  const rankingData = useMemo(() => {
-    if (!allClients || !allOwners) return [];
-
-    const stats: Record<string, { count: number; revenue: number; name: string }> = {};
-
-    allOwners.forEach(owner => {
-        stats[owner.id] = { count: 0, revenue: 0, name: `${owner.firstName} ${owner.lastName}` };
-    });
-
-    allClients.forEach(client => {
-      if (client.status !== 'Ativo') return;
-      const participantId = client.userId;
-      const revenue = parseCurrency(client.amountPaid);
-      if (!participantId || !stats[participantId]) return;
-
-      stats[participantId].count += 1;
-      stats[participantId].revenue += revenue;
-    });
-
-    return Object.entries(stats)
-      .map(([id, s]) => ({ id, ...s }))
-      .filter(s => s.count > 0)
-      .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
-      .slice(0, 3);
-  }, [allClients, allOwners]);
+  const { data: clients, isLoading: isLoadingClients } = useCollection<Client>(clientsQuery);
 
   const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
@@ -109,7 +65,7 @@ export default function DashboardPage() {
       expiredTodayCount: 0,
     };
 
-    if (!filteredClients) {
+    if (!clients) {
       return { stats: baseStats, subscriptionData: [], paymentMethodData: [], dueTodayList: [], dueIn3DaysList: [] };
     }
 
@@ -158,7 +114,7 @@ export default function DashboardPage() {
     const subscriptionCounts: Record<string, number> = {};
     const paymentMethodCounts: Record<string, number> = {};
 
-    filteredClients.forEach(client => {
+    clients.forEach(client => {
       const amount = parseCurrency(client.amountPaid);
       const dueDate = client.dueDate ? client.dueDate.toDate() : null;
       const createdAt = client.createdAt ? client.createdAt.toDate() : null;
@@ -213,7 +169,7 @@ export default function DashboardPage() {
       paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
     });
 
-    const totalClients = filteredClients.length;
+    const totalClients = clients.length;
     const activePercentage = totalClients > 0 ? (activeCount / totalClients) * 100 : 0;
     const overduePercentage = totalClients > 0 ? (overdueCount / totalClients) * 100 : 0;
         
@@ -247,7 +203,7 @@ export default function DashboardPage() {
 
     return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList };
 
-  }, [filteredClients, period]);
+  }, [clients, period]);
   
   const subscriptionChartConfig = useMemo(() => {
     if (!subscriptionData) return {};
@@ -429,12 +385,12 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-2">
+        <div className="mt-6 grid grid-cols-1 gap-6">
+            <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <div>
                         <CardTitle>Total de Vendas</CardTitle>
-                        <p className="text-sm text-muted-foreground">Receita total no período selecionado (Baseado na sua equipe).</p>
+                        <p className="text-sm text-muted-foreground">Receita total no período selecionado (Sua Equipe).</p>
                     </div>
                     <Select value={period} onValueChange={setPeriod}>
                         <SelectTrigger className="w-[180px]">
@@ -455,70 +411,13 @@ export default function DashboardPage() {
                     </div>
                 </CardContent>
             </Card>
-
-            <Card className="flex flex-col shadow-lg border-primary/20">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-yellow-500" />
-                        Ranking Global: Donos de Conta
-                    </CardTitle>
-                    <CardDescription>
-                        Performance baseada em todas as assinaturas do sistema.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1">
-                    <ScrollArea className="h-[200px]">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="hover:bg-transparent border-b">
-                                    <TableHead className="w-12 text-center">Pos</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead className="text-center">Ativos</TableHead>
-                                    <TableHead className="text-right">Faturamento</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rankingData.map((participant, index) => (
-                                    <TableRow key={participant.id} className="group transition-colors">
-                                        <TableCell className="font-bold py-3 text-center">
-                                            {index === 0 && <Trophy className="h-5 w-5 text-yellow-500 mx-auto" />}
-                                            {index === 1 && <Medal className="h-5 w-5 text-slate-400 mx-auto" />}
-                                            {index === 2 && <Medal className="h-5 w-5 text-orange-600 mx-auto" />}
-                                        </TableCell>
-                                        <TableCell className="py-3">
-                                            <span className="font-medium text-sm block truncate max-w-[120px]">
-                                                {participant.name}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-center py-3">
-                                            <Badge variant="secondary" className="font-bold">{participant.count}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right py-3">
-                                            <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                                {formatCurrency(participant.revenue)}
-                                            </span>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {rankingData.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8 italic text-xs">
-                                            Nenhum resultado para exibir no ranking.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
         </div>
 
          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Assinaturas</CardTitle>
-              <CardDescription>Distribuição de clientes por plano (Sua Equipe)</CardDescription>
+              <p className="text-sm text-muted-foreground">Distribuição de clientes por plano (Sua Equipe)</p>
             </CardHeader>
             <CardContent className="flex-1 min-h-[400px]">
               {subscriptionData.length > 0 ? (
@@ -544,7 +443,7 @@ export default function DashboardPage() {
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Formas de Pagamento</CardTitle>
-              <CardDescription>Distribuição de clientes por forma de pagamento (Sua Equipe)</CardDescription>
+              <p className="text-sm text-muted-foreground">Distribuição de clientes por forma de pagamento (Sua Equipe)</p>
             </CardHeader>
             <CardContent className="flex-1 min-h-[400px]">
                {paymentMethodData.length > 0 ? (
