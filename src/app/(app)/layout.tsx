@@ -34,6 +34,7 @@ import {
   Database,
   Trash2,
   FileText,
+  Boxes,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -215,7 +216,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         settings: false,
         users: false,
         attendants: false,
-        estoque: false,
+        estoque: true,
         notes: false,
         ads: false,
         pix: false,
@@ -562,6 +563,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/list'}><Link href="/shot/list"><List className="h-4 w-4" /><span>Lista</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/status-product'}><Link href="/shot/status-product"><Filter className="h-4 w-4" /><span>Status - Produto</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.estoque && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/estoque')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Estoque">
+                              <div className="flex items-center gap-2"><Boxes /><span>Estoque</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton asChild isActive={pathname === '/estoque/contas-completas'}>
+                                        <Link href="/estoque/contas-completas">Contas Completas</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>

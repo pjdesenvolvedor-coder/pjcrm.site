@@ -710,6 +710,22 @@
         "status"
       ]
     },
+    "FullAccount": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FullAccount",
+      "type": "object",
+      "description": "Represents a full account in stock (Contas Completas).",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "subscription": { "type": "string", "description": "The plan associated with this account." },
+        "status": { "type": "string", "enum": ["available", "used"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "email", "password", "subscription", "status", "createdAt"]
+    },
     "SystemAlert": {
       "title": "SystemAlert",
       "type": "object",
@@ -1084,6 +1100,26 @@
             {
               "name": "estoqueId",
               "description": "The unique identifier for the stock item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/full_accounts/{accountId}",
+        "definition": {
+          "entityName": "FullAccount",
+          "schema": {
+            "$ref": "#/backend/entities/FullAccount"
+          },
+          "description": "Stores full accounts in stock for each user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the account."
             }
           ]
         }

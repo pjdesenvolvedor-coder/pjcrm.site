@@ -215,3 +215,13 @@ export type SavedCleanedDb = {
   content: string;
   createdAt: Timestamp;
 };
+
+export type FullAccount = {
+  id: string;
+  userId: string;
+  email: string;
+  password: string;
+  subscription: string;
+  status: 'available' | 'used';
+  createdAt: Timestamp;
+};
