@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
@@ -62,6 +61,23 @@ const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
 const screenOptions = ["1", "2", "3", "4", "5", "6", "7"] as const;
 const deliveryMethods = ["credentials", "link"] as const;
 
+// Helper to format CPF or Email
+const formatEmailOrCPF = (value: string) => {
+    const cleanValue = value.replace(/\D/g, '');
+    
+    // If it looks like a CPF (only numbers)
+    if (cleanValue.length > 0 && /^\d+$/.test(cleanValue)) {
+        let formatted = cleanValue;
+        if (cleanValue.length > 3) formatted = `${cleanValue.slice(0, 3)}.${cleanValue.slice(3)}`;
+        if (cleanValue.length > 6) formatted = `${cleanValue.slice(0, 3)}.${cleanValue.slice(3, 6)}.${cleanValue.slice(6)}`;
+        if (cleanValue.length > 9) formatted = `${cleanValue.slice(0, 3)}.${cleanValue.slice(3, 6)}.${cleanValue.slice(6, 9)}-${cleanValue.slice(9, 11)}`;
+        return formatted.slice(0, 14);
+    }
+    
+    // Otherwise return as is (email or mixed)
+    return value;
+};
+
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   telegramUser: z.string().optional(),
@@ -86,7 +102,7 @@ const clientSchema = z.object({
         if (!data.emails || data.emails.length === 0 || !data.emails[0].value) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Pelo menos um e-mail é obrigatório para entrega de dados.",
+                message: "Pelo menos um e-mail ou CPF é obrigatório para entrega de dados.",
                 path: ["emails"],
             });
         }
@@ -94,13 +110,20 @@ const clientSchema = z.object({
 
     if (data.emails) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const cpfRegex = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
+        
         data.emails.forEach((e, idx) => {
-            if (e.value && !emailRegex.test(e.value)) {
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    message: "Email inválido",
-                    path: ["emails", idx, "value"],
-                });
+            if (e.value) {
+                const isEmail = emailRegex.test(e.value);
+                const isCpf = cpfRegex.test(e.value);
+                
+                if (!isEmail && !isCpf) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: "Insira um e-mail válido ou CPF (000.000.000-00)",
+                        path: ["emails", idx, "value"],
+                    });
+                }
             }
         });
     }
@@ -369,21 +392,44 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-start gap-4">
                     <FormLabel className="md:text-right md:pt-2">
-                        Emails {deliveryMethod === 'credentials' && '*'}
+                        Emails/CPF {deliveryMethod === 'credentials' && '*'}
                     </FormLabel>
                     <div className="md:col-span-3 space-y-2">
                         {!clientType ? (
-                            <FormField control={form.control} name="emails.0.value" render={({ field }) => ( <FormItem><FormControl><Input type="email" placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            <FormField control={form.control} name="emails.0.value" render={({ field }) => ( 
+                                <FormItem>
+                                    <FormControl>
+                                        <Input 
+                                            placeholder="email@exemplo.com ou CPF" 
+                                            {...field} 
+                                            onChange={(e) => field.onChange(formatEmailOrCPF(e.target.value))}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem> 
+                            )} />
                         ) : (
                             <>
                                 <ScrollArea className="h-40 w-full rounded-md border p-4 space-y-2">
                                     {fields.map((item, index) => (
                                         <FormField key={item.id} control={form.control} name={`emails.${index}.value`} render={({ field }) => (
-                                            <FormItem><div className="flex items-center gap-2"><FormControl><Input type="email" placeholder="email" {...field} /></FormControl>{fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}</div><FormMessage /></FormItem>
+                                            <FormItem>
+                                                <div className="flex items-center gap-2">
+                                                    <FormControl>
+                                                        <Input 
+                                                            placeholder="email ou CPF" 
+                                                            {...field} 
+                                                            onChange={(e) => field.onChange(formatEmailOrCPF(e.target.value))}
+                                                        />
+                                                    </FormControl>
+                                                    {fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>}
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
                                         )}/>
                                     ))}
                                 </ScrollArea>
-                                <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Email</Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}><Plus className="mr-2 h-4 w-4" />Adicionar Item</Button>
                             </>
                         )}
                     </div>
@@ -552,11 +598,11 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
         <div className="space-y-6 pt-4">
             <div className="space-y-4">
                 <div className="space-y-2">
-                    <Label>E-mails em uso (Separe por vírgula se houver mais de um)</Label>
+                    <Label>E-mails/CPF em uso (Separe por vírgula se houver mais de um)</Label>
                     <Input 
                         value={emails} 
-                        onChange={(e) => setEmails(e.target.value)} 
-                        placeholder="email@exemplo.com" 
+                        onChange={(e) => setEmails(formatEmailOrCPF(e.target.value))} 
+                        placeholder="email@exemplo.com ou CPF" 
                     />
                 </div>
                 <div className="space-y-2">
@@ -744,7 +790,7 @@ export default function CustomersPage() {
                         Nome {sortConfig?.key === 'name' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
                     </div>
                 </TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>Email/CPF</TableHead>
                 <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('subscription')}>
                     <div className="flex items-center gap-1">
                         Plano {sortConfig?.key === 'subscription' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
