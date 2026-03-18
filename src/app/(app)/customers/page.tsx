@@ -105,6 +105,14 @@ const clientSchema = z.object({
   amountPaid: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (data.deliveryMethod === 'credentials') {
+        if (!data.clientType && (!data.password || data.password.trim() === '')) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Senha é obrigatória para entrega de dados.",
+                path: ["password"],
+            });
+        }
+
         if (!data.emails || data.emails.length === 0 || !data.emails[0].value) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
@@ -444,7 +452,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 {deliveryMethod === 'credentials' && !clientType && (
                   <>
                     <FormField control={form.control} name="password" render={({ field }) => (
-                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Senha</FormLabel><FormControl><div className="relative md:col-span-3"><Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Senha" {...field} className="pl-9" /></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>
+                        <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Senha *</FormLabel><FormControl><div className="relative md:col-span-3"><Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Senha" {...field} className="pl-9" /></div></FormControl><FormMessage className="md:col-start-2 md:col-span-3" /></FormItem>
                     )}/>
                     <FormField control={form.control} name="screen" render={({ field }) => (
                         <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
