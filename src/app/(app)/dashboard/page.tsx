@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye, Trophy, Medal } from 'lucide-react';
@@ -78,7 +77,7 @@ export default function DashboardPage() {
 
     // Inicializa a lista com todos os donos de conta encontrados
     allOwners.forEach(owner => {
-        stats[o.id] = { count: 0, revenue: 0, name: `${owner.firstName} ${owner.lastName}` };
+        stats[owner.id] = { count: 0, revenue: 0, name: `${owner.firstName} ${owner.lastName}` };
     });
 
     // Processa TODOS os clientes do sistema para o ranking global
