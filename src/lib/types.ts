@@ -224,4 +224,5 @@ export type FullAccount = {
   subscription: string;
   status: 'available' | 'used';
   createdAt: Timestamp;
+  usedAt?: Timestamp;
 };

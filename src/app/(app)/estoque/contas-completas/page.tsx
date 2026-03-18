@@ -2,8 +2,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers } from 'lucide-react';
-import { collection, query, orderBy, doc, serverTimestamp } from 'firebase/firestore';
+import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock } from 'lucide-react';
+import { collection, query, orderBy, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import type { FullAccount, Subscription } from '@/lib/types';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { format } from 'date-fns';
 
 const accountSchema = z.object({
   email: z.string().min(1, 'E-mail/Login é obrigatório'),
@@ -171,12 +173,24 @@ export default function ContasCompletasPage() {
 
   const { data: accounts, isLoading } = useCollection<FullAccount>(accountsQuery);
 
-  const filteredAccounts = useMemo(() => {
+  const availableAccounts = useMemo(() => {
     if (!accounts) return [];
-    return accounts.filter(acc => 
+    return accounts.filter(acc => acc.status === 'available' && (
         acc.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
         acc.subscription.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ));
+  }, [accounts, searchTerm]);
+
+  const usedAccounts = useMemo(() => {
+    if (!accounts) return [];
+    return accounts.filter(acc => acc.status === 'used' && (
+        acc.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        acc.subscription.toLowerCase().includes(searchTerm.toLowerCase())
+    )).sort((a, b) => {
+        const dateA = a.usedAt?.toMillis() || 0;
+        const dateB = b.usedAt?.toMillis() || 0;
+        return dateB - dateA;
+    });
   }, [accounts, searchTerm]);
 
   const handleEdit = (account: FullAccount) => {
@@ -190,9 +204,24 @@ export default function ContasCompletasPage() {
     toast({ title: 'Conta Removida do Estoque' });
   };
 
+  const handleMarkAsUsed = (account: FullAccount) => {
+    if (!effectiveUserId) return;
+    const docRef = doc(firestore, 'users', effectiveUserId, 'full_accounts', account.id);
+    setDocumentNonBlocking(docRef, { 
+        status: 'used',
+        usedAt: serverTimestamp() 
+    }, { merge: true });
+    toast({ title: 'Conta Retirada!', description: 'A conta foi movida para o histórico.' });
+  };
+
   const handleAddNew = () => {
     setEditingAccount(undefined);
     setIsDialogOpen(true);
+  };
+
+  const formatDate = (timestamp?: Timestamp) => {
+    if (!timestamp) return '-';
+    return format(timestamp.toDate(), 'dd/MM/yyyy HH:mm');
   };
 
   return (
@@ -205,10 +234,10 @@ export default function ContasCompletasPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Pesquisar e-mail ou plano..."
+              placeholder="Pesquisar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-lg bg-background pl-8 md:w-[240px] lg:w-[320px]"
+              className="w-full rounded-lg bg-background pl-8 md:w-[200px]"
             />
         </div>
         <Button size="sm" onClick={handleAddNew} className="gap-1">
@@ -216,79 +245,180 @@ export default function ContasCompletasPage() {
             Nova Conta
         </Button>
       </PageHeader>
+      
       <main className="flex-1 overflow-auto p-4 md:p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-                <Layers className="h-5 w-5 text-primary" />
-                Estoque Disponível
-            </CardTitle>
-            <CardDescription>Visualize e gerencie seus acessos de login e senha.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>E-mail / Login</TableHead>
-                  <TableHead>Senha</TableHead>
-                  <TableHead>Assinatura</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando estoque...</TableCell></TableRow>
-                ) : filteredAccounts.length > 0 ? (
-                  filteredAccounts.map((account) => (
-                    <TableRow key={account.id}>
-                      <TableCell className="font-medium">{account.email}</TableCell>
-                      <TableCell className="font-mono text-xs">{account.password}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-primary/5">{account.subscription}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={account.status === 'available' ? 'default' : 'secondary'} className={account.status === 'available' ? 'bg-green-500/20 text-green-700' : ''}>
-                            {account.status === 'available' ? 'Disponível' : 'Em Uso'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(account)}>
-                                <Edit className="h-4 w-4" />
-                            </Button>
+        <Tabs defaultValue="estoque" className="w-full space-y-6">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="estoque" className="gap-2">
+                <Layers className="h-4 w-4" /> Estoque Atual
+            </TabsTrigger>
+            <TabsTrigger value="historico" className="gap-2">
+                <History className="h-4 w-4" /> Histórico de Retiradas
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="estoque">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Layers className="h-5 w-5 text-primary" />
+                    Estoque Disponível ({availableAccounts.length})
+                </CardTitle>
+                <CardDescription>Visualização detalhada dos acessos prontos para entrega.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Dados de Acesso</TableHead>
+                      <TableHead>Assinatura</TableHead>
+                      <TableHead className="hidden md:table-cell">Adicionado em</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow><TableCell colSpan={4} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                    ) : availableAccounts.length > 0 ? (
+                      availableAccounts.map((account) => (
+                        <TableRow key={account.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                                <span className="font-medium text-sm">{account.email}</span>
+                                <span className="text-xs text-muted-foreground font-mono">{account.password}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-primary/5">{account.subscription}</Badge>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                                <CalendarDays className="h-3 w-3" />
+                                {formatDate(account.createdAt)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-8 text-green-600 border-green-200 hover:bg-green-50 gap-1"
+                                    onClick={() => handleMarkAsUsed(account)}
+                                >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">Retirar</span>
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(account)}>
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Remover do Estoque?</AlertDialogTitle>
+                                            <AlertDialogDescription>Esta conta será apagada permanentemente.</AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDelete(account.id)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Nenhuma conta disponível.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="historico">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5 text-muted-foreground" />
+                    Histórico de Uso ({usedAccounts.length})
+                </CardTitle>
+                <CardDescription>Controle de logins que já foram retirados do estoque.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Conta</TableHead>
+                      <TableHead>Assinatura</TableHead>
+                      <TableHead>Datas</TableHead>
+                      <TableHead className="text-right">Ação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow><TableCell colSpan={4} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                    ) : usedAccounts.length > 0 ? (
+                      usedAccounts.map((account) => (
+                        <TableRow key={account.id} className="opacity-70 grayscale-[0.5]">
+                          <TableCell>
+                            <div className="flex flex-col">
+                                <span className="font-medium text-sm line-through decoration-muted-foreground/50">{account.email}</span>
+                                <Badge variant="secondary" className="w-fit text-[10px] mt-1 h-4">RETIRADA</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">{account.subscription}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1 text-[10px]">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                    <PlusCircle className="h-3 w-3" /> Add: {formatDate(account.createdAt)}
+                                </div>
+                                <div className="flex items-center gap-1 text-primary font-medium">
+                                    <Clock className="h-3 w-3" /> Fim: {formatDate(account.usedAt)}
+                                </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-destructive">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
-                                        <AlertDialogTitle>Remover do Estoque?</AlertDialogTitle>
-                                        <AlertDialogDescription>Essa ação não pode ser desfeita.</AlertDialogDescription>
+                                        <AlertDialogTitle>Excluir Log Histórico?</AlertDialogTitle>
+                                        <AlertDialogDescription>Isso removerá o registro desta conta para sempre.</AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogCancel>Voltar</AlertDialogCancel>
                                         <AlertDialogAction onClick={() => handleDelete(account.id)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                        {searchTerm ? 'Nenhuma conta encontrada para esta pesquisa.' : 'Seu estoque está vazio.'}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Nenhuma retirada registrada.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
 
       <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) setEditingAccount(undefined); setIsDialogOpen(open); }}>
