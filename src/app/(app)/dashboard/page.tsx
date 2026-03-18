@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, Eye, Trophy, Medal } from 'lucide-react';
@@ -213,9 +212,9 @@ export default function DashboardPage() {
       fill: `hsl(var(--chart-${(index % 5) + 1}))`
     }));
 
-    // Sorting and Filtering Agent Ranking (Only those with > 1 active client)
+    // Sorting and Filtering Agent Ranking (Show anyone with at least 1 active client)
     const agentRanking = Object.values(agentsMap)
-        .filter(a => a.activeCount > 1)
+        .filter(a => a.activeCount >= 1)
         .sort((a, b) => b.activeCount - a.activeCount);
 
     return { stats: finalStats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList, agentRanking };
@@ -437,7 +436,7 @@ export default function DashboardPage() {
                         <Trophy className="h-5 w-5 text-yellow-500" />
                         Ranking de Performance
                     </CardTitle>
-                    <CardDescription>Atendentes com mais de 1 cliente ativo.</CardDescription>
+                    <CardDescription>Atendentes com pelo menos 1 cliente ativo.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1">
                     <ScrollArea className="h-[200px]">
