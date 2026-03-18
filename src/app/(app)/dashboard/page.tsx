@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, orderBy, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, collectionGroup } from 'firebase/firestore';
 import type { Client, UserProfile } from '@/lib/types';
 import { useState, useMemo, useEffect } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
@@ -40,28 +40,36 @@ const formatCurrency = (value: number): string => {
 };
 
 export default function DashboardPage() {
-  const { firestore, effectiveUserId, user } = useFirebase();
+  const { firestore, effectiveUserId, userProfile } = useFirebase();
   const [period, setPeriod] = useState('this-month');
+  
+  const isAdmin = userProfile?.role === 'Admin';
 
+  // For Admins, fetch ALL clients in the system. For others, silo by team.
   const clientsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    if (isAdmin) {
+        // Global query for all clients in the system using collectionGroup
+        return query(collectionGroup(firestore, 'clients'));
+    }
     if (!effectiveUserId) return null;
     return query(collection(firestore, 'users', effectiveUserId, 'clients'));
-  }, [firestore, effectiveUserId]);
+  }, [firestore, effectiveUserId, isAdmin]);
 
   const { data: clients, isLoading: isLoadingClients } = useCollection<Client>(clientsQuery);
 
-  // Busca todos os usuários da equipe para garantir que todos sejam considerados no ranking
+  // For Admins: Fetch all primary account holders (Users) to identify them in the ranking.
+  // For others: Fetch only team members (Agents) of the current boss.
   const teamQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    if (isAdmin) {
+        return query(collection(firestore, 'users'), where('role', 'in', ['User', 'Admin']));
+    }
     if (!effectiveUserId) return null;
     return query(collection(firestore, 'users'), where('parentId', '==', effectiveUserId));
-  }, [firestore, effectiveUserId]);
+  }, [firestore, effectiveUserId, isAdmin]);
+  
   const { data: teamMembers } = useCollection<UserProfile>(teamQuery);
-
-  const adminDocRef = useMemoFirebase(() => {
-    if (!effectiveUserId) return null;
-    return doc(firestore, 'users', effectiveUserId);
-  }, [firestore, effectiveUserId]);
-  const { data: adminProfile } = useDoc<UserProfile>(adminDocRef);
 
   // Lógica do Ranking consolidada
   const rankingData = useMemo(() => {
@@ -69,38 +77,42 @@ export default function DashboardPage() {
 
     const stats: Record<string, { count: number; revenue: number; name: string }> = {};
 
-    // Inicializa com membros da equipe
+    // Initialize participants list from the users fetched
     teamMembers?.forEach(m => {
         stats[m.id] = { count: 0, revenue: 0, name: `${m.firstName} ${m.lastName}` };
     });
-    
-    // Adiciona o administrador (dono)
-    if (adminProfile) {
-        stats[adminProfile.id] = { count: 0, revenue: 0, name: `${adminProfile.firstName} ${adminProfile.lastName}` };
-    }
 
-    // Processa os clientes para somar estatísticas
+    // Process clients to aggregate statistics
     clients.forEach(client => {
       if (client.status !== 'Ativo') return;
 
-      // Se não tiver agentId, o crédito vai para o administrador
-      const id = client.agentId || effectiveUserId;
+      // DETERMINAÇÃO DO CRÉDITO:
+      // Se for Visão Global (Admin): o ranking é de "USUÁRIOS" (os donos das contas/bosses). Usamos userId.
+      // Se for Visão de Equipe (User/Agent): o ranking é de "ATENDENTES" (os membros da equipe). Usamos agentId.
+      const participantId = isAdmin ? client.userId : (client.agentId || effectiveUserId);
       const revenue = parseCurrency(client.amountPaid);
 
-      if (!stats[id]) {
-        stats[id] = { count: 0, revenue: 0, name: client.agentName || 'Administrador' };
+      if (!participantId) return;
+
+      if (!stats[participantId]) {
+        stats[participantId] = { 
+            count: 0, 
+            revenue: 0, 
+            name: (isAdmin ? (client.agentName || 'Dono de Conta') : (client.agentName || 'Atendente'))
+        };
       }
 
-      stats[id].count += 1;
-      stats[id].revenue += revenue;
+      stats[participantId].count += 1;
+      stats[participantId].revenue += revenue;
     });
 
-    // Converte para array, ordena por performance e pega apenas os 3 primeiros
+    // Convert to array, sort by performance and take top 3
     return Object.entries(stats)
       .map(([id, s]) => ({ id, ...s }))
+      .filter(s => s.count > 0) // Only show those with results
       .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
       .slice(0, 3);
-  }, [clients, teamMembers, adminProfile, effectiveUserId]);
+  }, [clients, teamMembers, effectiveUserId, isAdmin]);
 
   const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
@@ -307,7 +319,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Início"
+        title={isAdmin ? "Painel do Sistema (Global)" : "Início"}
       />
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -472,9 +484,13 @@ export default function DashboardPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Trophy className="h-5 w-5 text-yellow-500" />
-                        Top 3 Atendentes
+                        {isAdmin ? "Ranking Global: Donos de Conta" : "Top 3 Atendentes"}
                     </CardTitle>
-                    <CardDescription>Performance baseada em clientes ativos.</CardDescription>
+                    <CardDescription>
+                        {isAdmin 
+                            ? "Performance baseada em todas as assinaturas do sistema." 
+                            : "Performance baseada em clientes ativos da sua equipe."}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1">
                     <ScrollArea className="h-[200px]">
@@ -488,8 +504,8 @@ export default function DashboardPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {rankingData.map((agent, index) => (
-                                    <TableRow key={agent.id} className="group transition-colors">
+                                {rankingData.map((participant, index) => (
+                                    <TableRow key={participant.id} className="group transition-colors">
                                         <TableCell className="font-bold py-3 text-center">
                                             {index === 0 && <Trophy className="h-5 w-5 text-yellow-500 mx-auto" />}
                                             {index === 1 && <Medal className="h-5 w-5 text-slate-400 mx-auto" />}
@@ -497,15 +513,15 @@ export default function DashboardPage() {
                                         </TableCell>
                                         <TableCell className="py-3">
                                             <span className="font-medium text-sm block truncate max-w-[120px]">
-                                                {agent.name}
+                                                {participant.name}
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-center py-3">
-                                            <Badge variant="secondary" className="font-bold">{agent.count}</Badge>
+                                            <Badge variant="secondary" className="font-bold">{participant.count}</Badge>
                                         </TableCell>
                                         <TableCell className="text-right py-3">
                                             <span className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                                {formatCurrency(agent.revenue)}
+                                                {formatCurrency(participant.revenue)}
                                             </span>
                                         </TableCell>
                                     </TableRow>
@@ -513,7 +529,7 @@ export default function DashboardPage() {
                                 {rankingData.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={4} className="text-center text-muted-foreground py-8 italic text-xs">
-                                            Nenhum atendente no ranking ainda.
+                                            Nenhum resultado para exibir no ranking.
                                         </TableCell>
                                     </TableRow>
                                 )}
