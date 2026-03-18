@@ -5,8 +5,8 @@ import { Users, AlertTriangle, Calendar, Clock, DollarSign, ArrowUp, ArrowDown, 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useFirebase, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, orderBy, doc } from 'firebase/firestore';
 import type { Client, UserProfile } from '@/lib/types';
 import { useState, useMemo, useEffect } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
@@ -48,36 +48,59 @@ export default function DashboardPage() {
     return query(collection(firestore, 'users', effectiveUserId, 'clients'));
   }, [firestore, effectiveUserId]);
 
-  const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
+  const { data: clients, isLoading: isLoadingClients } = useCollection<Client>(clientsQuery);
 
-  // Lógica do Ranking extraída diretamente dos clientes
+  // Busca todos os usuários da equipe para garantir que todos sejam considerados no ranking
+  const teamQuery = useMemoFirebase(() => {
+    if (!effectiveUserId) return null;
+    return query(collection(firestore, 'users'), where('parentId', '==', effectiveUserId));
+  }, [firestore, effectiveUserId]);
+  const { data: teamMembers } = useCollection<UserProfile>(teamQuery);
+
+  const adminDocRef = useMemoFirebase(() => {
+    if (!effectiveUserId) return null;
+    return doc(firestore, 'users', effectiveUserId);
+  }, [firestore, effectiveUserId]);
+  const { data: adminProfile } = useDoc<UserProfile>(adminDocRef);
+
+  // Lógica do Ranking consolidada
   const rankingData = useMemo(() => {
     if (!clients) return [];
 
-    const agentStats: Record<string, { count: number; revenue: number; name: string }> = {};
+    const stats: Record<string, { count: number; revenue: number; name: string }> = {};
 
+    // Inicializa com membros da equipe
+    teamMembers?.forEach(m => {
+        stats[m.id] = { count: 0, revenue: 0, name: `${m.firstName} ${m.lastName}` };
+    });
+    
+    // Adiciona o administrador (dono)
+    if (adminProfile) {
+        stats[adminProfile.id] = { count: 0, revenue: 0, name: `${adminProfile.firstName} ${adminProfile.lastName}` };
+    }
+
+    // Processa os clientes para somar estatísticas
     clients.forEach(client => {
-      // Consideramos apenas clientes ativos no ranking
       if (client.status !== 'Ativo') return;
 
-      // Se não tiver agentId (clientes antigos), atribuímos ao dono da conta (effectiveUserId)
+      // Se não tiver agentId, o crédito vai para o administrador
       const id = client.agentId || effectiveUserId;
-      const name = client.agentName || 'Administrador';
       const revenue = parseCurrency(client.amountPaid);
 
-      if (!agentStats[id]) {
-        agentStats[id] = { count: 0, revenue: 0, name: name };
+      if (!stats[id]) {
+        stats[id] = { count: 0, revenue: 0, name: client.agentName || 'Administrador' };
       }
 
-      agentStats[id].count += 1;
-      agentStats[id].revenue += revenue;
+      stats[id].count += 1;
+      stats[id].revenue += revenue;
     });
 
-    return Object.entries(agentStats)
-      .map(([id, stats]) => ({ id, ...stats }))
-      .filter(a => a.count >= 1) // Mostra quem tem 1 ou mais clientes ativos
-      .sort((a, b) => b.count - a.count || b.revenue - a.revenue);
-  }, [clients, effectiveUserId]);
+    // Converte para array, ordena por performance e pega apenas os 3 primeiros
+    return Object.entries(stats)
+      .map(([id, s]) => ({ id, ...s }))
+      .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
+      .slice(0, 3);
+  }, [clients, teamMembers, adminProfile, effectiveUserId]);
 
   const { stats, subscriptionData, paymentMethodData, dueTodayList, dueIn3DaysList } = useMemo(() => {
     const baseStats = {
@@ -258,7 +281,7 @@ export default function DashboardPage() {
     }, {} as ChartConfig);
   }, [paymentMethodData]);
 
-  if (isLoading) {
+  if (isLoadingClients) {
     return (
       <div className="flex flex-col h-full">
         <PageHeader title="Início" />
@@ -449,9 +472,9 @@ export default function DashboardPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Trophy className="h-5 w-5 text-yellow-500" />
-                        Ranking de Performance
+                        Top 3 Atendentes
                     </CardTitle>
-                    <CardDescription>Atendentes com pelo menos 1 cliente ativo.</CardDescription>
+                    <CardDescription>Performance baseada em clientes ativos.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1">
                     <ScrollArea className="h-[200px]">
@@ -461,7 +484,7 @@ export default function DashboardPage() {
                                     <TableHead className="w-12 text-center">Pos</TableHead>
                                     <TableHead>Nome</TableHead>
                                     <TableHead className="text-center">Ativos</TableHead>
-                                    <TableHead className="text-right">Fat. Ativo</TableHead>
+                                    <TableHead className="text-right">Faturamento</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -471,7 +494,6 @@ export default function DashboardPage() {
                                             {index === 0 && <Trophy className="h-5 w-5 text-yellow-500 mx-auto" />}
                                             {index === 1 && <Medal className="h-5 w-5 text-slate-400 mx-auto" />}
                                             {index === 2 && <Medal className="h-5 w-5 text-orange-600 mx-auto" />}
-                                            {index > 2 && `${index + 1}º`}
                                         </TableCell>
                                         <TableCell className="py-3">
                                             <span className="font-medium text-sm block truncate max-w-[120px]">
