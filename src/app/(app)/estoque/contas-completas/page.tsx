@@ -1,13 +1,13 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
-import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { collection, query, orderBy, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -36,7 +36,8 @@ import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import type { FullAccount, Subscription } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format } from 'date-fns';
+import { format, add, differenceInDays, isAfter } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const accountSchema = z.object({
   email: z.string().min(1, 'E-mail/Login é obrigatório'),
@@ -158,6 +159,64 @@ function AccountForm({ onFinished, initialData }: { onFinished: () => void, init
     );
 }
 
+function AccountResetCard({ account, onReset }: { account: FullAccount, onReset: (acc: FullAccount) => void }) {
+    const usedAtDate = account.usedAt?.toDate() || new Date();
+    const expiryDate = add(usedAtDate, { days: 30 });
+    const isExpired = isAfter(new Date(), expiryDate);
+    const daysRemaining = 30 - differenceInDays(new Date(), usedAtDate);
+
+    return (
+        <Card className={cn(
+            "relative overflow-hidden border-2 transition-all duration-500",
+            isExpired 
+                ? "bg-destructive text-destructive-foreground border-destructive animate-pulse-destructive" 
+                : "hover:shadow-md border-muted"
+        )}>
+            <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                        <CardTitle className={cn("text-base truncate max-w-[200px]", isExpired ? "text-white" : "")}>
+                            {account.email}
+                        </CardTitle>
+                        <CardDescription className={isExpired ? "text-white/80" : ""}>
+                            {account.subscription}
+                        </CardDescription>
+                    </div>
+                    <Badge variant={isExpired ? "secondary" : "outline"} className={cn(isExpired ? "bg-white text-destructive font-bold" : "")}>
+                        {isExpired ? "EXPIRADO" : `${daysRemaining} dias`}
+                    </Badge>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-2 pb-4">
+                <div className="flex items-center gap-2 text-xs">
+                    <Key className="h-3 w-3 opacity-70" />
+                    <span className="font-mono">{account.password}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] opacity-80">
+                    <Clock className="h-3 w-3" />
+                    Retirada em: {format(usedAtDate, 'dd/MM/yyyy HH:mm')}
+                </div>
+                {isExpired && (
+                    <div className="mt-4 p-2 bg-white/20 rounded flex items-center gap-2 text-xs font-bold">
+                        <AlertTriangle className="h-4 w-4" />
+                        REDEFINIÇÃO OBRIGATÓRIA
+                    </div>
+                )}
+            </CardContent>
+            <CardFooter className="pt-0">
+                <Button 
+                    variant={isExpired ? "secondary" : "outline"} 
+                    className="w-full h-8 text-xs gap-2"
+                    onClick={() => onReset(account)}
+                >
+                    <RotateCcw className="h-3 w-3" />
+                    Renovar e Voltar ao Estoque
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+}
+
 export default function ContasCompletasPage() {
   const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
@@ -211,7 +270,18 @@ export default function ContasCompletasPage() {
         status: 'used',
         usedAt: serverTimestamp() 
     }, { merge: true });
-    toast({ title: 'Conta Retirada!', description: 'A conta foi movida para o histórico.' });
+    toast({ title: 'Conta Retirada!', description: 'A conta foi movida para redefinição.' });
+  };
+
+  const handleBackToStock = (account: FullAccount) => {
+    if (!effectiveUserId) return;
+    const docRef = doc(firestore, 'users', effectiveUserId, 'full_accounts', account.id);
+    setDocumentNonBlocking(docRef, { 
+        status: 'available',
+        usedAt: null,
+        createdAt: serverTimestamp() // Reset the addition date to the top of list
+    }, { merge: true });
+    toast({ title: 'Senha Redefinida!', description: 'A conta voltou para o estoque disponível.' });
   };
 
   const handleAddNew = () => {
@@ -248,12 +318,15 @@ export default function ContasCompletasPage() {
       
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <Tabs defaultValue="estoque" className="w-full space-y-6">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-2xl">
             <TabsTrigger value="estoque" className="gap-2">
-                <Layers className="h-4 w-4" /> Estoque Atual
+                <Layers className="h-4 w-4" /> Estoque
+            </TabsTrigger>
+            <TabsTrigger value="redefinir" className="gap-2">
+                <RefreshCw className="h-4 w-4" /> Redefinir Senha
             </TabsTrigger>
             <TabsTrigger value="historico" className="gap-2">
-                <History className="h-4 w-4" /> Histórico de Retiradas
+                <History className="h-4 w-4" /> Logs
             </TabsTrigger>
           </TabsList>
 
@@ -341,6 +414,35 @@ export default function ContasCompletasPage() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="redefinir">
+            <div className="space-y-4">
+                <div className="flex items-center gap-2 p-4 bg-muted/30 rounded-lg border">
+                    <RefreshCw className="h-5 w-5 text-primary" />
+                    <div>
+                        <h3 className="font-semibold">Contas em Período de Redefinição</h3>
+                        <p className="text-xs text-muted-foreground">As contas ficam aqui por 30 dias após a retirada. Quando expiram, a box fica vermelha indicando a troca necessária.</p>
+                    </div>
+                </div>
+                {isLoading ? (
+                    <div className="grid gap-4 md:grid-cols-3"><div className="h-40 bg-muted animate-pulse rounded-lg" /></div>
+                ) : usedAccounts.length > 0 ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {usedAccounts.map((account) => (
+                            <AccountResetCard 
+                                key={account.id} 
+                                account={account} 
+                                onReset={handleBackToStock} 
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <Card className="border-dashed flex items-center justify-center p-12 text-muted-foreground">
+                        Nenhuma conta pendente de redefinição no momento.
+                    </Card>
+                )}
+            </div>
           </TabsContent>
 
           <TabsContent value="historico">
