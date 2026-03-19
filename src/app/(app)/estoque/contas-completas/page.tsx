@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock, AlertTriangle, RotateCcw } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock, AlertTriangle, RotateCcw, Copy, Check } from 'lucide-react';
 import { collection, query, orderBy, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
@@ -224,6 +224,8 @@ export default function ContasCompletasPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<FullAccount | undefined>(undefined);
+  const [withdrawnAccount, setWithdrawnAccount] = useState<FullAccount | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const accountsQuery = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
@@ -270,6 +272,9 @@ export default function ContasCompletasPage() {
         status: 'used',
         usedAt: serverTimestamp() 
     }, { merge: true });
+    
+    // Abre a janela com os dados para cópia
+    setWithdrawnAccount(account);
     toast({ title: 'Conta Retirada!', description: 'A conta foi movida para redefinição.' });
   };
 
@@ -292,6 +297,13 @@ export default function ContasCompletasPage() {
   const formatDate = (timestamp?: Timestamp) => {
     if (!timestamp) return '-';
     return format(timestamp.toDate(), 'dd/MM/yyyy HH:mm');
+  };
+
+  const handleCopy = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    toast({ title: 'Copiado!', description: `${field} copiado para a área de transferência.` });
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   return (
@@ -523,6 +535,7 @@ export default function ContasCompletasPage() {
         </Tabs>
       </main>
 
+      {/* Modal de Cadastro/Edição */}
       <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) setEditingAccount(undefined); setIsDialogOpen(open); }}>
         <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -530,6 +543,58 @@ export default function ContasCompletasPage() {
                 <DialogDescription>Preencha os dados de login e senha do seu fornecedor.</DialogDescription>
             </DialogHeader>
             <AccountForm initialData={editingAccount} onFinished={() => setIsDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Visualização de Dados ao Retirar */}
+      <Dialog open={!!withdrawnAccount} onOpenChange={(open) => !open && setWithdrawnAccount(null)}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <div className="flex justify-center mb-4">
+                    <div className="bg-green-100 p-3 rounded-full">
+                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                    </div>
+                </div>
+                <DialogTitle className="text-center text-xl">Conta Retirada!</DialogTitle>
+                <DialogDescription className="text-center">
+                    Copie os dados abaixo para enviar ao seu cliente.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase font-bold">E-mail / Login</Label>
+                    <div className="flex items-center gap-2">
+                        <Input readOnly value={withdrawnAccount?.email || ''} className="bg-muted font-mono" />
+                        <Button 
+                            variant="outline" 
+                            size="icon" 
+                            onClick={() => handleCopy(withdrawnAccount?.email || '', 'E-mail')}
+                        >
+                            {copiedField === 'E-mail' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase font-bold">Senha</Label>
+                    <div className="flex items-center gap-2">
+                        <Input readOnly value={withdrawnAccount?.password || ''} className="bg-muted font-mono" />
+                        <Button 
+                            variant="outline" 
+                            size="icon" 
+                            onClick={() => handleCopy(withdrawnAccount?.password || '', 'Senha')}
+                        >
+                            {copiedField === 'Senha' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                </div>
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700 leading-relaxed">
+                    <Info className="h-4 w-4 mb-1" />
+                    Esta conta agora está na aba <strong>"Redefinir Senha"</strong>. Você tem 30 dias para renová-la antes que o alerta vermelho apareça.
+                </div>
+            </div>
+            <DialogFooter>
+                <Button className="w-full" onClick={() => setWithdrawnAccount(null)}>Concluído</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
