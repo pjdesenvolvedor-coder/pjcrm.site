@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock, AlertTriangle, RotateCcw, Copy, Check } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, Mail, Key, Package, Search, RefreshCw, Layers, CheckCircle2, History, CalendarDays, Clock, AlertTriangle, RotateCcw, Copy, Check, Info } from 'lucide-react';
 import { collection, query, orderBy, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
