@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { collection, Timestamp, doc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
@@ -661,7 +661,8 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
 }
 
 export default function CustomersPage() {
-  const { firestore, effectiveUserId } = useFirebase();
+  const { firestore, effectiveUserId, userProfile } = useFirebase();
+  const { user } = useUser();
   const { toast } = useToast();
   const [dialogState, setDialogState] = useState<any>({ view: 'closed' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -794,11 +795,94 @@ export default function CustomersPage() {
     }
   };
 
+  const handleExport = () => {
+    if (!clients || clients.length === 0) {
+        toast({ variant: 'destructive', title: 'Nenhum dado', description: 'Não há clientes para exportar.' });
+        return;
+    }
+    const dataStr = JSON.stringify(clients, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `clientes_export_${format(new Date(), 'dd-MM-yyyy')}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exportação concluída!' });
+  };
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !effectiveUserId) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const content = e.target?.result as string;
+            const importedClients = JSON.parse(content);
+
+            if (!Array.isArray(importedClients)) {
+                throw new Error("O arquivo deve conter uma lista de clientes.");
+            }
+
+            let count = 0;
+            for (const c of importedClients) {
+                if (!c.name || !c.phone) continue;
+
+                const { id, ...clientData } = c; // remove old ID
+                
+                // Handle dates - if exported as JSON they come back as strings or plain objects
+                if (clientData.dueDate) {
+                    if (typeof clientData.dueDate === 'string') {
+                        clientData.dueDate = Timestamp.fromDate(new Date(clientData.dueDate));
+                    } else if (clientData.dueDate.seconds) {
+                        clientData.dueDate = new Timestamp(clientData.dueDate.seconds, clientData.dueDate.nanoseconds || 0);
+                    }
+                }
+
+                const finalData = {
+                    ...clientData,
+                    userId: effectiveUserId,
+                    agentId: user?.uid,
+                    agentName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Sistema',
+                    createdAt: serverTimestamp(),
+                };
+
+                addDocumentNonBlocking(collection(firestore, 'users', effectiveUserId, 'clients'), finalData);
+                count++;
+            }
+
+            toast({ title: 'Importação concluída!', description: `${count} clientes foram adicionados.` });
+        } catch (error: any) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro na importação', description: error.message });
+        } finally {
+            event.target.value = ''; // reset input
+        }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="Todos os Clientes">
-        <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar por nome, tel ou e-mail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[320px]" /></div>
-        <Button size="sm" onClick={() => setDialogState({ view: 'add' })}><PlusCircle className="h-4 w-4 mr-1" />Adicionar</Button>
+        <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar por nome, tel ou e-mail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[240px]" /></div>
+        <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport} className="gap-1 hidden md:flex">
+                <Download className="h-4 w-4" /> Exportar
+            </Button>
+            <Label htmlFor="import-clients" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), "cursor-pointer gap-1 hidden md:flex")}>
+                <Upload className="h-4 w-4" /> Importar
+                <input 
+                    id="import-clients"
+                    type="file" 
+                    accept=".json" 
+                    className="hidden" 
+                    onChange={handleImport}
+                />
+            </Label>
+            <Button size="sm" onClick={() => setDialogState({ view: 'add' })}><PlusCircle className="h-4 w-4 mr-1" />Adicionar</Button>
+        </div>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <Card>
