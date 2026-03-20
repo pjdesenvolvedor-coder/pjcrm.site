@@ -800,15 +800,48 @@ export default function CustomersPage() {
         toast({ variant: 'destructive', title: 'Nenhum dado', description: 'Não há clientes para exportar.' });
         return;
     }
-    const dataStr = JSON.stringify(clients, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `clientes_export_${format(new Date(), 'dd-MM-yyyy')}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast({ title: 'Exportação concluída!' });
+
+    const timestamp = format(new Date(), 'dd-MM-yyyy');
+
+    // 1. Export JSON (Full DB Backup)
+    const jsonStr = JSON.stringify(clients, null, 2);
+    const jsonBlob = new Blob([jsonStr], { type: 'application/json' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+    const jsonLink = document.createElement('a');
+    jsonLink.href = jsonUrl;
+    jsonLink.download = `backup_clientes_${timestamp}.json`;
+    jsonLink.click();
+    URL.revokeObjectURL(jsonUrl);
+
+    // 2. Export TXT (Formatted List)
+    // Format: NomeCliente - NumeroClientes - Emaildaconta - Plano - VENCIMENTO
+    const txtLines = clients.map(c => {
+        const name = c.name || 'Sem Nome';
+        const phone = c.phone || 'Sem Telefone';
+        const email = Array.isArray(c.email) ? c.email.join(', ') : (c.email || 'Sem Email');
+        const plan = c.subscription || 'Sem Plano';
+        const dueDate = c.dueDate ? format(c.dueDate.toDate(), 'dd/MM/yyyy') : 'Sem Vencimento';
+        
+        return `${name} - ${phone} - ${email} - ${plan} - ${dueDate}`;
+    });
+
+    const txtContent = txtLines.join('\n');
+    const txtBlob = new Blob([txtContent], { type: 'text/plain' });
+    const txtUrl = URL.createObjectURL(txtBlob);
+    const txtLink = document.createElement('a');
+    txtLink.href = txtUrl;
+    txtLink.download = `lista_clientes_${timestamp}.txt`;
+    
+    // Pequeno delay para garantir que o navegador não bloqueie múltiplos downloads
+    setTimeout(() => {
+        txtLink.click();
+        URL.revokeObjectURL(txtUrl);
+    }, 100);
+
+    toast({ 
+        title: 'Exportação concluída!', 
+        description: 'Foram gerados arquivos JSON (Backup) e TXT (Lista formatada).' 
+    });
   };
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
