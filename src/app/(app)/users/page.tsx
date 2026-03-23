@@ -463,17 +463,96 @@ export default function UsersPage() {
 
     const newStatus = userToToggle.status === 'blocked' ? 'active' : 'blocked';
     const userDocRef = doc(firestore, "users", userToToggle.id);
+    const userSettingsRef = doc(firestore, "users", userToToggle.id, "settings", "config");
     
-    setDocumentNonBlocking(userDocRef, { status: newStatus }, { merge: true });
+    try {
+        if (newStatus === 'blocked') {
+            // Find the token assigned to this user and free it
+            const tokensRef = collection(firestore, 'tokens');
+            const tokenQuery = query(tokensRef, where('assignedTo', '==', userToToggle.id));
+            const tokenSnap = await getDocs(tokenQuery);
+            
+            const batch = writeBatch(firestore);
+            batch.update(userDocRef, { status: newStatus });
+            batch.set(userSettingsRef, { webhookToken: null }, { merge: true });
+            
+            let tokenToDisconnect: string | null = null;
+            
+            if (!tokenSnap.empty) {
+                const tokenDoc = tokenSnap.docs[0];
+                tokenToDisconnect = tokenDoc.data().value;
+                batch.update(tokenDoc.ref, {
+                    status: 'available',
+                    assignedTo: null,
+                    assignedEmail: null
+                });
+            }
+            
+            await batch.commit();
 
-    toast({
-        title: `Atendente ${newStatus === 'blocked' ? 'Bloqueado' : 'Desbloqueado'}`,
-        description: `O acesso de ${userToToggle.firstName} foi ${newStatus === 'blocked' ? 'removido' : 'restaurado'}.`,
-    });
-    
-    setUsers(prevUsers => prevUsers.map(u => 
-        u.id === userToToggle.id ? { ...u, status: newStatus } : u
-    ));
+            if (tokenToDisconnect) {
+                // Call webhook to disconnect the token session
+                fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: tokenToDisconnect }),
+                }).catch(err => console.error("Failed to disconnect token on block:", err));
+            }
+
+            toast({
+                title: 'Atendente Bloqueado',
+                description: `O acesso de ${userToToggle.firstName} foi removido e o token liberado.`,
+            });
+            
+            setUsers(prevUsers => prevUsers.map(u => 
+                u.id === userToToggle.id ? { ...u, status: newStatus } : u
+            ));
+        } else {
+            // Unblocking - try to find an available token
+            const tokensRef = collection(firestore, 'tokens');
+            const tokenQuery = query(tokensRef, where('status', '==', 'available'), limit(1));
+            const tokenSnap = await getDocs(tokenQuery);
+            
+            if (tokenSnap.empty) {
+                 toast({
+                     variant: "destructive",
+                     title: "Estoque vazio",
+                     description: "Não há tokens disponíveis no momento para atribuir ao atendente. Adicione mais tokens no estoque.",
+                 });
+                 return;
+            }
+            
+            const tokenDoc = tokenSnap.docs[0];
+            const tokenData = tokenDoc.data();
+            
+            const batch = writeBatch(firestore);
+            batch.update(userDocRef, { status: newStatus });
+            batch.set(userSettingsRef, { webhookToken: tokenData.value }, { merge: true });
+            batch.update(tokenDoc.ref, {
+                status: 'in_use',
+                assignedTo: userToToggle.id,
+                assignedEmail: userToToggle.email
+            });
+            
+            await batch.commit();
+
+            toast({
+                title: 'Atendente Desbloqueado',
+                description: `O acesso de ${userToToggle.firstName} foi restaurado e um novo token foi atribuído.`,
+            });
+            
+            setUsers(prevUsers => prevUsers.map(u => 
+                u.id === userToToggle.id ? { ...u, status: newStatus } : u
+            ));
+        }
+    } catch (error) {
+        console.error("Error toggling block status:", error);
+        toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Ocorreu um erro ao alterar o status do atendente.",
+        });
+    }
   };
 
   const handleDeleteUser = async (userToDelete: UserProfile) => {
