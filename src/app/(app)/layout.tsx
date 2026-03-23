@@ -224,6 +224,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         usage: false,
         logs: false,
         dbCleaner: true,
+        zapVendas: true,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -666,6 +667,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </DialogTrigger>
+              )}
+
+              {permissions.zapVendas && (
+                <SidebarMenuItem>
+                  <Collapsible>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="ZAP VENDAS">
+                              <div className="flex items-center gap-2"><Zap /><span>ZAP VENDAS</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/zap-vendas/connection'}><Link href="/zap-vendas/connection"><Zap className="h-4 w-4" />Conexão Zap</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/zap-vendas/settings'}><Link href="/zap-vendas/settings"><SettingsIcon className="h-4 w-4" />Configurações</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
               )}
 
               {permissions.settings && (

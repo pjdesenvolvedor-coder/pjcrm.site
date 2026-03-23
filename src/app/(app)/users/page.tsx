@@ -56,6 +56,7 @@ const permissionsSchema = z.object({
   ads: z.boolean().default(false),
   pix: z.boolean().default(false),
   dbCleaner: z.boolean().default(false),
+  zapVendas: z.boolean().default(false),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -74,6 +75,7 @@ const permissionLabels: { key: keyof UserPermissions, label: string }[] = [
     { key: 'settings', label: 'Configurações (BMs, Assinaturas)' },
     { key: 'users', label: 'Gerenciar Atendentes' },
     { key: 'dbCleaner', label: 'Limpador de DB' },
+    { key: 'zapVendas', label: 'Zap Vendas' },
 ];
 
 function UserClientCount({ userId, adminId }: { userId: string, adminId: string }) {
@@ -166,6 +168,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                 ads: user.permissions?.ads ?? false,
                 pix: user.permissions?.pix ?? false,
                 dbCleaner: user.permissions?.dbCleaner ?? false,
+                zapVendas: user.permissions?.zapVendas ?? false,
             },
             subscriptionEndDate: user.subscriptionEndDate ? format(user.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : '',
         },

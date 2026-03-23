@@ -19,6 +19,7 @@ export type UserPermissions = {
   usage: boolean;
   logs: boolean;
   dbCleaner: boolean;
+  zapVendas: boolean;
 };
 
 export type UserProfile = {
@@ -125,6 +126,7 @@ export type Settings = {
   leadInitialMessage?: string;
   leadConvertedMessage?: string;
   leadLostMessage?: string;
+  zapVendasToken?: string;
 };
 
 export type RemarketingConfig = {
