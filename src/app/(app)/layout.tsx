@@ -35,6 +35,7 @@ import {
   Trash2,
   FileText,
   Boxes,
+  KeyRound,
 } from 'lucide-react';
 import Image from 'next/image';
 
