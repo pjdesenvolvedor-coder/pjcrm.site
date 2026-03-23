@@ -685,6 +685,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                   <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                   <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                   <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token"><KeyRound />Meu Token</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 </>
                               )}
                               {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
