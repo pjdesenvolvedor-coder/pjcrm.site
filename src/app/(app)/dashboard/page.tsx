@@ -10,7 +10,7 @@ import type { Client } from '@/lib/types';
 import { useState, useMemo } from 'react';
 import { isToday, isWithinInterval, addDays, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PieChart, Pie, Cell } from "recharts";
+import { PieChart, Pie, Cell, Label } from "recharts";
 import {
   ChartContainer,
   ChartLegend,
@@ -385,14 +385,14 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
+            <Card className="bg-gradient-to-br from-background to-muted/50 border-muted shadow-sm">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
-                        <CardTitle>Total de Vendas</CardTitle>
-                        <p className="text-sm text-muted-foreground">Receita total no período selecionado (Sua Equipe).</p>
+                        <CardTitle className="text-xl">Total de Vendas</CardTitle>
+                        <p className="text-sm text-muted-foreground mt-1">Receita total no período selecionado (Sua Equipe).</p>
                     </div>
                     <Select value={period} onValueChange={setPeriod}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-[180px] bg-background">
                             <SelectValue placeholder="Selecione o período" />
                         </SelectTrigger>
                         <SelectContent>
@@ -404,9 +404,11 @@ export default function DashboardPage() {
                     </Select>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex items-center gap-2">
-                        < DollarSign className="h-10 w-10 text-green-500" />
-                        <p className="text-5xl font-bold">{formatCurrency(stats.totalSales)}</p>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-green-500/10 rounded-full">
+                           <DollarSign className="h-8 w-8 text-green-600 dark:text-green-500" />
+                        </div>
+                        <p className="text-4xl md:text-5xl font-bold tracking-tight">{formatCurrency(stats.totalSales)}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -423,12 +425,28 @@ export default function DashboardPage() {
                 <ChartContainer config={subscriptionChartConfig} className="w-full h-full aspect-auto">
                   <PieChart>
                     <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-                    <Pie data={subscriptionData} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
+                    <Pie data={subscriptionData} dataKey="value" nameKey="name" innerRadius={70} strokeWidth={2} paddingAngle={2}>
+                      <Label
+                        content={({ viewBox }) => {
+                          if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                            return (
+                              <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                                <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
+                                  {subscriptionData.reduce((acc, curr) => acc + curr.value, 0)}
+                                </tspan>
+                                <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 24} className="fill-muted-foreground text-xs">
+                                  Planos
+                                </tspan>
+                              </text>
+                            )
+                          }
+                        }}
+                      />
                       {subscriptionData.map((entry) => (
                         <Cell key={`cell-${entry.name}`} fill={entry.fill} className="stroke-background focus:outline-none" />
                       ))}
                     </Pie>
-                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center" />} />
+                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center mt-4" />} />
                   </PieChart>
                 </ChartContainer>
               ) : (
@@ -449,12 +467,28 @@ export default function DashboardPage() {
                 <ChartContainer config={paymentMethodChartConfig} className="w-full h-full aspect-auto">
                   <PieChart>
                     <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-                    <Pie data={paymentMethodData} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
+                    <Pie data={paymentMethodData} dataKey="value" nameKey="name" innerRadius={70} strokeWidth={2} paddingAngle={2}>
+                      <Label
+                        content={({ viewBox }) => {
+                          if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                            return (
+                              <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                                <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-3xl font-bold">
+                                  {paymentMethodData.reduce((acc, curr) => acc + curr.value, 0)}
+                                </tspan>
+                                <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 24} className="fill-muted-foreground text-xs">
+                                  Vendas
+                                </tspan>
+                              </text>
+                            )
+                          }
+                        }}
+                      />
                       {paymentMethodData.map((entry) => (
                         <Cell key={`cell-${entry.name}`} fill={entry.fill} className="stroke-background focus:outline-none" />
                       ))}
                     </Pie>
-                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center" />} />
+                    <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center mt-4" />} />
                   </PieChart>
                 </ChartContainer>
               ) : (
