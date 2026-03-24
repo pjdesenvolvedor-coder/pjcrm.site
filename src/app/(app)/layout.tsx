@@ -37,6 +37,16 @@ import {
   Boxes,
   KeyRound,
   CalendarDays,
+  LayoutDashboard,
+  MessageSquareShare,
+  UsersRound,
+  Wand2,
+  Megaphone,
+  Eraser,
+  MessageCircleMore,
+  BarChart3,
+  NotepadText,
+  Store,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -474,10 +484,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent>
           <Dialog open={isZapConnectOpen} onOpenChange={setZapConnectOpen}>
             <SidebarMenu>
+              {/* GROUP 1: VISÃO GERAL */}
+              <div className="px-3 py-1 mt-2 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Painel</div>
               {permissions.dashboard && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Início">
-                        <Link href="/dashboard"><Home /><span>Início</span></Link>
+                    <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Dashboard">
+                        <Link href="/dashboard"><LayoutDashboard className="h-4 w-4" /><span className="text-[13px] font-medium">Dashboard</span></Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
@@ -485,96 +497,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {permissions.calendario && (
                 <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === '/calendario'} tooltip="Calendário">
-                        <Link href="/calendario"><CalendarDays /><span>Calendário</span></Link>
+                        <Link href="/calendario"><CalendarDays className="h-4 w-4" /><span className="text-[13px] font-medium">Calendário</span></Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
+              
+              {permissions.ads && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/notes/ads'} tooltip="Relatórios">
+                      <Link href="/notes/ads"><BarChart3 className="h-4 w-4" /><span className="text-[13px] font-medium">Relatórios</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
 
+              {/* GROUP 2: GESTÃO */}
+              <div className="px-3 py-1 mt-4 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Gestão</div>
               {permissions.customers && (
                 <SidebarMenuItem>
                   <Collapsible defaultOpen={pathname.startsWith('/customers') || pathname === '/support'}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Clientes">
-                              <div className="flex items-center gap-2"><Contact /><span>Clientes</span></div>
+                              <div className="flex items-center gap-2"><UsersRound className="h-4 w-4" /><span className="text-[13px] font-medium">Clientes</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/customers'}><Link href="/customers">Todos os Clientes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/customers'}><Link href="/customers">Lista Completa</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname === '/customers/wants-to-buy'}>
-                                      <Link href="/customers/wants-to-buy"><span>Quer Comprar</span>{leadCount > 0 && <Badge variant="default" className="ml-auto bg-blue-500">{leadCount}</Badge>}</Link>
+                                  <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/customers/wants-to-buy'}>
+                                      <Link href="/customers/wants-to-buy"><span>Prospectos</span>{leadCount > 0 && <Badge variant="default" className="ml-auto bg-blue-500 h-4 px-1">{leadCount}</Badge>}</Link>
                                   </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
                               <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton asChild isActive={pathname === '/support'}>
-                                      <Link href="/support"><span>Suporte</span>{supportCount > 0 && <Badge variant="secondary" className="ml-auto">{supportCount}</Badge>}</Link>
+                                  <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/support'}>
+                                      <Link href="/support"><span>Tickets</span>{supportCount > 0 && <Badge variant="secondary" className="ml-auto h-4 px-1">{supportCount}</Badge>}</Link>
                                   </SidebarMenuSubButton>
                               </SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
-              
-              {permissions.automations && (
-                <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/automations')}>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Automações">
-                              <div className="flex items-center gap-2"><Bot /><span>Automações</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/due-date'}><Link href="/automations/due-date">Vencimento</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Upsell</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/delivery-credentials'}><Link href="/automations/delivery-credentials">Entrega EMAIL/SENHA</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/delivery-link'}><Link href="/automations/delivery-link">Entrega LINK</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Suporte (Auto)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/automations/leads'}><Link href="/automations/leads">Vendas (Leads)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
-
-              {permissions.groups && (
-                <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/groups')}>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Grupos">
-                              <div className="flex items-center gap-2"><Users /><span>Grupos</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/groups/get-jid'}><Link href="/groups/get-jid">Obter JID Grupo</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/groups/extract-members'}><Link href="/groups/extract-members">Extrair Membros</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/groups/schedule-message'}><Link href="/groups/schedule-message">Agendar Mensagem</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
-
-              {permissions.shot && (
-                <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/shot')}>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Disparo">
-                              <div className="flex items-center gap-2"><Send /><span>Disparo</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/list'}><Link href="/shot/list"><List className="h-4 w-4" /><span>Lista</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/shot/status-product'}><Link href="/shot/status-product"><Filter className="h-4 w-4" /><span>Status - Produto</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
@@ -586,42 +545,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Collapsible defaultOpen={pathname.startsWith('/estoque')}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Estoque">
-                              <div className="flex items-center gap-2"><Boxes /><span>Estoque</span></div>
+                              <div className="flex items-center gap-2"><Boxes className="h-4 w-4" /><span className="text-[13px] font-medium">Estoque</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
                                 <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/estoque/contas-completas'}>
-                                        <Link href="/estoque/contas-completas">Contas Completas</Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
-
-              {permissions.dbCleaner && (
-                <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/db-cleaner')}>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Limpador de DB">
-                              <div className="flex items-center gap-2"><Database /><span>Limpador de DB</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/db-cleaner/duplicates'}>
-                                        <Link href="/db-cleaner/duplicates"><Trash2 className="h-4 w-4" /><span>Duplicadas</span></Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={pathname === '/db-cleaner/returns'}>
-                                        <Link href="/db-cleaner/returns"><FileText className="h-4 w-4" /><span>Retorno</span></Link>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/estoque/contas-completas'}>
+                                        <Link href="/estoque/contas-completas">Gestão de Contas</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                           </SidebarMenuSub>
@@ -632,47 +564,86 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.notes && (
                 <SidebarMenuItem>
-                  <Collapsible>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Notas">
-                              <div className="flex items-center gap-2"><StickyNote /><span>Notas</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/notes/tasks'}><Link href="/notes/tasks">Minhas Tarefas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
+                  <SidebarMenuButton asChild isActive={pathname === '/notes/tasks'} tooltip="Tarefas">
+                      <Link href="/notes/tasks"><NotepadText className="h-4 w-4" /><span className="text-[13px] font-medium">Tarefas</span></Link>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
 
-              {permissions.ads && (
+              {/* GROUP 3: AUTOMAÇÃO E MENSAGENS */}
+              <div className="px-3 py-1 mt-4 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Operacional</div>
+              {permissions.automations && (
                 <SidebarMenuItem>
-                  <Collapsible>
+                  <Collapsible defaultOpen={pathname.startsWith('/automations')}>
                       <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Relatórios">
-                              <div className="flex items-center gap-2"><TrendingUp /><span>Relatórios</span></div>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Automações">
+                              <div className="flex items-center gap-2"><Wand2 className="h-4 w-4" /><span className="text-[13px] font-medium">Automações</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                                <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/notes/ads'}><Link href="/notes/ads">Relatório de Anúncios</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/due-date'}><Link href="/automations/due-date">Avisos Re-Cobrança</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Funil Upsell</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-credentials'}><Link href="/automations/delivery-credentials">Envio Acesso (Dados)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-link'}><Link href="/automations/delivery-link">Envio Acesso (Link)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Msg Suporte</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/leads'}><Link href="/automations/leads">Msg Leads</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
                 </SidebarMenuItem>
               )}
 
+              {permissions.shot && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/shot')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Disparo em Massa">
+                              <div className="flex items-center gap-2"><Megaphone className="h-4 w-4" /><span className="text-[13px] font-medium">Campanhas</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/shot/list'}><Link href="/shot/list">Lista de Disparo</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/shot/status-product'}><Link href="/shot/status-product">Por Produto</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.groups && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/groups')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Grupos WhatsApp">
+                              <div className="flex items-center gap-2"><MessageCircleMore className="h-4 w-4" /><span className="text-[13px] font-medium">Comunidades</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/groups/get-jid'}><Link href="/groups/get-jid">Obter JID</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/groups/extract-members'}><Link href="/groups/extract-members">Extrair Leads</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/groups/schedule-message'}><Link href="/groups/schedule-message">Agendar Envio</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {/* GROUP 4: CONEXÕES WPP */}
+              <div className="px-3 py-1 mt-4 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Conexões</div>
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="ZapConexão">
-                      <Zap /><span className="flex-1">ZapConexão</span>
+                    <SidebarMenuButton tooltip="Conexão Automática">
+                      <MessageSquareShare className="h-4 w-4 text-emerald-600 dark:text-emerald-500" /><span className="flex-1 text-[13px] font-bold text-emerald-700 dark:text-emerald-400">Hub Principal</span>
                       <div className="group-data-[collapsible=icon]:hidden">
-                        {liveStatus?.status === 'connected' ? <Badge variant="secondary" className="bg-green-100 text-green-800">Conectado</Badge> : <Badge variant="destructive">Desconectado</Badge>}
+                        {liveStatus?.status === 'connected' ? <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> : <div className="h-2 w-2 rounded-full bg-destructive" />}
                       </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -684,14 +655,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Collapsible>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="ZAP VENDAS">
-                              <div className="flex items-center gap-2"><Zap /><span>ZAP VENDAS</span></div>
+                              <div className="flex items-center gap-2"><Store className="h-4 w-4 text-orange-600 dark:text-orange-500" /><span className="text-[13px] font-bold text-orange-700 dark:text-orange-400">PDV Vendas</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/zap-vendas/connection'}><Link href="/zap-vendas/connection"><Zap className="h-4 w-4" />Conexão Zap</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/zap-vendas/settings'}><Link href="/zap-vendas/settings"><SettingsIcon className="h-4 w-4" />Configurações</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/zap-vendas/connection'}><Link href="/zap-vendas/connection">Aparelho</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/zap-vendas/settings'}><Link href="/zap-vendas/settings">Ajustes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {/* GROUP 5: SISTEMA */}
+              <div className="px-3 py-1 mt-4 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Sistema</div>
+              {permissions.dbCleaner && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/db-cleaner')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Limpador DB">
+                              <div className="flex items-center gap-2"><Eraser className="h-4 w-4" /><span className="text-[13px] font-medium">Limpeza Web</span></div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/db-cleaner/duplicates'}>
+                                        <Link href="/db-cleaner/duplicates">Remover Duplicatas</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/db-cleaner/returns'}>
+                                        <Link href="/db-cleaner/returns">Tratar Retornos</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
@@ -703,7 +703,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Collapsible>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
-                              <div className="flex items-center gap-2"><SettingsIcon /><span>Configurações</span></div>
+                              <div className="flex items-center gap-2"><SettingsIcon className="h-4 w-4" /><span className="text-[13px] font-medium">Ajustes</span></div>
                               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
                           </SidebarMenuButton>
                       </CollapsibleTrigger>
@@ -711,23 +711,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                               {userProfile?.role === 'Admin' && (
                                 <>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/users'}><Link href="/users"><Users />Usuários do Sistema</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage"><Activity />Uso do Firebase</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts"><AlertTriangle />Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance"><ShieldAlert />Modo Manutenção</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens"><Package />Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token"><KeyRound />Meu Token</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/users'}><Link href="/users">Utilizadores</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage">Painel de Custos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts">Mural Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance">Controle Suspensão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens">Tickets Sistema</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token">Meu Ticket</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 </>
                               )}
                               {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
                                   <>
-                                    <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants"><UserPlus />Atendentes</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                    <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets"><Clock />Horários Padrão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                    <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants">Funcionários</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                    <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Timers Padrão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                   </>
                               )}
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs"><ClipboardList />Logs de Envio</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms"><Briefcase />BMs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Assinaturas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs">Central de Logs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms">Cofre de AdAccounts</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Gestão Planos Gerais</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
