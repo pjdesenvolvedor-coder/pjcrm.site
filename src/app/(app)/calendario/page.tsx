@@ -80,8 +80,8 @@ export default function CalendarPage() {
     return (
       <div className="flex h-full w-full items-center justify-center p-8 min-h-[500px]">
         <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-muted-foreground animate-pulse">Carregando calendário...</p>
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse">Carregando calendário...</p>
         </div>
       </div>
     );
@@ -99,7 +99,7 @@ export default function CalendarPage() {
             Visualize os clientes com assinatura a vencer em cada dia.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2 bg-background border rounded-lg p-1.5 shadow-sm">
           <Button variant="ghost" size="icon" onClick={prevMonth} className="hover:bg-muted">
             <ChevronLeft className="h-5 w-5" />
@@ -131,8 +131,8 @@ export default function CalendarPage() {
               const isTodayDay = isToday(day);
 
               return (
-                <div 
-                  key={day.toString()} 
+                <div
+                  key={day.toString()}
                   className={cn(
                     "min-h-[140px] bg-background p-3 transition-colors group relative flex flex-col",
                     !isCurrentMonth && "bg-muted/30 text-muted-foreground/50",
@@ -148,7 +148,7 @@ export default function CalendarPage() {
                     )}>
                       {format(day, 'd')}
                     </span>
-                    
+
                     {clientsOnDay.length > 0 && (
                       <Popover>
                         <PopoverTrigger asChild>
@@ -172,13 +172,13 @@ export default function CalendarPage() {
                                 {clientsOnDay.map(c => (
                                   <div key={c.id} className="flex flex-col py-2 px-3 hover:bg-muted rounded-md transition-colors gap-1">
                                     <div className="flex justify-between items-start gap-2">
-                                        <span className="font-medium text-sm line-clamp-1 flex-1" title={c.name}>{c.name}</span>
-                                        <Badge variant="outline" className="text-[10px] shrink-0 font-medium">
-                                            {c.status}
-                                        </Badge>
+                                      <span className="font-medium text-sm line-clamp-1 flex-1" title={c.name}>{c.name}</span>
+                                      <Badge variant="outline" className="text-[10px] shrink-0 font-medium">
+                                        {c.status}
+                                      </Badge>
                                     </div>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        {c.phone}
+                                      {c.phone}
                                     </span>
                                   </div>
                                 ))}
@@ -189,19 +189,19 @@ export default function CalendarPage() {
                       </Popover>
                     )}
                   </div>
-                  
+
                   {/* Miniature dots for visual effect when there are clients */}
                   {clientsOnDay.length > 0 && (
-                     <div className="mt-auto flex flex-wrap gap-1 px-1">
-                        {clientsOnDay.slice(0, 5).map((_, i) => (
-                           <div key={i} className="w-1.5 h-1.5 rounded-full bg-destructive/60" />
-                        ))}
-                        {clientsOnDay.length > 5 && (
-                           <div className="text-[10px] font-bold text-muted-foreground leading-none flex items-center">
-                              +
-                           </div>
-                        )}
-                     </div>
+                    <div className="mt-auto flex flex-wrap gap-1 px-1">
+                      {clientsOnDay.slice(0, 5).map((_, i) => (
+                        <div key={i} className="w-1.5 h-1.5 rounded-full bg-destructive/60" />
+                      ))}
+                      {clientsOnDay.length > 5 && (
+                        <div className="text-[10px] font-bold text-muted-foreground leading-none flex items-center">
+                          +
+                        </div>
+                      )}
+                    </div>
                   )}
 
                 </div>
@@ -213,3 +213,4 @@ export default function CalendarPage() {
     </div>
   );
 }
+
