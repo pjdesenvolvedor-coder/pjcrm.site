@@ -795,6 +795,47 @@ export default function CustomersPage() {
     }
   };
 
+  const handleResendAccess = async (client: Client) => {
+      if (!settings?.webhookToken) {
+          toast({ variant: 'destructive', title: 'Erro', description: 'Token de webhook não configurado.' });
+          return;
+      }
+
+      const deliveryMethod = client.deliveryMethod || 'credentials';
+      const messageTemplate = deliveryMethod === 'credentials' ? settings.deliveryMessage : settings.deliveryLinkMessage;
+
+      if (!messageTemplate) {
+          toast({ variant: 'destructive', title: 'Erro', description: 'Mensagem de entrega não configurada nas Configurações.' });
+          return;
+      }
+
+      let formattedMessage = messageTemplate
+          .replace(/{cliente}/g, client.name)
+          .replace(/{telefone}/g, client.phone)
+          .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : (client.email || 'N/A'))
+          .replace(/{senha}/g, client.password || 'N/A')
+          .replace(/{tela}/g, client.screen || 'N/A')
+          .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
+          .replace(/{link}/g, client.accessLink || 'N/A')
+          .replace(/{assinatura}/g, client.subscription || 'N/A')
+          .replace(/{vencimento}/g, client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : 'N/A')
+          .replace(/{valor}/g, client.amountPaid || '0,00')
+          .replace(/{status}/g, client.status);
+
+      try {
+          const response = await fetch('/api/send-message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: settings.webhookToken }),
+          });
+
+          if (!response.ok) throw new Error('Falha no envio');
+          toast({ title: 'Acesso reenviado', description: 'Mensagem com dados de acesso foi enviada para o cliente.' });
+      } catch (error) {
+          toast({ variant: 'destructive', title: 'Erro ao enviar', description: 'Não foi possível reenviar o acesso.' });
+      }
+  };
+
   const handleExport = () => {
     if (!clients || clients.length === 0) {
         toast({ variant: 'destructive', title: 'Nenhum dado', description: 'Não há clientes para exportar.' });
@@ -956,7 +997,29 @@ export default function CustomersPage() {
                     <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
                     <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
-                    <TableCell className="text-right space-x-1">
+                    <TableCell className="text-right space-x-1 whitespace-nowrap">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => handleResendAccess(client)}>
+                                        <Key className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Reenviar Acesso</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" className="h-8 w-8 text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => setDialogState({ view: 'add', client: { name: client.name, phone: client.phone, telegramUser: client.telegramUser } })}>
+                                        <ShoppingCart className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Nova Compra (Mesmo Cliente)</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => setDialogState({ view: 'message', client })}>
                             <MessageSquare className="h-4 w-4" />
                         </Button>
