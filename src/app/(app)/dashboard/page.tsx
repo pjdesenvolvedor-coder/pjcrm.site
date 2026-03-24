@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { ModeToggle } from '@/components/mode-toggle';
 
 const parseCurrency = (value?: string | null): number => {
   if (!value) return 0;
@@ -229,7 +230,9 @@ export default function DashboardPage() {
   if (isLoadingClients) {
     return (
       <div className="flex flex-col h-full">
-        <PageHeader title="Início" />
+        <PageHeader title="Início">
+           <ModeToggle />
+        </PageHeader>
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Skeleton className="h-28" />
@@ -251,7 +254,9 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <PageHeader title="Início" />
+      <PageHeader title="Início">
+        <ModeToggle />
+      </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
