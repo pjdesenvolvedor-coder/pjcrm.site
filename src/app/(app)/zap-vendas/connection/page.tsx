@@ -13,16 +13,16 @@ import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 
 type LiveStatus = {
-  status: 'disconnected' | 'connecting' | 'connected';
-  profileName?: string;
-  profilePicUrl?: string;
+    status: 'disconnected' | 'connecting' | 'connected';
+    profileName?: string;
+    profilePicUrl?: string;
 };
 
 export default function ZapVendasConnectionPage() {
     const { firestore, effectiveUserId, isUserLoading } = useFirebase();
     const { user } = useUser();
     const { toast } = useToast();
-    
+
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'qr_code' | 'error'>('disconnected');
     const [qrCode, setQrCode] = useState<string | null>(null);
     const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
@@ -59,7 +59,7 @@ export default function ZapVendasConnectionPage() {
                         profilePicUrl: statusData.fotoperfil,
                     };
                     setLiveStatus(newStatus);
-                    
+
                     if (newStatus.status === 'connected') {
                         if (connectionStatus === 'qr_code' || connectionStatus === 'connecting') {
                             setConnectionStatus('disconnected');
@@ -136,7 +136,7 @@ export default function ZapVendasConnectionPage() {
             toast({ variant: 'destructive', title: 'Falha na Conexão', description: error.message });
         }
     };
-    
+
     const handleDisconnect = async () => {
         if (!settings?.zapVendasToken) return;
         setIsDisconnecting(true);
@@ -173,7 +173,7 @@ export default function ZapVendasConnectionPage() {
                         <QrCode className="h-4 w-4 mr-2" /> Pronto para escanear
                     </Badge>
                     <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
-                        <Image src={qrCode} alt="QR Code" width={220} height={220} data-ai-hint="qr code"/>
+                        <Image src={qrCode} alt="QR Code" width={220} height={220} data-ai-hint="qr code" />
                     </div>
                     <p className="text-lg font-semibold text-muted-foreground animate-pulse">Aguardando conexão...</p>
                 </div>
@@ -185,9 +185,9 @@ export default function ZapVendasConnectionPage() {
                     <Badge variant="default" className="py-1 px-3 bg-green-100 text-green-800">Conectado</Badge>
                     {liveStatus.profilePicUrl && <Image src={liveStatus.profilePicUrl} alt="Foto" width={96} height={96} className="rounded-full my-4 shadow-lg" />}
                     <p className="font-semibold text-lg">{liveStatus.profileName}</p>
-                     <Button variant="destructive" onClick={handleDisconnect} disabled={isDisconnecting}>
+                    <Button variant="destructive" onClick={handleDisconnect} disabled={isDisconnecting}>
                         {isDisconnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : "Desconectar"}
-                      </Button>
+                    </Button>
                 </div>
             );
         }

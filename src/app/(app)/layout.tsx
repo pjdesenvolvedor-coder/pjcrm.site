@@ -36,6 +36,7 @@ import {
   FileText,
   Boxes,
   KeyRound,
+  CalendarDays,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -225,6 +226,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         logs: false,
         dbCleaner: true,
         zapVendas: true,
+        calendario: true,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -476,6 +478,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Início">
                         <Link href="/dashboard"><Home /><span>Início</span></Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.calendario && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === '/calendario'} tooltip="Calendário">
+                        <Link href="/calendario"><CalendarDays /><span>Calendário</span></Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}

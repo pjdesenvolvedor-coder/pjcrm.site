@@ -20,6 +20,7 @@ export type UserPermissions = {
   logs: boolean;
   dbCleaner: boolean;
   zapVendas: boolean;
+  calendario: boolean;
 };
 
 export type UserProfile = {
