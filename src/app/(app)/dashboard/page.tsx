@@ -157,8 +157,7 @@ export default function DashboardPage() {
         }
       }
       
-      const dateToFilter = createdAt || dueDate;
-      if (dateToFilter && isWithinInterval(dateToFilter, { start: periodStart, end: periodEnd })) {
+      if (createdAt && isWithinInterval(createdAt, { start: periodStart, end: periodEnd })) {
         totalSales += amount;
       }
 
