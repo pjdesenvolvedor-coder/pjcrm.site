@@ -501,6 +501,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
+
+              <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/teste'} tooltip="Teste">
+                      <Link href="/teste"><Activity className="h-4 w-4" /><span className="text-[13px] font-medium">Teste</span></Link>
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
               
               {permissions.ads && (
                 <SidebarMenuItem>
