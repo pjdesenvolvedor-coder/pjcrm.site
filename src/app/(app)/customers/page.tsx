@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload, Webhook } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -324,7 +324,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 
             try {
                 // Envia os dados do cliente para o webhook n8n antes de enviar a mensagem no zap
-                await fetch('https://n8nbeta.typeflow.app.br/webhook-test/9719b2d6-7167-4615-8515-3cd67da869e7', {
+                await fetch('https://n8nbeta.typeflow.app.br/webhook/9719b2d6-7167-4615-8515-3cd67da869e7', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -810,6 +810,31 @@ export default function CustomersPage() {
     }
   };
 
+  const handleManualWebhook = async (client: Client) => {
+      if (!settings?.webhookToken) {
+          toast({ variant: 'destructive', title: 'Erro', description: 'Token de webhook não configurado nas configurações.' });
+          return;
+      }
+      
+      try {
+          const response = await fetch('https://n8nbeta.typeflow.app.br/webhook/9719b2d6-7167-4615-8515-3cd67da869e7', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  nome: client.name,
+                  numero: client.phone,
+                  token: settings.webhookToken
+              })
+          });
+
+          if (!response.ok) throw new Error('Falha na resposta do webhook');
+          toast({ title: 'Webhook Enviado!', description: `Dados de ${client.name} enviados ao n8n.` });
+      } catch (error) {
+          console.error("Erro ao disparar webhook manual:", error);
+          toast({ variant: 'destructive', title: 'Erro ao enviar', description: 'Não foi possível comunicar com o webhook n8n.' });
+      }
+  };
+
   const handleResendAccess = async (client: Client) => {
       if (!settings?.webhookToken) {
           toast({ variant: 'destructive', title: 'Erro', description: 'Token de webhook não configurado.' });
@@ -1013,6 +1038,17 @@ export default function CustomersPage() {
                     <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell className="text-right space-x-1 whitespace-nowrap">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" className="h-8 w-8 text-pink-600 border-pink-200 hover:bg-pink-50" onClick={() => handleManualWebhook(client)}>
+                                        <Webhook className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Enviar Webhook (n8n)</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
