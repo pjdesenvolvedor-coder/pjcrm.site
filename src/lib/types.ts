@@ -84,6 +84,7 @@ export type Client = {
   sentRemarketingIds?: string[];
   agentId?: string;
   agentName?: string;
+  n8nExported?: boolean;
 };
 
 export type MessageLog = {

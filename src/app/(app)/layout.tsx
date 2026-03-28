@@ -729,6 +729,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                   <>
                                     <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants">Funcionários</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                     <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Timers Padrão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                    <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/save-contacts'}><Link href="/settings/save-contacts">Salvar Contatos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                   </>
                               )}
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs">Central de Logs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
