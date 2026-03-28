@@ -322,6 +322,21 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
                 .replace(/{valor}/g, values.amountPaid || '0,00').replace(/{status}/g, newStatus);
 
+            try {
+                // Envia os dados do cliente para o webhook n8n antes de enviar a mensagem no zap
+                await fetch('https://n8nbeta.typeflow.app.br/webhook-test/9719b2d6-7167-4615-8515-3cd67da869e7', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome: values.name,
+                        numero: values.phone,
+                        token: settings.webhookToken
+                    })
+                });
+            } catch (error) {
+                console.error("Falha ao enviar webhook n8n:", error);
+            }
+
             fetch('/api/send-message', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: formattedMessage, phoneNumber: values.phone, token: settings.webhookToken }),
