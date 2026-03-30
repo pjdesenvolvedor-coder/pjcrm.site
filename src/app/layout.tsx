@@ -6,11 +6,8 @@ import { FirebaseClientProvider } from '@/firebase';
 import { ThemeProvider } from "@/components/theme-provider"
 
 export const metadata: Metadata = {
-  title: 'EMPREENDIMENTOS - CRM',
+  title: 'PJ CRM',
   description: 'CRM para gestão de clientes e empreendimentos.',
-  icons: {
-    icon: 'https://i.imgur.com/sgoiuiz.png',
-  },
 };
 
 export default function RootLayout({
