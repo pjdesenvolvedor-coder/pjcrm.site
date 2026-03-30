@@ -47,6 +47,7 @@ import {
   BarChart3,
   NotepadText,
   Store,
+  Webhook,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -505,6 +506,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname === '/teste'} tooltip="Teste">
                       <Link href="/teste"><Activity className="h-4 w-4" /><span className="text-[13px] font-medium">Teste</span></Link>
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/webhook-receiver'} tooltip="Receber Webhook">
+                      <Link href="/webhook-receiver"><Webhook className="h-4 w-4" /><span className="text-[13px] font-medium">Receber Webhook</span></Link>
                   </SidebarMenuButton>
               </SidebarMenuItem>
               
