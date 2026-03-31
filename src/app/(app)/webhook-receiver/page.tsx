@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Trash2, Webhook, Copy, CheckCircle2, Clock, Globe } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useFirebase } from '@/firebase';
 
 interface WebhookLog {
   id: string;
@@ -22,15 +23,18 @@ export default function WebhookReceiverPage() {
   const [isConnected, setIsConnected] = useState(false);
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
+  const { effectiveUserId } = useFirebase();
 
   const [webhookUrl, setWebhookUrl] = useState('');
 
   useEffect(() => {
+    if (!effectiveUserId) return;
+
     if (typeof window !== 'undefined') {
-      setWebhookUrl(`${window.location.origin}/api/webhook-receiver`);
+      setWebhookUrl(`${window.location.origin}/api/webhook-receiver/${effectiveUserId}`);
     }
 
-    const eventSource = new EventSource('/api/webhook-receiver');
+    const eventSource = new EventSource(`/api/webhook-receiver/${effectiveUserId}`);
 
     eventSource.onopen = () => {
       setIsConnected(true);
@@ -67,9 +71,10 @@ export default function WebhookReceiverPage() {
     return () => {
       eventSource.close();
     };
-  }, []);
+  }, [effectiveUserId]);
 
   const handleCopy = () => {
+    if (!webhookUrl) return;
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     toast({ title: 'URL copiada para a área de transferência!' });
@@ -77,8 +82,9 @@ export default function WebhookReceiverPage() {
   };
 
   const clearLogs = async () => {
+    if (!effectiveUserId) return;
     try {
-      await fetch('/api/webhook-receiver', { method: 'DELETE' });
+      await fetch(`/api/webhook-receiver/${effectiveUserId}`, { method: 'DELETE' });
       setLogs([]);
       toast({ title: 'Logs limpos com sucesso.' });
     } catch (e) {
