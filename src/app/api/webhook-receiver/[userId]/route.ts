@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
+import { format } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
       const dueDate = new Date();
       dueDate.setMonth(dueDate.getMonth() + 1);
 
-      const clientData = {
+      const clientData: any = {
         userId: userId,
         name: b.nome || 'Cliente via Webhook',
         phone: b.telefone || '',
@@ -93,13 +94,16 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         password: b.senhaConta || null,
         screen: b.perfil || null,
         pinScreen: b.senhaPerfil || null,
+        accessLink: null,
         deliveryMethod: 'credentials',
         paymentMethod: 'PIX',
         status: 'Ativo',
         needsSupport: false,
-        createdAt: serverTimestamp(),
+        createdAt: new Date(), // Using Date object simplifies Upsell logic on client
         dueDate: Timestamp.fromDate(dueDate),
         upsellSent: false,
+        sentUpsellIds: [],
+        sentRemarketingIds: [],
         quantity: 1,
         clientType: null,
         agentName: 'Sistema (Webhook)',
@@ -107,6 +111,56 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
 
       await addDoc(collection(db, 'users', userId, 'clients'), clientData);
       console.log('Cliente adicionado com sucesso via Webhook');
+
+      // Fetch user settings to trigger automations (Delivery message & n8n webhook)
+      const settingsDocRef = doc(db, 'users', userId, 'settings', 'config');
+      const settingsSnap = await getDoc(settingsDocRef);
+      
+      if (settingsSnap.exists()) {
+        const settings = settingsSnap.data();
+        
+        const isDeliveryActive = settings.isDeliveryAutomationActive;
+        const deliveryMessageTemplate = settings.deliveryMessage;
+
+        if (isDeliveryActive && deliveryMessageTemplate && settings.webhookToken) {
+            let formattedMessage = deliveryMessageTemplate
+                .replace(/{cliente}/g, clientData.name)
+                .replace(/{telefone}/g, clientData.phone)
+                .replace(/{email}/g, clientData.email.join(', '))
+                .replace(/{senha}/g, clientData.password || 'N/A')
+                .replace(/{tela}/g, clientData.screen || 'N/A')
+                .replace(/{pin_tela}/g, clientData.pinScreen || 'N/A')
+                .replace(/{link}/g, clientData.accessLink || 'N/A')
+                .replace(/{assinatura}/g, clientData.subscription)
+                .replace(/{vencimento}/g, format(dueDate, 'dd/MM/yyyy'))
+                .replace(/{valor}/g, clientData.amountPaid || '0,00')
+                .replace(/{status}/g, clientData.status);
+
+            try {
+                // Envia os dados para a automação principal (n8n webhook)
+                await fetch('https://n8nbeta.typeflow.app.br/webhook/9719b2d6-7167-4615-8515-3cd67da869e7', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome: clientData.name,
+                        numero: clientData.phone,
+                        token: settings.webhookToken
+                    })
+                });
+            } catch (error) {
+                console.error("Falha ao enviar webhook n8n no backend:", error);
+            }
+
+            // Calls the local API endpoint that forwards to the actual Zap connection webhook
+            const baseUrl = req.headers.get('origin') || `http://${req.headers.get('host')}`;
+            fetch(`${baseUrl}/api/send-message`, {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: formattedMessage, phoneNumber: clientData.phone, token: settings.webhookToken }),
+            }).catch(console.error);
+        }
+      }
+
     } catch (e) {
       console.error('Erro ao adicionar cliente via webhook:', e);
     }
