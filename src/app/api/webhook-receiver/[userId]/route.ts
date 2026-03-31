@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { firebaseConfig } from '@/firebase/config';
 
 export const dynamic = 'force-dynamic';
+
+// Initialize Firebase App for the server route
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 interface WebhookLog {
   id: string;
@@ -67,6 +74,42 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
 
   if (!webhookLogsByUser[userId]) {
     webhookLogsByUser[userId] = [];
+  }
+
+  // Se o payload contém "nome" e "telefone", processamos para adicionar um cliente
+  if (body && typeof body === 'object' && ('nome' in body) && ('telefone' in body)) {
+    try {
+      const b = body as any;
+      const dueDate = new Date();
+      dueDate.setMonth(dueDate.getMonth() + 1);
+
+      const clientData = {
+        userId: userId,
+        name: b.nome || 'Cliente via Webhook',
+        phone: b.telefone || '',
+        subscription: b.produto || 'Produto Webhook',
+        amountPaid: b.valor ? b.valor.toString() : '0,00',
+        email: b.emailConta ? [b.emailConta] : [],
+        password: b.senhaConta || null,
+        screen: b.perfil || null,
+        pinScreen: b.senhaPerfil || null,
+        deliveryMethod: 'credentials',
+        paymentMethod: 'PIX',
+        status: 'Ativo',
+        needsSupport: false,
+        createdAt: serverTimestamp(),
+        dueDate: Timestamp.fromDate(dueDate),
+        upsellSent: false,
+        quantity: 1,
+        clientType: null,
+        agentName: 'Sistema (Webhook)',
+      };
+
+      await addDoc(collection(db, 'users', userId, 'clients'), clientData);
+      console.log('Cliente adicionado com sucesso via Webhook');
+    } catch (e) {
+      console.error('Erro ao adicionar cliente via webhook:', e);
+    }
   }
 
   webhookLogsByUser[userId].unshift(entry);
