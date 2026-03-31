@@ -783,10 +783,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SystemNotification />
         {children}
       </SidebarInset>
-      <ScheduledMessageHandler />
-      <DueDateMessageHandler />
-      <UpsellMessageHandler />
-      <RemarketingMessageHandler />
+      {/* 
+        <ScheduledMessageHandler />
+        <DueDateMessageHandler />
+        <UpsellMessageHandler />
+        <RemarketingMessageHandler /> 
+      */}
       <SubscriptionTimer />
     </SidebarProvider>
   );
