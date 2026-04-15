@@ -107,6 +107,10 @@ export function ScheduledMessageHandler() {
                         timestamp: serverTimestamp(),
                     });
 
+                    const msgToken = msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken 
+                        ? settings.billingWebhookToken 
+                        : token;
+
                     const response = await fetch('/api/send-group-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -114,7 +118,7 @@ export function ScheduledMessageHandler() {
                             jid: msg.jid,
                             message: msg.message,
                             imageUrl: msg.imageUrl,
-                            token: token,
+                            token: msgToken,
                         }),
                     });
 

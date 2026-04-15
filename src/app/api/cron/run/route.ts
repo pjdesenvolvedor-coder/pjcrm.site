@@ -238,9 +238,13 @@ export async function GET(request: Request) {
                 } catch (e) {}
 
                 if (processed) {
+                    const msgToken = msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken 
+                        ? settings.billingWebhookToken 
+                        : settings.webhookToken;
+
                     const response = await fetch(`${originUrl}/api/send-group-message`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: settings.webhookToken }),
+                        body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken }),
                     });
 
                     if (response.ok) {

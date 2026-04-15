@@ -48,6 +48,7 @@ const scheduleSchema = z.object({
     sendHour: z.string().min(1, { message: "A hora é obrigatória." }),
     sendMinute: z.string().min(1, { message: "O minuto é obrigatório." }),
     repeatDaily: z.boolean().default(false),
+    useBillingZap: z.boolean().default(false),
 });
 
 type ScheduleFormData = z.infer<typeof scheduleSchema>;
@@ -69,6 +70,7 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
             sendHour: new Date().getHours().toString().padStart(2, '0'),
             sendMinute: new Date().getMinutes().toString().padStart(2, '0'),
             repeatDaily: false,
+            useBillingZap: false,
         },
     });
 
@@ -152,6 +154,7 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
             repeatDaily: values.repeatDaily,
             status: 'Scheduled' as const,
             imageUrl: imageUrlDataUri || imagePreview || undefined,
+            useBillingZap: values.useBillingZap,
         };
         
         addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'scheduled_messages'), newScheduledMessageForFirestore);
@@ -266,8 +269,29 @@ function ScheduleMessageForm({ onFinished }: { onFinished: () => void }) {
                                 />
                             </div>
                         </div>
-                        <div className="flex items-center space-x-2 pt-2">
-                        <FormField
+                        <div className="flex flex-col gap-3 pt-4">
+                            <FormField
+                                control={form.control}
+                                name="useBillingZap"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                        <div className="space-y-0.5">
+                                            <FormLabel className="text-base">Usar ZAP Cobrança</FormLabel>
+                                            <p className="text-[13px] text-muted-foreground mr-4">
+                                                Habilitar envio pelo número de cobrança. Se desmarcado (padrão), o Hub Principal será utilizado.
+                                            </p>
+                                        </div>
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
                                 control={form.control}
                                 name="repeatDaily"
                                 render={({ field }) => (
@@ -382,6 +406,7 @@ export default function ScheduleMessagePage() {
                     <TableRow>
                         <TableHead>Grupo (JID)</TableHead>
                         <TableHead>Mensagem</TableHead>
+                        <TableHead>Canal</TableHead>
                         <TableHead>Data de Envio</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
@@ -397,6 +422,11 @@ export default function ScheduleMessagePage() {
                         <TableRow key={msg.id}>
                             <TableCell className="font-medium truncate max-w-xs">{msg.jid}</TableCell>
                             <TableCell className="truncate max-w-xs">{msg.message}</TableCell>
+                            <TableCell>
+                                <Badge variant="outline" className="text-xs font-normal">
+                                    {msg.useBillingZap ? 'ZAP Cobrança' : 'Hub Principal'}
+                                </Badge>
+                            </TableCell>
                             <TableCell>{format(msg.sendAt.toDate(), 'dd/MM/yyyy HH:mm')}</TableCell>
                             <TableCell>
                                 <Badge variant={getStatusVariant(msg.status)} className={cn(msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30', msg.status === 'Sent' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{translateStatus(msg.status)}</Badge>
@@ -426,7 +456,7 @@ export default function ScheduleMessagePage() {
                      ))}
                      {!isLoading && scheduledMessages?.length === 0 && (
                         <TableRow>
-                            <TableCell colSpan={5} className="text-center">Nenhum agendamento encontrado.</TableCell>
+                            <TableCell colSpan={6} className="text-center">Nenhum agendamento encontrado.</TableCell>
                         </TableRow>
                     )}
                 </TableBody>

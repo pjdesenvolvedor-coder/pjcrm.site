@@ -166,6 +166,7 @@ export type ScheduledMessage = {
   repeatDaily: boolean;
   status: 'Scheduled' | 'Sent' | 'Error' | 'Sending';
   claimedAt?: Timestamp | null;
+  useBillingZap?: boolean;
 };
 
 export type Token = {
