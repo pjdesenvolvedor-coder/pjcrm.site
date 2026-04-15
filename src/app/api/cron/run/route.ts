@@ -65,6 +65,11 @@ export async function GET(request: Request) {
             const activeClients = clients.filter(c => c.status === 'Ativo');
             const overdueStatusClients = clients.filter(c => c.status === 'Vencido');
 
+            // Determine which token to use for billing (collection) messages
+            const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
+                ? settings.billingWebhookToken 
+                : settings.webhookToken;
+
             /* --- 1. PROCESSAR VENCIMENTOS --- */
             if (settings.isDueDateMessageActive && settings.dueDateMessage) {
                 const overdueClients = activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now).slice(0, QUEUE_LIMIT);
@@ -97,7 +102,7 @@ export async function GET(request: Request) {
                         // Send webhook
                         await fetch(`${originUrl}/api/send-message`, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: settings.webhookToken }),
+                            body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: billingToken }),
                         }).catch(console.error);
                     }
                 }
@@ -140,7 +145,7 @@ export async function GET(request: Request) {
 
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: settings.webhookToken }),
+                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: billingToken }),
                                 }).catch(console.error);
                             }
                         }
@@ -176,7 +181,7 @@ export async function GET(request: Request) {
                                 rmkDone++;
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: config.message.replace(/{cliente}/g, client.name).replace(/{telefone}/g, client.phone), phoneNumber: client.phone, token: settings.webhookToken }),
+                                    body: JSON.stringify({ message: config.message.replace(/{cliente}/g, client.name).replace(/{telefone}/g, client.phone), phoneNumber: client.phone, token: billingToken }),
                                 }).catch(console.error);
                             }
                         }
@@ -207,7 +212,7 @@ export async function GET(request: Request) {
                                 rmkDone++;
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: config.message.replace(/{cliente}/g, client.name).replace(/{telefone}/g, client.phone), phoneNumber: client.phone, token: settings.webhookToken }),
+                                    body: JSON.stringify({ message: config.message.replace(/{cliente}/g, client.name).replace(/{telefone}/g, client.phone), phoneNumber: client.phone, token: billingToken }),
                                 }).catch(console.error);
                             }
                         }

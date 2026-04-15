@@ -129,6 +129,8 @@ export type Settings = {
   leadConvertedMessage?: string;
   leadLostMessage?: string;
   zapVendasToken?: string;
+  billingWebhookToken?: string;
+  useSeparateBillingZap?: boolean;
 };
 
 export type RemarketingConfig = {

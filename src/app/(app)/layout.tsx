@@ -48,6 +48,7 @@ import {
   NotepadText,
   Store,
   Webhook,
+  DollarSign,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -662,6 +663,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </SidebarMenuItem>
                 </DialogTrigger>
               )}
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/zap-cobranca'} tooltip="ZAP Cobrança">
+                  <Link href="/zap-cobranca">
+                    <DollarSign className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    <span className="flex-1 text-[13px] font-bold text-violet-700 dark:text-violet-400">ZAP Cobrança</span>
+                    <div className="group-data-[collapsible=icon]:hidden">
+                      {settings?.useSeparateBillingZap
+                        ? (settings?.billingWebhookToken ? <div className="h-2 w-2 rounded-full bg-violet-500" /> : <div className="h-2 w-2 rounded-full bg-destructive" />)
+                        : <div className="h-2 w-2 rounded-full bg-emerald-400" />}
+                    </div>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
               {permissions.zapVendas && (
                 <SidebarMenuItem>
