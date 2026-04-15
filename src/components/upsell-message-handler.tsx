@@ -46,7 +46,11 @@ export function UpsellMessageHandler() {
 
             const activeUpsells = settings?.upsells?.filter(u => u.isActive && u.upsellMessage) || [];
 
-            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !settings?.webhookToken || !user || !firestore) {
+            const billingToken = settings?.useSeparateBillingZap && settings?.billingWebhookToken 
+                ? settings?.billingWebhookToken 
+                : settings?.webhookToken;
+
+            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !billingToken || !user || !firestore) {
                 return;
             }
 
@@ -111,13 +115,17 @@ export function UpsellMessageHandler() {
                         .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                         .replace(/{status}/g, client.status);
 
+                    const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
+                        ? settings.billingWebhookToken 
+                        : settings.webhookToken;
+
                     const response = await fetch('/api/send-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             message: formattedMessage,
                             phoneNumber: client.phone,
-                            token: settings.webhookToken,
+                            token: billingToken,
                         }),
                     });
 

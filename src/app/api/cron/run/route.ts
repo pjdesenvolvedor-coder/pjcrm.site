@@ -56,7 +56,12 @@ export async function GET(request: Request) {
             if (!specificConfig || !specificConfig.exists()) continue;
             const settings = specificConfig.data() as Settings;
 
-            if (!settings.webhookToken) continue; // Sem token nao da pre enviar no flow
+            // Determine which token to use for billing (collection) messages
+            const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
+                ? settings.billingWebhookToken 
+                : settings.webhookToken;
+
+            if (!billingToken) continue; // Sem token algum nao da pra enviar cobrança
 
             // Vamos puxar todos os clientes Ativos (para Vencimentos, Upsell) e Vencidos (para Remarketing)
             const clientsSnapshot = await getDocs(collection(db, 'users', userId, 'clients'));

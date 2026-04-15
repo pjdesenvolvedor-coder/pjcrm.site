@@ -754,6 +754,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/save-contacts'}><Link href="/settings/save-contacts">Salvar Contatos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                   </>
                               )}
+                              <SidebarMenuSubItem>
+                                  <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/rebill'}>
+                                      <Link href="/settings/rebill" className="flex items-center gap-2">
+                                          <span>RECOBRAR</span>
+                                          <Badge variant="secondary" className="h-4 px-1 bg-red-500/10 text-red-600 text-[9px] border-none font-bold">HOJE</Badge>
+                                      </Link>
+                                  </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs">Central de Logs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms">Cofre de AdAccounts</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Gestão Planos Gerais</Link></SidebarMenuSubButton></SidebarMenuSubItem>

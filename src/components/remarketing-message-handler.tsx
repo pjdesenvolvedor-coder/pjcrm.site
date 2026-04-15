@@ -46,7 +46,11 @@ export function RemarketingMessageHandler() {
             const activeSignupRemarketings = settings?.postSignupRemarketings?.filter(r => r.isActive && r.message) || [];
             const activeDueDateRemarketings = settings?.postDueDateRemarketings?.filter(r => r.isActive && r.message) || [];
 
-            if (!clients || clients.length === 0 || (activeSignupRemarketings.length === 0 && activeDueDateRemarketings.length === 0) || !settings?.webhookToken || !user || !firestore) {
+            const billingToken = settings?.useSeparateBillingZap && settings?.billingWebhookToken 
+                ? settings?.billingWebhookToken 
+                : settings?.webhookToken;
+
+            if (!clients || clients.length === 0 || (activeSignupRemarketings.length === 0 && activeDueDateRemarketings.length === 0) || !billingToken || !user || !firestore) {
                 return;
             }
 
@@ -121,13 +125,17 @@ export function RemarketingMessageHandler() {
                         .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                         .replace(/{status}/g, client.status);
 
+                    const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
+                        ? settings.billingWebhookToken 
+                        : settings.webhookToken;
+
                     const response = await fetch('/api/send-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             message: formattedMessage,
                             phoneNumber: client.phone,
-                            token: settings.webhookToken,
+                            token: billingToken,
                         }),
                     });
 

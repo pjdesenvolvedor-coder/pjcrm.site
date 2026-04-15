@@ -19,6 +19,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Progress } from '@/components/ui/progress';
 
 const dueDateMessageSchema = z.object({
   isDueDateMessageActive: z.boolean().default(false),
@@ -75,6 +76,8 @@ export default function DueDateMessagePage() {
         description: `A variável ${variable} foi copiada para a área de transferência.`,
     })
   }
+
+
 
   if (isLoading) {
     return (
@@ -175,6 +178,8 @@ export default function DueDateMessagePage() {
             </Card>
           </form>
         </Form>
+
+
       </main>
     </div>
   );

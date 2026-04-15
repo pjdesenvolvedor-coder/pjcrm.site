@@ -44,7 +44,11 @@ export function DueDateMessageHandler() {
                 return;
             }
 
-            if (!activeClients || activeClients.length === 0 || !settings?.isDueDateMessageActive || !settings.dueDateMessage || !settings.webhookToken || !user || !firestore) {
+            const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
+                ? settings.billingWebhookToken 
+                : settings.webhookToken;
+
+            if (!activeClients || activeClients.length === 0 || !settings?.isDueDateMessageActive || !settings.dueDateMessage || !billingToken || !user || !firestore) {
                 return;
             }
 
@@ -92,13 +96,17 @@ export function DueDateMessageHandler() {
                         .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                         .replace(/{status}/g, 'Vencido');
 
+                    const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
+                        ? settings.billingWebhookToken 
+                        : settings.webhookToken;
+
                     const response = await fetch('/api/send-message', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             message: formattedMessage,
                             phoneNumber: client.phone,
-                            token: settings.webhookToken,
+                            token: billingToken,
                         }),
                     });
 
