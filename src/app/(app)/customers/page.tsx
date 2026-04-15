@@ -682,6 +682,7 @@ export default function CustomersPage() {
   const [dialogState, setDialogState] = useState<any>({ view: 'closed' });
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<any>({ key: 'name', direction: 'ascending' });
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   
   const settingsDocRef = useMemoFirebase(() => (effectiveUserId ? doc(firestore, 'users', effectiveUserId, 'settings', 'config') : null), [firestore, effectiveUserId]);
@@ -700,7 +701,13 @@ export default function CustomersPage() {
 
   const filteredClients = useMemo(() => {
     if (!clients) return [];
+    const now = new Date();
     let items = clients.filter(c => {
+        // Filter by overdue: check real dueDate instead of stored status
+        if (showOverdueOnly) {
+            const isOverdue = c.dueDate && c.dueDate.toDate() < now;
+            if (!isOverdue) return false;
+        }
         const search = searchTerm.toLowerCase();
         const emailsStr = Array.isArray(c.email) ? c.email.join(' ') : (c.email || '');
         return c.name.toLowerCase().includes(search) || 
@@ -712,8 +719,14 @@ export default function CustomersPage() {
             let aV = a[sortConfig.key];
             let bV = b[sortConfig.key];
             
-            if (aV?.toMillis) aV = aV.toMillis();
-            if (bV?.toMillis) bV = bV.toMillis();
+            // Special handling for amountPaid: parse as float
+            if (sortConfig.key === 'amountPaid') {
+                aV = parseFloat((aV || '0').toString().replace(',', '.')) || 0;
+                bV = parseFloat((bV || '0').toString().replace(',', '.')) || 0;
+            } else {
+                if (aV?.toMillis) aV = aV.toMillis();
+                if (bV?.toMillis) bV = bV.toMillis();
+            }
             
             if (aV === null || aV === undefined) return 1;
             if (bV === null || bV === undefined) return -1;
@@ -724,7 +737,7 @@ export default function CustomersPage() {
         });
     }
     return items;
-  }, [clients, searchTerm, sortConfig]);
+  }, [clients, searchTerm, sortConfig, showOverdueOnly]);
 
   const handleToggleSupport = (client: Client) => {
     if (!effectiveUserId) return;
@@ -982,6 +995,15 @@ export default function CustomersPage() {
       <PageHeader title="Todos os Clientes">
         <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar por nome, tel ou e-mail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[240px]" /></div>
         <div className="flex items-center gap-2">
+            <Button
+                variant={showOverdueOnly ? 'destructive' : 'outline'}
+                size="sm"
+                onClick={() => setShowOverdueOnly(v => !v)}
+                className="gap-1"
+            >
+                <CalendarDays className="h-4 w-4" />
+                {showOverdueOnly ? 'Vencidos ✓' : 'Vencidos'}
+            </Button>
             <Button variant="outline" size="sm" onClick={handleExport} className="gap-1 hidden md:flex">
                 <Download className="h-4 w-4" /> Exportar
             </Button>
@@ -1024,6 +1046,11 @@ export default function CustomersPage() {
                         Vencimento {sortConfig?.key === 'dueDate' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
                     </div>
                 </TableHead>
+                <TableHead className="cursor-pointer hover:text-foreground transition-colors" onClick={() => requestSort('amountPaid')}>
+                    <div className="flex items-center gap-1">
+                        Valor Pago {sortConfig?.key === 'amountPaid' && (sortConfig.direction === 'ascending' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                    </div>
+                </TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -1037,6 +1064,11 @@ export default function CustomersPage() {
                     <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
                     <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
+                    <TableCell>
+                        {client.amountPaid ? (
+                            <span className="font-medium text-green-700">R$ {client.amountPaid}</span>
+                        ) : '-'}
+                    </TableCell>
                     <TableCell className="text-right space-x-1 whitespace-nowrap">
                         <TooltipProvider>
                             <Tooltip>
