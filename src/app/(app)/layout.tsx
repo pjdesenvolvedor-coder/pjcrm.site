@@ -49,6 +49,7 @@ import {
   Store,
   Webhook,
   DollarSign,
+  RefreshCcw,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -725,51 +726,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </Collapsible>
                 </SidebarMenuItem>
               )}
-
-              {permissions.settings && (
-                <SidebarMenuItem>
-                  <Collapsible>
-                      <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
-                              <div className="flex items-center gap-2"><SettingsIcon className="h-4 w-4" /><span className="text-[13px] font-medium">Ajustes</span></div>
-                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                          <SidebarMenuSub>
-                              {userProfile?.role === 'Admin' && (
-                                <>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/users'}><Link href="/users">Utilizadores</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/usage'}><Link href="/settings/usage">Painel de Custos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/alerts'}><Link href="/settings/alerts">Mural Alertas</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/maintenance'}><Link href="/settings/maintenance">Controle Suspensão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens">Tickets Sistema</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token">Meu Ticket</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                </>
-                              )}
-                              {(userProfile?.role === 'Admin' || userProfile?.role === 'User') && (
-                                  <>
-                                    <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants">Funcionários</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                    <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Timers Padrão</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                    <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/save-contacts'}><Link href="/settings/save-contacts">Salvar Contatos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                  </>
-                              )}
-                              <SidebarMenuSubItem>
-                                  <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/rebill'}>
-                                      <Link href="/settings/rebill" className="flex items-center gap-2">
-                                          <span>RECOBRAR</span>
-                                          <Badge variant="secondary" className="h-4 px-1 bg-red-500/10 text-red-600 text-[9px] border-none font-bold">HOJE</Badge>
-                                      </Link>
-                                  </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/logs'}><Link href="/settings/logs">Central de Logs</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/bms'}><Link href="/settings/bms">Cofre de AdAccounts</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Gestão Planos Gerais</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                          </SidebarMenuSub>
-                      </CollapsibleContent>
-                  </Collapsible>
-                </SidebarMenuItem>
-              )}
+              
+              {/* RECOBRAR - Sempre visível para todos os usuários conforme pedido */}
+              <SidebarMenuItem>
+                  <SidebarMenuSubItem className="list-none px-0">
+                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/rebill'}>
+                          <Link href="/settings/rebill" className="flex items-center gap-2">
+                              <RefreshCcw className="h-4 w-4" />
+                              <span>RECOBRAR</span>
+                              <Badge variant="secondary" className="h-4 px-1 bg-red-500/10 text-red-600 text-[9px] border-none font-bold">HOJE</Badge>
+                          </Link>
+                      </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+              </SidebarMenuItem>
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm">
                 <DialogHeader className="p-6 border-b"><DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle></DialogHeader>

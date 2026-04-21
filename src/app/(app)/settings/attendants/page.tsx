@@ -140,7 +140,7 @@ function UserEditForm({ attendant, onFinished }: { attendant: UserProfile, onFin
                             <FormField
                                 key={key}
                                 control={form.control}
-                                name={`permissions.${key}`}
+                                name={`permissions.${key}` as any}
                                 render={({ field }) => (
                                     <FormItem className="flex flex-row items-center justify-between space-y-0 p-2 hover:bg-muted/50 rounded-sm">
                                         <FormLabel className="font-normal cursor-pointer text-xs">{label}</FormLabel>
@@ -266,7 +266,7 @@ export default function AttendantsPage() {
                         </Badge>
                     </TableCell>
                     <TableCell className="text-xs">
-                        {att.subscriptionEndDate ? format(attendant.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : 'Vitalício'}
+                        {att.subscriptionEndDate ? format(att.subscriptionEndDate.toDate(), 'dd/MM/yyyy') : 'Vitalício'}
                     </TableCell>
                     <TableCell className="text-right space-x-1">
                         <Button variant="outline" size="sm" onClick={() => handleGrantTrial(att)} className="text-[10px] h-7 px-2">+3 dias</Button>

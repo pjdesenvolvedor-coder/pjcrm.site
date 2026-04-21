@@ -352,16 +352,17 @@ export default function ScheduleMessagePage() {
     toast({ title: 'Agendamento Removido', description: 'A mensagem foi removida da lista de agendamentos.' });
   };
   
-   const getStatusVariant = (status: 'Scheduled' | 'Sent' | 'Error') => {
+   const getStatusVariant = (status: string) => {
     switch (status) {
       case 'Scheduled': return 'default';
-      case 'Sent': return 'secondary'; // Could be green
+      case 'Sent': return 'secondary';
       case 'Error': return 'destructive';
+      case 'Sending': return 'secondary';
       default: return 'outline';
     }
   };
 
-  const translateStatus = (status: 'Scheduled' | 'Sent' | 'Error'): string => {
+  const translateStatus = (status: string): string => {
     switch (status) {
       case 'Scheduled':
         return 'Agendado';
@@ -369,6 +370,8 @@ export default function ScheduleMessagePage() {
         return 'Enviado';
       case 'Error':
         return 'Erro';
+      case 'Sending':
+        return 'Enviando...';
       default:
         return status;
     }

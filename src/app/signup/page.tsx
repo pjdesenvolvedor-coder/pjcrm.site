@@ -63,6 +63,7 @@ function SignupForm() {
         dashboard: true, customers: false, inbox: false, automations: false,
         groups: false, shot: false, zapconnect: false, settings: false, users: false,
         attendants: false, notes: true, ads: false, pix: false, usage: false, estoque: false,
+        logs: false, dbCleaner: false, zapVendas: false, calendario: false
       };
 
       const profileData: any = {

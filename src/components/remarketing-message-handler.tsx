@@ -125,9 +125,9 @@ export function RemarketingMessageHandler() {
                         .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                         .replace(/{status}/g, client.status);
 
-                    const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
-                        ? settings.billingWebhookToken 
-                        : settings.webhookToken;
+                    const billingToken = settings?.useSeparateBillingZap && settings?.billingWebhookToken 
+                        ? settings?.billingWebhookToken 
+                        : settings?.webhookToken;
 
                     const response = await fetch('/api/send-message', {
                         method: 'POST',

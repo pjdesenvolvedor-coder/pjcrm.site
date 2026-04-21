@@ -10,8 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import type { Settings, Client } from '@/lib/types';
 import { format } from 'date-fns';
-import { Loader2, PlayCircle, LogOut, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, PlayCircle, LogOut, CheckCircle2, AlertCircle, RefreshCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { cn } from '@/lib/utils';
 
@@ -210,7 +211,7 @@ export default function RebillPage() {
                 </div>
 
                 <Button 
-                  size="xl" 
+                  size="lg" 
                   className={cn(
                     "w-full max-w-md h-16 text-lg font-bold shadow-2xl transition-all active:scale-95",
                     isProcessing ? "bg-slate-200" : "bg-red-600 hover:bg-red-700"
@@ -274,7 +275,7 @@ export default function RebillPage() {
                         <span className="font-semibold text-slate-700">{log.name}</span>
                       </div>
                       <div className="flex items-center gap-4">
-                        <Badge variant={log.status === 'success' ? 'success' : log.status === 'error' ? 'destructive' : 'secondary'} className="capitalize min-w-[80px] justify-center">
+                        <Badge variant={log.status === 'success' ? 'default' : log.status === 'error' ? 'destructive' : 'secondary'} className="capitalize min-w-[80px] justify-center">
                           {log.status === 'success' ? 'Enviado' : log.status === 'error' ? 'Erro' : 'Enviando...'}
                         </Badge>
                         <span className="text-xs text-slate-400 font-mono">{log.time}</span>
@@ -301,24 +302,4 @@ export default function RebillPage() {
   );
 }
 
-function RefreshCcw(props: any) {
-    return (
-      <svg
-        {...props}
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5" />
-        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-        <path d="M16 16h5v5" />
-      </svg>
-    )
-  }
+

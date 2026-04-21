@@ -227,9 +227,9 @@ export default function RemarketingPage() {
                             </FormItem>
                           )}
                         />
-                        {field.createdAt > 0 && (
+                        {field.createdAt !== undefined && field.createdAt > 0 && (
                             <p className="text-[10px] text-muted-foreground">
-                                Criado em: {new Date(field.createdAt).toLocaleString()} (Clientes antigos ignorados)
+                                Criado em: {new Date(field.createdAt!).toLocaleString()} (Clientes antigos ignorados)
                             </p>
                         )}
                       </CardContent>
@@ -312,9 +312,9 @@ export default function RemarketingPage() {
                             </FormItem>
                           )}
                         />
-                        {field.createdAt > 0 && (
+                        {field.createdAt !== undefined && field.createdAt > 0 && (
                             <p className="text-[10px] text-muted-foreground">
-                                Criado em: {new Date(field.createdAt).toLocaleString()} (Clientes antigos ignorados)
+                                Criado em: {new Date(field.createdAt!).toLocaleString()} (Clientes antigos ignorados)
                             </p>
                         )}
                       </CardContent>

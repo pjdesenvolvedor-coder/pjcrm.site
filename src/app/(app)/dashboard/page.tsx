@@ -26,10 +26,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { ModeToggle } from '@/components/mode-toggle';
 
-const parseCurrency = (value?: string | null): number => {
+const parseCurrency = (value?: string | number | null): number => {
   if (!value) return 0;
-  const cleanedValue = value.toString().replace(/\./g, '').replace(',', '.');
-  const number = parseFloat(cleanedValue);
+  if (typeof value === 'number') return value;
+  let str = value.toString().replace(/[R$\s]/g, '');
+  if (str.includes(',')) {
+      str = str.replace(/\./g, '').replace(',', '.');
+  } else if (!/\.\d{1,2}$/.test(str)) {
+      str = str.replace(/\./g, '');
+  }
+  const number = parseFloat(str);
   return isNaN(number) ? 0 : number;
 };
 

@@ -72,19 +72,19 @@ export function InboxView() {
               )}
             >
               <Avatar className="h-10 w-10 border">
-                <AvatarImage src={conv.avatarUrl} alt={conv.customerName} />
-                <AvatarFallback>{conv.customerName.charAt(0)}</AvatarFallback>
+                <AvatarImage src={conv.avatarUrl} alt={conv.customerName || 'Cliente'} />
+                <AvatarFallback>{(conv.customerName || 'C').charAt(0)}</AvatarFallback>
               </Avatar>
               <div className="flex-1 overflow-hidden">
                 <div className="flex items-baseline justify-between">
-                  <p className="font-semibold truncate">{conv.customerName}</p>
+                  <p className="font-semibold truncate">{conv.customerName || 'Cliente sem nome'}</p>
                   <p className="text-xs text-muted-foreground">
                     {conv.timestamp ? (new Date(conv.timestamp.seconds * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                   </p>
                 </div>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-sm text-muted-foreground truncate">{conv.lastMessage}</p>
-                  {conv.unreadCount > 0 && (
+                  {(conv.unreadCount || 0) > 0 && (
                     <Badge variant="default" className="w-5 h-5 flex items-center justify-center p-0">{conv.unreadCount}</Badge>
                   )}
                 </div>
@@ -138,7 +138,7 @@ function ConversationPanel({ conversation }: { conversation: Conversation }) {
       if (lastUserMessage) {
         setIsLoadingSuggestions(true);
         try {
-          const input: SuggestSmartRepliesInput = { message: lastUserMessage.content };
+          const input: SuggestSmartRepliesInput = { message: lastUserMessage.content || lastUserMessage.text || '' };
           const result = await suggestSmartReplies(input);
           setSuggestions(result.suggestions);
         } catch (error) {
@@ -182,11 +182,11 @@ function ConversationPanel({ conversation }: { conversation: Conversation }) {
     <>
       <header className="flex items-center gap-4 p-4 border-b">
         <Avatar className="h-10 w-10 border">
-          <AvatarImage src={conversation.avatarUrl} alt={conversation.customerName} />
-          <AvatarFallback>{conversation.customerName.charAt(0)}</AvatarFallback>
+          <AvatarImage src={conversation.avatarUrl} alt={conversation.customerName || 'Cliente'} />
+          <AvatarFallback>{(conversation.customerName || 'C').charAt(0)}</AvatarFallback>
         </Avatar>
         <div>
-          <h2 className="font-semibold text-lg">{conversation.customerName}</h2>
+          <h2 className="font-semibold text-lg">{conversation.customerName || 'Cliente'}</h2>
           <p className="text-sm text-muted-foreground">Online</p>
         </div>
       </header>
@@ -205,7 +205,7 @@ function ConversationPanel({ conversation }: { conversation: Conversation }) {
               >
                 <Avatar className="h-8 w-8 border">
                   <AvatarImage src={msg.avatarUrl} />
-                  <AvatarFallback>{msg.sender.charAt(0).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback>{(msg.sender || 'U').charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div
                   className={cn(

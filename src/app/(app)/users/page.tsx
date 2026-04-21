@@ -179,7 +179,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
     useEffect(() => {
         if (role === 'Admin') {
             permissionLabels.forEach(({ key }) => {
-                form.setValue(`permissions.${key}`, true);
+                form.setValue(`permissions.${key}` as any, true);
             });
         }
     }, [role, form]);
@@ -262,7 +262,7 @@ function UserEditForm({ user, onFinished }: { user: UserProfile, onFinished: () 
                             <FormField
                                 key={key}
                                 control={form.control}
-                                name={`permissions.${key}`}
+                                name={`permissions.${key}` as any}
                                 render={({ field }) => (
                                     <FormItem className="flex flex-row items-center justify-between space-y-0 p-2 hover:bg-muted/50 rounded-sm">
                                         <FormLabel className="font-normal cursor-pointer text-xs">{label}</FormLabel>

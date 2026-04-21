@@ -70,48 +70,31 @@ export async function GET(request: Request) {
             const activeClients = clients.filter(c => c.status === 'Ativo');
             const overdueStatusClients = clients.filter(c => c.status === 'Vencido');
 
-            // Determine which token to use for billing (collection) messages
-            const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
-                ? settings.billingWebhookToken 
-                : settings.webhookToken;
-
             /* --- 1. PROCESSAR VENCIMENTOS --- */
+            // O update de status (Ativo -> Vencido) deve ocorrer para todos, independentemente da mensagem
+            const allOverdueClients = activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now);
+            for (const client of allOverdueClients) {
+                const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
+                try {
+                    await runTransaction(db, async (txn) => {
+                        const cSnap = await txn.get(clientDocRef);
+                        if (cSnap.data()?.status === 'Ativo') {
+                            txn.update(clientDocRef, { status: 'Vencido' });
+                        }
+                    });
+                } catch (e) {}
+            }
+
+            // Disparo automático desativado temporariamente a pedido do usuário
+            /*
             if (settings.isDueDateMessageActive && settings.dueDateMessage) {
-                const overdueClients = activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now).slice(0, QUEUE_LIMIT);
+                const overdueClients = allOverdueClients.slice(0, QUEUE_LIMIT);
                 
                 for (const client of overdueClients) {
-                    const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
-                    let processed = false;
-                    try {
-                        await runTransaction(db, async (txn) => {
-                            const cSnap = await txn.get(clientDocRef);
-                            if (cSnap.data()?.status !== 'Ativo') throw new Error('Not ative');
-                            txn.update(clientDocRef, { status: 'Vencido' });
-                            processed = true;
-                        });
-                    } catch (e) {}
-
-                    if (processed) {
-                        let formattedMessage = settings.dueDateMessage
-                            .replace(/{cliente}/g, client.name)
-                            .replace(/{telefone}/g, client.phone)
-                            .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : client.email)
-                            .replace(/{assinatura}/g, client.subscription || '')
-                            .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : '')
-                            .replace(/{valor}/g, client.amountPaid || '0,00')
-                            .replace(/{senha}/g, client.password || 'N/A')
-                            .replace(/{tela}/g, client.screen || 'N/A')
-                            .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
-                            .replace(/{status}/g, 'Vencido');
-                        
-                        // Send webhook
-                        await fetch(`${originUrl}/api/send-message`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: billingToken }),
-                        }).catch(console.error);
-                    }
+                    // ... logica de envio removida temporariamente
                 }
             }
+            */
 
             /* --- 2. PROCESSAR UPSELL --- */
             const activeUpsells = settings.upsells?.filter(u => u.isActive && u.upsellMessage) || [];

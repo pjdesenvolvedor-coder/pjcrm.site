@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserPermissions = {
@@ -233,3 +232,35 @@ export type FullAccount = {
   createdAt: Timestamp;
   usedAt?: Timestamp;
 };
+
+export type Conversation = {
+  id: string;
+  jid: string;
+  name: string;
+  customerName?: string;
+  avatarUrl?: string;
+  lastMessage?: string;
+  lastTimestamp?: Timestamp;
+  timestamp?: Timestamp;
+  unreadCount?: number;
+};
+
+export type Message = {
+  id: string;
+  text?: string;
+  content?: string;
+  fromMe: boolean;
+  sender?: string;
+  avatarUrl?: string;
+  timestamp: Timestamp;
+  type?: string;
+};
+
+export type AutomatedMessageWorkflow = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  trigger?: string;
+  status?: string;
+};
+
