@@ -1058,12 +1058,17 @@ export default function CustomersPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={6} className="text-center">Carregando...</TableCell></TableRow>
-              ) : filteredClients.map((client) => (
+              ) : filteredClients.map((client) => {
+                  const now = new Date();
+                  const isActuallyOverdue = client.status === 'Ativo' && client.dueDate && (client.dueDate as any).toDate() <= now;
+                  const displayStatus = isActuallyOverdue ? 'Vencido' : client.status;
+                  
+                  return (
                 <TableRow key={client.id} className={cn(client.needsSupport && "bg-primary/5")}>
                     <TableCell><div className='flex items-center gap-2'>{client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}{client.name}</div></TableCell>
                     <TableCell><div className="text-xs text-muted-foreground max-w-[180px] truncate">{Array.isArray(client.email) ? client.email[0] : client.email}</div></TableCell>
                     <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
-                    <TableCell><Badge variant={client.status === 'Ativo' ? 'default' : 'destructive'} className={cn(client.status === 'Ativo' && 'bg-green-500/20 text-green-700')}>{client.status}</Badge></TableCell>
+                    <TableCell><Badge variant={displayStatus === 'Ativo' ? 'default' : 'destructive'} className={cn(displayStatus === 'Ativo' && 'bg-green-500/20 text-green-700')}>{displayStatus}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell>
                         {client.amountPaid ? (
@@ -1117,7 +1122,8 @@ export default function CustomersPage() {
                             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Cliente?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Não</AlertDialogCancel><AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', effectiveUserId!, 'clients', client.id))}>Sim</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                     </TableCell>
                 </TableRow>
-              ))}
+              )})}
+
             </TableBody>
           </Table>
         </Card>
