@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import type { Settings, Client } from '@/lib/types';
 import { format } from 'date-fns';
-import { Loader2, PlayCircle, LogOut, CheckCircle2, AlertCircle, RefreshCcw, Tag, Trash2 } from 'lucide-react';
+import { Loader2, PlayCircle, LogOut, CheckCircle2, AlertCircle, RefreshCcw, Tag, Trash2, AlertTriangle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
