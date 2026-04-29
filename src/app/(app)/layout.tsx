@@ -749,6 +749,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings'}><Link href="/settings">Geral</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants">Atendentes (Vendas)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token">Tokens n8n</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              {userProfile?.role === 'Admin' && (
+                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens">Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                              )}
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/save-contacts'}><Link href="/settings/save-contacts">Webhook Exportar</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Planos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Predefinições</Link></SidebarMenuSubButton></SidebarMenuSubItem>
@@ -766,6 +769,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               <RefreshCcw className="h-4 w-4" />
                               <span>RECOBRAR</span>
                               <Badge variant="secondary" className="h-4 px-1 bg-red-500/10 text-red-600 text-[9px] border-none font-bold">HOJE</Badge>
+                          </Link>
+                      </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+              </SidebarMenuItem>
+
+              {/* COBRAR VENCIDOS - Sempre visível para todos os usuários */}
+              <SidebarMenuItem>
+                  <SidebarMenuSubItem className="list-none px-0">
+                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/charge-overdue'}>
+                          <Link href="/charge-overdue" className="flex items-center gap-2 text-orange-600 dark:text-orange-500">
+                              <AlertTriangle className="h-4 w-4" />
+                              <span className="font-bold">COBRAR VENCIDOS</span>
                           </Link>
                       </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
