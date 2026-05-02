@@ -146,7 +146,7 @@ export async function GET(request: Request) {
 
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: billingToken }),
+                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: settings.webhookToken }),
                                 }).catch(console.error);
                             }
                         }
@@ -182,7 +182,7 @@ export async function GET(request: Request) {
                                 rmkDone++;
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: billingToken }),
+                                    body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: settings.webhookToken }),
                                 }).catch(console.error);
                             }
                         }
@@ -213,7 +213,7 @@ export async function GET(request: Request) {
                                 rmkDone++;
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: billingToken }),
+                                    body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: settings.webhookToken }),
                                 }).catch(console.error);
                             }
                         }
