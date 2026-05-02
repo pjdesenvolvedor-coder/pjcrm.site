@@ -166,6 +166,7 @@ export function ScheduledMessageHandler() {
                     }
 
                 } catch (error: any) {
+                    console.error("Error processing scheduled message:", msg.id, error);
                 } finally {
                     processingRef.current.delete(msg.id);
                 }
