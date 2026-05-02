@@ -92,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         amountPaid: b.valor ? b.valor.toString() : '0,00',
         email: (b.email || b.emailConta) ? [b.email || b.emailConta] : [],
         password: b.senha || b.senhaConta || null,
-        screen: b.perfil || null,
+        screen: b.tela || b.perfil || null,
         pinScreen: b.senhaPerfil || null,
         accessLink: null,
         deliveryMethod: 'credentials',
