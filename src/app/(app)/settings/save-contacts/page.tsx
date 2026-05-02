@@ -25,16 +25,17 @@ export default function SaveContactsPage() {
 
     const [delaySeconds, setDelaySeconds] = useState('3');
     const [isExporting, setIsExporting] = useState(false);
+    const [exportMode, setExportMode] = useState<'pending' | 'all'>('pending');
     const [progress, setProgress] = useState(0);
     const [logs, setLogs] = useState<{message: string, type: 'info'|'success'|'error', time: string}[]>([]);
     
     // Create unique groups by name and phone
     const pendingGroups = useMemo(() => {
         if (!clients) return [];
-        const pending = clients.filter(c => !c.n8nExported);
+        const filtered = exportMode === 'pending' ? clients.filter(c => !c.n8nExported) : clients;
         
         const groups = new Map<string, Client[]>();
-        pending.forEach(c => {
+        filtered.forEach(c => {
             const nameKey = (c.name || '').trim().toLowerCase();
             const phoneKey = (c.phone || '').trim();
             const key = `${nameKey}|${phoneKey}`;
@@ -46,7 +47,7 @@ export default function SaveContactsPage() {
         });
         
         return Array.from(groups.values());
-    }, [clients]);
+    }, [clients, exportMode]);
 
     const addLog = (message: string, type: 'info'|'success'|'error' = 'info') => {
         setLogs(prev => [{
@@ -162,20 +163,46 @@ export default function SaveContactsPage() {
 
     return (
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-            <PageHeader title="Salvar Contatos" description="Exporte em lote os seus clientes para o webhook do n8n." />
+            <PageHeader title="Salvar Contatos" description="Sincronize seus clientes com o n8n para salvar na agenda do WhatsApp." />
 
             <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-xl flex items-center gap-2">
-                            <SaveAll className="h-5 w-5 text-primary" /> Configurador de Envio
+                            <SaveAll className="h-5 w-5 text-primary" /> Configurar Sincronização
                         </CardTitle>
                         <CardDescription>
-                            Configure e inicie a importação dos seus contatos pendentes.
+                            Escolha se deseja enviar apenas novos contatos ou todos da base.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <div className="space-y-2">
+                        <div className="space-y-4 border-b pb-4">
+                            <label className="text-sm font-medium">Modo de Envio</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button 
+                                    type="button" 
+                                    variant={exportMode === 'pending' ? 'default' : 'outline'} 
+                                    className="h-14 flex flex-col gap-0"
+                                    onClick={() => setExportMode('pending')}
+                                    disabled={isExporting}
+                                >
+                                    <span className="text-sm font-bold">Apenas Pendentes</span>
+                                    <span className="text-[10px] opacity-70">Novos cadastros</span>
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    variant={exportMode === 'all' ? 'default' : 'outline'} 
+                                    className="h-14 flex flex-col gap-0 border-blue-200 text-blue-700 hover:bg-blue-50 data-[variant=default]:bg-blue-600"
+                                    onClick={() => setExportMode('all')}
+                                    disabled={isExporting}
+                                >
+                                    <span className="text-sm font-bold">Enviar TODOS</span>
+                                    <span className="text-[10px] opacity-70">Base completa</span>
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
                             <label className="text-sm font-medium">Intervalo de envio (Segundos)</label>
                             <Input 
                                 type="number" 
@@ -185,15 +212,15 @@ export default function SaveContactsPage() {
                                 onChange={e => setDelaySeconds(e.target.value)} 
                                 disabled={isExporting}
                             />
-                            <p className="text-xs text-muted-foreground">Recomendamos pelo menos 3 segundos para evitar bloqueios ou sobrecarga (rate limits).</p>
+                            <p className="text-xs text-muted-foreground">Recomendamos pelo menos 3 segundos para evitar bloqueios.</p>
                         </div>
 
                         <div className="p-4 bg-muted/50 rounded-lg border border-border flex items-start gap-3">
                             <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                             <div className="text-sm">
-                                <p className="font-semibold text-foreground">Deduplicação Inteligente</p>
+                                <p className="font-semibold text-foreground">{exportMode === 'all' ? 'Exportação Completa' : 'Deduplicação Inteligente'}</p>
                                 <p className="text-muted-foreground mt-1">
-                                    Encontramos <strong>{pendingGroups.length}</strong> contatos únicos aguardando envio (clientes com o mesmo nome e número contam apenas como 1 envio).
+                                    Encontramos <strong>{pendingGroups.length}</strong> contatos únicos para processar neste modo.
                                 </p>
                             </div>
                         </div>

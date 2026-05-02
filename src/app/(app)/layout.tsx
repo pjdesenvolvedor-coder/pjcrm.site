@@ -456,9 +456,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Badge variant="default" className="py-1 px-3 bg-green-100 text-green-800">Conectado</Badge>
           {liveStatus.profilePicUrl && <Image src={liveStatus.profilePicUrl} alt="Foto" width={96} height={96} className="rounded-full my-4 shadow-lg" />}
           <p className="font-semibold text-lg">{liveStatus.profileName}</p>
-           <Button variant="destructive" onClick={handleDisconnect} disabled={isDisconnecting}>
-              {isDisconnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : "Desconectar"}
+           <div className="flex flex-col gap-2 w-full">
+            <Button variant="outline" className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800" onClick={() => { setZapConnectOpen(false); router.push('/settings/save-contacts'); }}>
+                <SaveAll className="h-4 w-4" />
+                Salvar Contatos (Exportar)
             </Button>
+            <Button variant="destructive" className="w-full" onClick={handleDisconnect} disabled={isDisconnecting}>
+                {isDisconnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : "Desconectar"}
+            </Button>
+           </div>
         </div>
       );
     }
@@ -652,6 +658,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {/* GROUP 4: CONEXÕES WPP */}
               <div className="px-3 py-1 mt-4 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Conexões</div>
+              
+              <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/settings/save-contacts'} tooltip="Salvar Contatos">
+                      <Link href="/settings/save-contacts">
+                        <SaveAll className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <span className="flex-1 text-[13px] font-bold text-blue-700 dark:text-blue-400">Salvar Contatos</span>
+                      </Link>
+                  </SidebarMenuButton>
+              </SidebarMenuItem>
+
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
@@ -752,7 +768,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               {userProfile?.role === 'Admin' && (
                                   <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens">Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               )}
-                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/save-contacts'}><Link href="/settings/save-contacts">Webhook Exportar</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Planos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Predefinições</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
