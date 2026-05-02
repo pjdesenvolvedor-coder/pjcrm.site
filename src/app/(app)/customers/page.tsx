@@ -622,6 +622,8 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
             amountPaid: amount,
             dueDate: Timestamp.fromDate(newDueDate),
             createdAt: serverTimestamp(),
+            sentUpsellIds: [],
+            sentRemarketingIds: [],
             agentId: user.uid,
             agentName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Sistema',
         }, { merge: true });
