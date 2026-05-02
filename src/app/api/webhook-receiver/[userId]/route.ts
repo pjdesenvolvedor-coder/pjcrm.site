@@ -92,7 +92,13 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         amountPaid: b.valor ? b.valor.toString() : '0,00',
         email: (b.email || b.emailConta) ? [b.email || b.emailConta] : [],
         password: b.senha || b.senhaConta || null,
-        screen: b.tela || b.perfil || null,
+        screen: (() => {
+          const raw = b.tela || b.perfil || null;
+          if (!raw) return null;
+          const str = String(raw).trim();
+          const match = str.match(/\d+/);
+          return match ? match[0] : str;
+        })(),
         pinScreen: b.senhaPerfil || null,
         accessLink: null,
         deliveryMethod: 'credentials',

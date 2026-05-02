@@ -179,7 +179,12 @@ export default function UpsellPage() {
                                         <FormControl>
                                         <Switch
                                             checked={field.value}
-                                            onCheckedChange={field.onChange}
+                                            onCheckedChange={(checked) => {
+                                                field.onChange(checked);
+                                                if (checked) {
+                                                    form.setValue(`upsells.${index}.createdAt`, Date.now(), { shouldDirty: true });
+                                                }
+                                            }}
                                         />
                                         </FormControl>
                                     </div>

@@ -195,7 +195,15 @@ export default function RemarketingPage() {
                                 <FormLabel className="text-base">Ativar este remarketing</FormLabel>
                               </div>
                               <FormControl>
-                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                <Switch 
+                                  checked={field.value} 
+                                  onCheckedChange={(checked) => {
+                                      field.onChange(checked);
+                                      if (checked) {
+                                          form.setValue(`postSignupRemarketings.${index}.createdAt`, Date.now(), { shouldDirty: true });
+                                      }
+                                  }} 
+                                />
                               </FormControl>
                             </FormItem>
                           )}
@@ -280,7 +288,15 @@ export default function RemarketingPage() {
                                 <FormLabel className="text-base">Ativar este remarketing</FormLabel>
                               </div>
                               <FormControl>
-                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                <Switch 
+                                  checked={field.value} 
+                                  onCheckedChange={(checked) => {
+                                      field.onChange(checked);
+                                      if (checked) {
+                                          form.setValue(`postDueDateRemarketings.${index}.createdAt`, Date.now(), { shouldDirty: true });
+                                      }
+                                  }} 
+                                />
                               </FormControl>
                             </FormItem>
                           )}
