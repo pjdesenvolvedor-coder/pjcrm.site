@@ -26,6 +26,22 @@ function addServerLog(userId: string, type: string, clientName: string, target: 
     // We will await logs sequentially to be safe.
 }
 
+function formatMessageWithClient(template: string, client: Client): string {
+    if (!template) return '';
+    return template
+        .replace(/{cliente}/g, client.name || '')
+        .replace(/{telefone}/g, client.phone || '')
+        .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : (client.email || ''))
+        .replace(/{senha}/g, client.password || 'N/A')
+        .replace(/{tela}/g, client.screen || 'N/A')
+        .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
+        .replace(/{link}/g, client.accessLink || 'N/A')
+        .replace(/{assinatura}/g, client.subscription || 'N/A')
+        .replace(/{vencimento}/g, client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : 'N/A')
+        .replace(/{valor}/g, client.amountPaid || '0,00')
+        .replace(/{status}/g, client.status || 'Ativo');
+}
+
 export async function GET(request: Request) {
     try {
         const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -126,10 +142,7 @@ export async function GET(request: Request) {
 
                             if (processed) {
                                 upsellsDone++;
-                                let formattedMessage = upsell.upsellMessage
-                                    .replace(/{cliente}/g, client.name)
-                                    .replace(/{telefone}/g, client.phone)
-                                    .replace(/{status}/g, client.status);
+                                let formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -169,7 +182,7 @@ export async function GET(request: Request) {
                                 rmkDone++;
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: config.message.replace(/{cliente}/g, client.name).replace(/{telefone}/g, client.phone), phoneNumber: client.phone, token: billingToken }),
+                                    body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: billingToken }),
                                 }).catch(console.error);
                             }
                         }
@@ -200,7 +213,7 @@ export async function GET(request: Request) {
                                 rmkDone++;
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: config.message.replace(/{cliente}/g, client.name).replace(/{telefone}/g, client.phone), phoneNumber: client.phone, token: billingToken }),
+                                    body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: billingToken }),
                                 }).catch(console.error);
                             }
                         }
