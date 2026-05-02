@@ -105,10 +105,9 @@ export default function ZapCobrancaPage() {
     setQrCode(null);
     if (!effectiveUserId) return;
     if (!separate) {
-      // Use same ZAP — clear billing token
       setDocumentNonBlocking(
         doc(firestore, 'users', effectiveUserId, 'settings', 'config'),
-        { useSeparateBillingZap: false, billingWebhookToken: null },
+        { useSeparateBillingZap: false },
         { merge: true }
       );
       toast({ title: 'Configurado!', description: 'ZAP Cobrança usará o mesmo Hub Principal.' });
@@ -139,6 +138,15 @@ export default function ZapCobrancaPage() {
     }
     setConnectionState('connecting');
     setQrCode(null);
+
+    // Auto-save token if it's a separate ZAP to prevent loss
+    if (useSeparate && tokenInput.trim()) {
+      setDocumentNonBlocking(
+        doc(firestore, 'users', effectiveUserId!, 'settings', 'config'),
+        { billingWebhookToken: tokenInput.trim(), useSeparateBillingZap: true },
+        { merge: true }
+      );
+    }
     try {
       const res = await fetch('https://n8nbeta.typeflow.app.br/webhook/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
         method: 'POST',
