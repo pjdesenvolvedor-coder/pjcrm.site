@@ -45,6 +45,25 @@ interface LinkItem {
   createdAt: any;
 }
 
+function getDuplicatesInfo(items: { id: string; key: string }[]) {
+  const seen = new Set<string>();
+  const duplicateIds: string[] = [];
+  
+  items.forEach(item => {
+    const normKey = item.key.toLowerCase().trim();
+    if (seen.has(normKey)) {
+      duplicateIds.push(item.id);
+    } else {
+      seen.add(normKey);
+    }
+  });
+  
+  return {
+    count: duplicateIds.length,
+    idsToRemove: duplicateIds
+  };
+}
+
 export default function LinksPage() {
   const { firestore, effectiveUserId } = useFirebase();
   const { toast } = useToast();
@@ -170,6 +189,22 @@ export default function LinksPage() {
     });
   };
 
+  // Remove duplicates helper
+  const handleRemoveDuplicates = (ids: string[], service: string) => {
+    if (!effectiveUserId || ids.length === 0) return;
+
+    ids.forEach(id => {
+      const docRef = doc(firestore, 'users', effectiveUserId, 'claro_links', id);
+      deleteDocumentNonBlocking(docRef);
+    });
+
+    toast({
+      title: `${ids.length} duplicado(s) removido(s)!`,
+      description: `Limpeza concluída para a tag ${service}.`,
+      className: "bg-amber-600 text-white border-none"
+    });
+  };
+
   // Format creation date, hour and minute (ex: 19/05 às 11:36)
   const formatTimestamp = (timestamp?: any) => {
     if (!timestamp) return 'Agora mesmo';
@@ -250,6 +285,9 @@ export default function LinksPage() {
           <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {STREAMING_SERVICES.map(service => {
               const serviceLinks = groupedLinks[service] || [];
+              const duplicatesInfo = getDuplicatesInfo(
+                serviceLinks.map(l => ({ id: l.id, key: l.link }))
+              );
               const style = SERVICE_STYLES[service] || { bg: "", border: "hover:border-primary/50", text: "text-primary", badgeBg: "bg-primary/20" };
 
               return (
@@ -263,14 +301,32 @@ export default function LinksPage() {
                   )}
                 >
                   <CardHeader className="pb-3 border-b bg-muted/20">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center gap-2">
                       <CardTitle className={cn("text-base font-bold flex items-center gap-1.5", style.text)}>
                         <Sparkles className="h-4 w-4 shrink-0" />
                         {service}
                       </CardTitle>
-                      <Badge className={cn("font-bold text-xs py-0.5 px-2.5", style.badgeBg)} variant="secondary">
-                        {serviceLinks.length} {serviceLinks.length === 1 ? 'disponível' : 'disponíveis'}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {duplicatesInfo.count > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-none font-bold text-xs py-0.5 px-2 animate-pulse shrink-0">
+                              {duplicatesInfo.count} {duplicatesInfo.count === 1 ? 'duplicado' : 'duplicados'}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 hover:text-amber-700 shrink-0"
+                              title="Remover duplicados"
+                              onClick={() => handleRemoveDuplicates(duplicatesInfo.idsToRemove, service)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                        <Badge className={cn("font-bold text-xs py-0.5 px-2.5 shrink-0", style.badgeBg)} variant="secondary">
+                          {serviceLinks.length} {serviceLinks.length === 1 ? 'disponível' : 'disponíveis'}
+                        </Badge>
+                      </div>
                     </div>
                   </CardHeader>
 
