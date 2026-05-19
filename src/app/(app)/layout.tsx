@@ -51,6 +51,7 @@ import {
   DollarSign,
   RefreshCcw,
   SaveAll,
+  Link2,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -241,6 +242,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         dbCleaner: true,
         zapVendas: true,
         calendario: true,
+        linksClaro: true,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -576,6 +578,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/estoque/contas-completas'}>
                                         <Link href="/estoque/contas-completas">Gestão de Contas</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {permissions.linksClaro && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/links-claro')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Links Claro">
+                              <div className="flex items-center gap-2">
+                                <Link2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                <span className="text-[13px] font-bold text-blue-700 dark:text-blue-400">Links Claro</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/links-claro/logins'}>
+                                        <Link href="/links-claro/logins">1 Logins</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/links-claro/links'}>
+                                        <Link href="/links-claro/links">2 Links</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                           </SidebarMenuSub>

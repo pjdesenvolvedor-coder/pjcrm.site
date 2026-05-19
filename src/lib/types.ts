@@ -20,6 +20,7 @@ export type UserPermissions = {
   dbCleaner: boolean;
   zapVendas: boolean;
   calendario: boolean;
+  linksClaro: boolean;
 };
 
 export type UserProfile = {
