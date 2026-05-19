@@ -602,12 +602,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/links-claro/logins'}>
-                                        <Link href="/links-claro/logins">1 Logins</Link>
+                                        <Link href="/links-claro/logins">Logins</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>
                                     <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/links-claro/links'}>
-                                        <Link href="/links-claro/links">2 Links</Link>
+                                        <Link href="/links-claro/links">Links</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                           </SidebarMenuSub>

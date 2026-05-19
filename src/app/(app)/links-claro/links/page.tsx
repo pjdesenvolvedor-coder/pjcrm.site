@@ -22,11 +22,7 @@ const STREAMING_SERVICES = [
   "Apple",
   "Max",
   "Prime Video",
-  "Disney",
-  "Globo",
-  "Globo + Premiere",
-  "Globo + Telecine",
-  "Globo Completa"
+  "Disney"
 ];
 
 // Aesthetic mapping for card styling
