@@ -23,6 +23,12 @@ export default function TwoFactorSettings() {
   );
   const { data: settings } = useDoc(settingsDocRef);
 
+  const configDocRef = useMemoFirebase(
+    () => (effectiveUserId ? doc(firestore, 'users', effectiveUserId, 'settings', 'config') : null),
+    [firestore, effectiveUserId]
+  );
+  const { data: config } = useDoc(configDocRef);
+
   const [useSeparate, setUseSeparate] = useState<boolean>(false);
   const [token, setToken] = useState('');
   const [template, setTemplate] = useState('Seu código de verificação é {codigo}');
@@ -33,10 +39,19 @@ export default function TwoFactorSettings() {
       toast({ title: 'Preencha número e mensagem', variant: 'destructive' });
       return;
     }
+    const resolvedToken = useSeparate && token.trim()
+      ? token.trim()
+      : (config?.webhookToken ?? '');
+
+    if (!resolvedToken) {
+      toast({ title: 'Nenhum Token configurado para envio', variant: 'destructive' });
+      return;
+    }
+
     const payload = {
       text: manualMessage,
       number: manualNumber.replace(/\D/g, ''),
-      token: 'cb43cc8e-78bf-4382-b362-2f50edfa38bd',
+      token: resolvedToken,
     };
     try {
       const resp = await fetch('https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580', {
