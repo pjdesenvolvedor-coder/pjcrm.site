@@ -716,11 +716,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === '/settings/2fa'} tooltip="Configurações 2FA">
-                      <Link href="/settings/2fa">
-                        <SettingsIcon className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                        <span className="flex-1 text-[13px] font-bold text-purple-700 dark:text-purple-400">2FA</span>
-                      </Link>
+                    <SidebarMenuButton tooltip="Conexão Automática">
+                      <MessageSquareShare className="h-4 w-4 text-emerald-600 dark:text-emerald-500" /><span className="flex-1 text-[13px] font-bold text-emerald-700 dark:text-emerald-400">Hub Principal</span>
+                      <div className="group-data-[collapsible=icon]:hidden">
+                        {liveStatus?.status === 'connected' ? <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> : <div className="h-2 w-2 rounded-full bg-destructive" />}
+                      </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </DialogTrigger>

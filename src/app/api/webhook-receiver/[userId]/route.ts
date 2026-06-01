@@ -77,63 +77,6 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
     webhookLogsByUser[userId] = [];
   }
 
-  // Se o payload é de autenticação de 2 fatores (Conteudo === "2fatores")
-  if (body && typeof body === 'object' && ('Conteudo' in body || 'conteudo' in body) && ('NumeroCliente' in body || 'numerocliente' in body) && ('codigofa' in body)) {
-    try {
-      const b = body as any;
-      const conteudo = (b.Conteudo || b.conteudo || '').toString().toLowerCase();
-      
-      if (conteudo === '2fatores') {
-        const numeroCliente = (b.NumeroCliente || b.numerocliente || '').toString();
-        const codigofa = (b.codigofa || '').toString();
-        
-        // Fetch user settings to trigger 2FA sending (n8n webhook)
-        const settingsDocRef = doc(db, 'users', userId, 'settings', 'config');
-        const settingsSnap = await getDoc(settingsDocRef);
-
-        if (settingsSnap.exists()) {
-          const settings = settingsSnap.data();
-
-          // Use custom 2FA template if provided, otherwise fallback to default
-          const template: string = settings.twoFactorTemplate || `🔒 *Código de Acesso*\n\nSeu código de verificação é: *${codigofa}*\n\nInsira este código na tela de login para prosseguir.`;
-          const formattedMessage = template.replace(/\{codigo\}/g, codigofa);
-
-          let cleanedPhone = numeroCliente.replace(/\D/g, '');
-          if (cleanedPhone.startsWith('55') && cleanedPhone.length >= 12) {
-            cleanedPhone = cleanedPhone.substring(2);
-          }
-
-          // Determine which Zap token to use
-          let zapToken = settings.webhookToken; // fallback
-          if (settings.selectedZapId && settings.zapTokens) {
-            const selected = settings.zapTokens.find((z: any) => z.id === settings.selectedZapId);
-            if (selected && selected.token) {
-              zapToken = selected.token;
-            }
-          }
-
-          const baseUrl = req.headers.get('origin') || `http://${req.headers.get('host')}`;
-          if (zapToken) {
-            fetch(`${baseUrl}/api/send-message`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                message: formattedMessage,
-                phoneNumber: cleanedPhone,
-                token: zapToken,
-              }),
-            }).catch(console.error);
-            console.log(`2FA message triggered with custom template for ${cleanedPhone}`);
-          } else {
-            console.warn('Zap token not configured for 2FA');
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Erro ao processar webhook de 2 fatores:', e);
-    }
-  }
-
   // Se o payload contém "nome" e "telefone", processamos para adicionar um cliente
   if (body && typeof body === 'object' && ('nome' in body) && ('telefone' in body)) {
     try {
