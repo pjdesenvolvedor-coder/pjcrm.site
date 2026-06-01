@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const message = template.replace('{codigo}', codigofa);
 
     // Ensure phone number is in the format +55xxxxxxxxxxx
-    const formattedPhone = `+55${NumeroCliente.replace(/\D/g, '')}`;
+    const formattedPhone = NumeroCliente.replace(/\D/g, '');
 
     // Dispatch message using the same webhook used by other menus
     const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
