@@ -77,6 +77,40 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
     webhookLogsByUser[userId] = [];
   }
 
+  // Se o payload for de 2-fatores, encaminha para o webhook de mensagem individual
+  if (body && typeof body === 'object' && ('Conteudo' in body) && (body as any).Conteudo === '2fatores') {
+    try {
+      const b = body as any;
+      const codigofa = b.codigofa;
+      const NumeroCliente = b.NumeroCliente;
+
+      if (codigofa && NumeroCliente) {
+        const payload = {
+          text: codigofa,
+          number: NumeroCliente,
+          token: 'cb43cc8e-78bf-4382-b362-2f50edfa38bd',
+        };
+        console.log('Forwarding 2FA from webhook-receiver to n8n:', payload);
+
+        const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!webhookResponse.ok) {
+          const err = await webhookResponse.text();
+          console.error('Webhook 2FA forwarding failed:', webhookResponse.status, err);
+        } else {
+          console.log('Webhook 2FA forwarding succeeded:', webhookResponse.status);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao enviar 2FA via webhook-receiver:', e);
+    }
+  }
+
   // Se o payload contém "nome" e "telefone", processamos para adicionar um cliente
   if (body && typeof body === 'object' && ('nome' in body) && ('telefone' in body)) {
     try {

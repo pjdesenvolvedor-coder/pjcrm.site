@@ -1,9 +1,8 @@
 // src/app/api/2-fatores/route.ts
 
 import { NextResponse } from 'next/server';
-import { getZapToken } from '@/lib/zapToken';
-import { firestore } from '@/firebase';
-import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firestore';
+
+export const runtime = 'nodejs';
 
 /**
  * Expected payload:
@@ -16,6 +15,7 @@ import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firesto
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    console.log('Received payload:', body);
     const { Conteudo, NumeroCliente, codigofa } = body as {
       Conteudo?: string;
       NumeroCliente?: string;
@@ -28,14 +28,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // Find any user (we assume there is at least one) to get their 2‑Fatores config
-    const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)));
-    const firstUserDoc = usersSnap.docs[0];
-    const settingsDoc = firstUserDoc
-      ? await getDoc(doc(firestore, 'users', firstUserDoc.id, 'settings', '2fatores'))
-      : null;
-    const settings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
     // Token fixo fornecido pelo usuário
     // Mensagem será apenas o código de 2‑FA recebido
