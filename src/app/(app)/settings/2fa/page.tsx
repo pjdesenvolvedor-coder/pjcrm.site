@@ -14,7 +14,7 @@ import { useFirebase, useUser, setDocumentNonBlocking } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 interface ZapToken {
@@ -32,6 +32,7 @@ interface Settings {
 const schema = z.object({
   twoFactorTemplate: z.string().min(1, 'Modelo obrigatório'),
   selectedZapId: z.string().optional(),
+  twoFactorZapId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -62,6 +63,7 @@ export default function TwoFASettingsPage() {
         reset({
           twoFactorTemplate: data.twoFactorTemplate ?? '',
           selectedZapId: data.selectedZapId ?? '',
+          twoFactorZapId: data.twoFactorZapId ?? '',
         });
       }
     };
@@ -75,6 +77,7 @@ export default function TwoFASettingsPage() {
       twoFactorTemplate: values.twoFactorTemplate,
       zapTokens,
       selectedZapId: values.selectedZapId,
+      twoFactorZapId: values.twoFactorZapId,
     } as Settings;
     await setDocumentNonBlocking(docRef, payload, { merge: true });
     toast({ title: 'Configurações salvas', description: 'Modelo 2FA e Zaps atualizados.' });
@@ -115,6 +118,26 @@ export default function TwoFASettingsPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Textarea {...register('twoFactorTemplate')} placeholder="🔒 *Código de Acesso*\n\nSeu código é {codigo}" rows={4} />
             <div className="flex items-center space-x-2">
+              {/* Zap para 2FA */}
+              <Controller
+                control={control}
+                name="twoFactorZapId"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Zap 2FA (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {zapTokens.map((z) => (
+                        <SelectItem key={z.id} value={z.id}>
+                          {z.name ?? z.token.slice(0, 6) + '...'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {/* Zap principal (mantido) */}
               <Select name="selectedZapId" value={selectedZapId} onValueChange={(v) => (document.getElementById('selectedZapId') as HTMLInputElement).value = v}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Selecione o Zap" />

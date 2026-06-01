@@ -17,6 +17,8 @@ const schema = z.object({
     })
   ).optional(),
   selectedZapId: z.string().optional(),
+  // New field for 2FA Zap selection
+  twoFactorZapId: z.string().optional(),
 });
 
 export async function PATCH(request: Request) {
