@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     // Payload exactly as the PowerShell command expects
     const payload = {
       text: codigofa,
-      number: NumeroCliente.replace(/\D/g, ''),
+      number: NumeroCliente,
       token: 'cb43cc8e-78bf-4382-b362-2f50edfa38bd',
     };
     console.log('Payload to webhook:', payload);
