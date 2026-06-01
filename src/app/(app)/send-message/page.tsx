@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ interface Settings {
 const schema = z.object({
   message: z.string().min(1, 'Mensagem é obrigatória'),
   phoneNumber: z.string().min(1, 'Número do cliente é obrigatório'),
-  selectedZapId: z.string().optional(),
+  selectedZapId: z.string().min(1, 'Selecione um Zap'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -41,7 +41,7 @@ export default function SendMessagePage() {
 
   const [zapTokens, setZapTokens] = useState<ZapToken[]>([]);
 
-  const { register, handleSubmit, reset, watch } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
   });
 
@@ -86,8 +86,6 @@ export default function SendMessagePage() {
     }
   };
 
-  const selectedZapId = watch('selectedZapId');
-
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="Enviar Mensagem" description="Envie uma mensagem personalizada usando um Zap configurado." />
@@ -99,25 +97,32 @@ export default function SendMessagePage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Textarea {...register('message')} placeholder="Digite sua mensagem..." rows={4} />
+            {errors.message && <p className="text-sm text-red-500">{errors.message.message}</p>}
             <Input {...register('phoneNumber')} placeholder="Número do cliente (apenas dígitos)" />
-            <div className="flex items-center space-x-2">
-              <Select
+            {errors.phoneNumber && <p className="text-sm text-red-500">{errors.phoneNumber.message}</p>}
+            <div className="flex flex-col gap-2">
+              <Controller
+                control={control}
                 name="selectedZapId"
-                value={selectedZapId}
-                onValueChange={(v) => (document.getElementById('selectedZapId') as HTMLInputElement).value = v}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Selecione o Zap" />
-                </SelectTrigger>
-                <SelectContent>
-                  {zapTokens.map((z) => (
-                    <SelectItem key={z.id} value={z.id}>
-                      {z.name ?? z.token.slice(0, 6) + '...'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input id="selectedZapId" type="hidden" {...register('selectedZapId')} />
+                render={({ field }) => (
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Selecione o Zap" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {zapTokens.map((z) => (
+                        <SelectItem key={z.id} value={z.id}>
+                          {z.name ?? z.token.slice(0, 6) + '...'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.selectedZapId && <p className="text-sm text-red-500">{errors.selectedZapId.message}</p>}
             </div>
             <Button type="submit">Enviar Mensagem</Button>
           </form>
