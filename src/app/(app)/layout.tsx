@@ -699,6 +699,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/send-message'} tooltip="Enviar Mensagem">
+                    <Link href="/send-message">
+                      <Send className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                      <span className="flex-1 text-[13px] font-bold text-indigo-700 dark:text-indigo-400">Enviar Mensagem</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               )}
 
               {/* GROUP 4: CONEXÕES WPP */}
