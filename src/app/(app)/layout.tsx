@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -52,6 +51,7 @@ import {
   RefreshCcw,
   SaveAll,
   Link2,
+  ShieldCheck,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -739,6 +739,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/2-fatores'} tooltip="2-Fatores (SiteVendas)">
+                    <Link href="/2-fatores">
+                      <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span className="flex-1 text-[13px] font-bold text-green-700 dark:text-green-400">2-Fatores (SiteVendas)</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
               {permissions.zapVendas && (
                 <SidebarMenuItem>
