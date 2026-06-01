@@ -38,29 +38,22 @@ export async function POST(request: Request) {
     const settings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
     // Token fixo fornecido pelo usuário
-    const token = 'cb43cc8e-78bf-4382-b362-2f50edfa38bd';
     // Mensagem será apenas o código de 2‑FA recebido
 
-    // Replace placeholder with actual code
-    const message = codigofa;
-
-    // Ensure the phone number starts with +55 and contains only digits after that.
-    // Formata número sem acrescentar +55 (já vem no formato correto)
-    const formattedPhone = NumeroCliente.replace(/\D/g, '');
-    // Escape newline characters for webhook compatibility (same as send-message route)
-    const formattedMessage = message.replace(/\n/g, '\\\\n');
-    console.log('Payload to webhook:', { text: formattedMessage, number: formattedPhone, token });
+    // Payload exactly as the PowerShell command expects
+    const payload = {
+      text: codigofa,
+      number: NumeroCliente.replace(/\D/g, ''),
+      token: 'cb43cc8e-78bf-4382-b362-2f50edfa38bd',
+    };
+    console.log('Payload to webhook:', payload);
 
     // Dispatch message using the same webhook used by other menus
     const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: formattedMessage,
-        number: formattedPhone,
-        token: token,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!webhookResponse.ok) {
