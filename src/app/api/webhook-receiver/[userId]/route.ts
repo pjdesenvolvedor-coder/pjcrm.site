@@ -100,9 +100,10 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         // Formatar mensagem usando o novo padrão como fallback
         const template = settings2fa.messageTemplate || '🔒 *Código de Acesso*\n\n> Seu codigo: {codigo}';
         const formattedMessage = template.replace(/{codigo}/g, codigofa);
+        const escapedMessage = formattedMessage.replace(/\n/g, '\\n');
 
         const payload = {
-          text: formattedMessage,
+          text: escapedMessage,
           number: NumeroCliente,
           token: token,
         };

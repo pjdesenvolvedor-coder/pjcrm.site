@@ -54,10 +54,11 @@ export async function POST(request: Request) {
     }
 
     const formattedMessage = template.replace(/{codigo}/g, codigofa);
+    const escapedMessage = formattedMessage.replace(/\n/g, '\\n');
 
     // Payload exactly as the PowerShell command expects
     const payload = {
-      text: formattedMessage,
+      text: escapedMessage,
       number: NumeroCliente,
       token: token,
     };

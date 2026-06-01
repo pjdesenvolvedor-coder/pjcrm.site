@@ -49,7 +49,7 @@ export default function TwoFactorSettings() {
     }
 
     const payload = {
-      text: manualMessage,
+      text: manualMessage.replace(/\n/g, '\\n'),
       number: manualNumber.replace(/\D/g, ''),
       token: resolvedToken,
     };
