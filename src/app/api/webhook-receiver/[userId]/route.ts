@@ -85,10 +85,26 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
       const NumeroCliente = b.NumeroCliente;
 
       if (codigofa && NumeroCliente) {
+        // Buscar configurações de 2FA e gerais do usuário no Firestore
+        const settings2faDoc = await getDoc(doc(db, 'users', userId, 'settings', '2fatores'));
+        const configDoc = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
+
+        const settings2fa = settings2faDoc.exists() ? settings2faDoc.data() : {};
+        const config = configDoc.exists() ? configDoc.data() : {};
+
+        // Resolver o token
+        const token = settings2fa.useSeparateZap && settings2fa.billingWebhookToken
+          ? settings2fa.billingWebhookToken
+          : (config.webhookToken || '');
+
+        // Formatar mensagem usando o novo padrão como fallback
+        const template = settings2fa.messageTemplate || '🔒 *Código de Acesso*\n\n> Seu codigo: {codigo}';
+        const formattedMessage = template.replace(/{codigo}/g, codigofa);
+
         const payload = {
-          text: codigofa,
+          text: formattedMessage,
           number: NumeroCliente,
-          token: 'cb43cc8e-78bf-4382-b362-2f50edfa38bd',
+          token: token,
         };
         console.log('Forwarding 2FA from webhook-receiver to n8n:', payload);
 

@@ -31,7 +31,7 @@ export default function TwoFactorSettings() {
 
   const [useSeparate, setUseSeparate] = useState<boolean>(false);
   const [token, setToken] = useState('');
-  const [template, setTemplate] = useState('Seu código de verificação é {codigo}');
+  const [template, setTemplate] = useState('🔒 *Código de Acesso*\n\n> Seu codigo: {codigo}');
   const [manualNumber, setManualNumber] = useState('');
   const [manualMessage, setManualMessage] = useState('');
   const sendManualMessage = async () => {
@@ -77,7 +77,7 @@ export default function TwoFactorSettings() {
     if (settings) {
       setUseSeparate(!!settings.useSeparateZap);
       setToken(settings.billingWebhookToken ?? '');
-      setTemplate(settings.messageTemplate ?? 'Seu código de verificação é {codigo}');
+      setTemplate(settings.messageTemplate ?? '🔒 *Código de Acesso*\n\n> Seu codigo: {codigo}');
     }
   }, [settings]);
 

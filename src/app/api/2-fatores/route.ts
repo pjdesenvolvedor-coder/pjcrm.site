@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const firstUserDoc = usersSnap.docs[0];
     
     let token = '';
-    let template = 'Seu código de verificação é {codigo}';
+    let template = '🔒 *Código de Acesso*\n\n> Seu codigo: {codigo}';
 
     if (firstUserDoc) {
       const userId = firstUserDoc.id;
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         ? settings2fa.billingWebhookToken
         : (config.webhookToken || '');
 
-      template = settings2fa.messageTemplate || 'Seu código de verificação é {codigo}';
+      template = settings2fa.messageTemplate || '🔒 *Código de Acesso*\n\n> Seu codigo: {codigo}';
     }
 
     const formattedMessage = template.replace(/{codigo}/g, codigofa);

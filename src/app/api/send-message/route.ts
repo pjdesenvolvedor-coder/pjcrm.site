@@ -9,8 +9,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Message, phoneNumber, and token are required' }, { status: 400 });
     }
 
-    // Ensure the phone number starts with +55 and contains only digits after that.
-    const formattedPhoneNumber = `+55${phoneNumber.replace(/\D/g, '')}`;
+    // Ensure the phone number contains only digits and has no +55 prefix added.
+    const formattedPhoneNumber = phoneNumber.replace(/\D/g, '');
 
     // To ensure compatibility with some webhooks that might not correctly interpret
     // standard newline characters in JSON, we explicitly escape them.
