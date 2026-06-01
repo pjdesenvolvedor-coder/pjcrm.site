@@ -131,6 +131,10 @@ export type Settings = {
   zapVendasToken?: string;
   billingWebhookToken?: string;
   useSeparateBillingZap?: boolean;
+  // New fields for 2FA customization and multiple Zap tokens
+  twoFactorTemplate?: string;
+  zapTokens?: Array<{id: string; token: string; name?: string}>;
+  selectedZapId?: string;
 };
 
 export type RemarketingConfig = {

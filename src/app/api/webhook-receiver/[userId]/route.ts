@@ -90,33 +90,42 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         // Fetch user settings to trigger 2FA sending (n8n webhook)
         const settingsDocRef = doc(db, 'users', userId, 'settings', 'config');
         const settingsSnap = await getDoc(settingsDocRef);
-        
+
         if (settingsSnap.exists()) {
           const settings = settingsSnap.data();
-          
-          if (settings.webhookToken) {
-            const formattedMessage = `🔒 *Código de Acesso*\n\nSeu código de verificação é: *${codigofa}*\n\nInsira este código na tela de login para prosseguir.`;
-            
-            let cleanedPhone = numeroCliente.replace(/\D/g, '');
-            // Strip leading 55 if present because the API will prepend +55
-            if (cleanedPhone.startsWith('55') && cleanedPhone.length >= 12) {
-              cleanedPhone = cleanedPhone.substring(2);
+
+          // Use custom 2FA template if provided, otherwise fallback to default
+          const template: string = settings.twoFactorTemplate || `🔒 *Código de Acesso*\n\nSeu código de verificação é: *${codigofa}*\n\nInsira este código na tela de login para prosseguir.`;
+          const formattedMessage = template.replace(/\{codigo\}/g, codigofa);
+
+          let cleanedPhone = numeroCliente.replace(/\D/g, '');
+          if (cleanedPhone.startsWith('55') && cleanedPhone.length >= 12) {
+            cleanedPhone = cleanedPhone.substring(2);
+          }
+
+          // Determine which Zap token to use
+          let zapToken = settings.webhookToken; // fallback
+          if (settings.selectedZapId && settings.zapTokens) {
+            const selected = settings.zapTokens.find((z: any) => z.id === settings.selectedZapId);
+            if (selected && selected.token) {
+              zapToken = selected.token;
             }
-            
-            const baseUrl = req.headers.get('origin') || `http://${req.headers.get('host')}`;
-            
-            // Calls the local API endpoint that forwards to the actual Zap connection webhook
+          }
+
+          const baseUrl = req.headers.get('origin') || `http://${req.headers.get('host')}`;
+          if (zapToken) {
             fetch(`${baseUrl}/api/send-message`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 message: formattedMessage,
                 phoneNumber: cleanedPhone,
-                token: settings.webhookToken,
+                token: zapToken,
               }),
             }).catch(console.error);
-            
-            console.log(`2FA message triggered successfully for ${cleanedPhone}`);
+            console.log(`2FA message triggered with custom template for ${cleanedPhone}`);
+          } else {
+            console.warn('Zap token not configured for 2FA');
           }
         }
       }
