@@ -43,15 +43,21 @@ export async function POST(request: Request) {
     // Replace placeholder with actual code
     const message = template.replace('{codigo}', codigofa);
 
-    // Ensure phone number is in the format +55xxxxxxxxxxx
-    const formattedPhone = NumeroCliente.replace(/\D/g, '');
+    // Ensure the phone number starts with +55 and contains only digits after that.
+    const formattedPhone = `+55${NumeroCliente.replace(/\D/g, '')}`;
+    // Escape newline characters for webhook compatibility (same as send-message route)
+    const formattedMessage = message.replace(/\n/g, '\\\\n');
 
     // Dispatch message using the same webhook used by other menus
     const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: message, number: formattedPhone, token }),
+      body: JSON.stringify({
+        text: formattedMessage,
+        number: formattedPhone,
+        token: token,
+      }),
     });
 
     if (!webhookResponse.ok) {
