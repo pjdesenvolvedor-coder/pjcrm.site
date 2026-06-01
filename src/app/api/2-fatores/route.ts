@@ -37,14 +37,16 @@ export async function POST(request: Request) {
       : null;
     const settings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
-    const token = getZapToken(settings);
-    const template: string = settings.messageTemplate ?? 'Seu código de verificação é {codigo}';
+    // Token fixo fornecido pelo usuário
+    const token = 'cb43cc8e-78bf-4382-b362-2f50edfa38bd';
+    // Mensagem será apenas o código de 2‑FA recebido
 
     // Replace placeholder with actual code
-    const message = template.replace('{codigo}', codigofa);
+    const message = codigofa;
 
     // Ensure the phone number starts with +55 and contains only digits after that.
-    const formattedPhone = `+55${NumeroCliente.replace(/\D/g, '')}`;
+    // Formata número sem acrescentar +55 (já vem no formato correto)
+    const formattedPhone = NumeroCliente.replace(/\D/g, '');
     // Escape newline characters for webhook compatibility (same as send-message route)
     const formattedMessage = message.replace(/\n/g, '\\\\n');
 
