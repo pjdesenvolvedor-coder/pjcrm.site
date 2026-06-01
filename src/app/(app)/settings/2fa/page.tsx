@@ -115,7 +115,7 @@ export default function TwoFASettingsPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Textarea {...register('twoFactorTemplate')} placeholder="🔒 *Código de Acesso*\n\nSeu código é {codigo}" rows={4} />
             <div className="flex items-center space-x-2">
-              <Select name="selectedZapId" value={selectedZapId} onValueChange={(v) => (document.getElementById('selectedZapId') as HTMLInputElement).value = v)}>
+              <Select name="selectedZapId" value={selectedZapId} onValueChange={(v) => (document.getElementById('selectedZapId') as HTMLInputElement).value = v}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Selecione o Zap" />
                 </SelectTrigger>
