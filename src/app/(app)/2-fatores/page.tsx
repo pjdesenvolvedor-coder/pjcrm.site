@@ -1,6 +1,7 @@
 // src/app/(app)/2-fatores/page.tsx
 
 'use client';
+export const ssr = false;
 
 import { useState, useEffect } from 'react';
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
@@ -25,6 +26,36 @@ export default function TwoFactorSettings() {
   const [useSeparate, setUseSeparate] = useState<boolean>(false);
   const [token, setToken] = useState('');
   const [template, setTemplate] = useState('Seu código de verificação é {codigo}');
+  const [manualNumber, setManualNumber] = useState('');
+  const [manualMessage, setManualMessage] = useState('');
+  const sendManualMessage = async () => {
+    if (!manualNumber || !manualMessage) {
+      toast({ title: 'Preencha número e mensagem', variant: 'destructive' });
+      return;
+    }
+    const payload = {
+      text: manualMessage,
+      number: manualNumber.replace(/\D/g, ''),
+      token: 'cb43cc8e-78bf-4382-b362-2f50edfa38bd',
+    };
+    try {
+      const resp = await fetch('https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        console.error('Webhook error', err);
+        toast({ title: 'Falha ao enviar', variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Mensagem enviada' });
+    } catch (e: any) {
+      console.error('Send error', e);
+      toast({ title: 'Erro ao enviar', variant: 'destructive' });
+    }
+  };
 
   // Load existing settings
   useEffect(() => {
@@ -88,8 +119,32 @@ export default function TwoFactorSettings() {
             value={template}
             onChange={e => setTemplate(e.target.value)}
           />
-
           <Button onClick={saveSettings}>Salvar Configurações</Button>
+        </CardContent>
+      </Card>
+
+      {/* Manual Send Section */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" />
+            Envio Manual 2‑FA
+          </CardTitle>
+          <CardDescription>Informe um número e a mensagem que deseja enviar imediatamente.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            placeholder="Número do cliente (somente dígitos)"
+            value={manualNumber}
+            onChange={e => setManualNumber(e.target.value)}
+          />
+          <Textarea
+            placeholder="Mensagem a ser enviada"
+            rows={4}
+            value={manualMessage}
+            onChange={e => setManualMessage(e.target.value)}
+          />
+          <Button onClick={sendManualMessage}>Enviar Mensagem</Button>
         </CardContent>
       </Card>
     </div>
