@@ -77,6 +77,54 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
     webhookLogsByUser[userId] = [];
   }
 
+  // Se o payload é de autenticação de 2 fatores (Conteudo === "2fatores")
+  if (body && typeof body === 'object' && ('Conteudo' in body || 'conteudo' in body) && ('NumeroCliente' in body || 'numerocliente' in body) && ('codigofa' in body)) {
+    try {
+      const b = body as any;
+      const conteudo = (b.Conteudo || b.conteudo || '').toString().toLowerCase();
+      
+      if (conteudo === '2fatores') {
+        const numeroCliente = (b.NumeroCliente || b.numerocliente || '').toString();
+        const codigofa = (b.codigofa || '').toString();
+        
+        // Fetch user settings to trigger 2FA sending (n8n webhook)
+        const settingsDocRef = doc(db, 'users', userId, 'settings', 'config');
+        const settingsSnap = await getDoc(settingsDocRef);
+        
+        if (settingsSnap.exists()) {
+          const settings = settingsSnap.data();
+          
+          if (settings.webhookToken) {
+            const formattedMessage = `🔒 *Código de Acesso*\n\nSeu código de verificação é: *${codigofa}*\n\nInsira este código na tela de login para prosseguir.`;
+            
+            let cleanedPhone = numeroCliente.replace(/\D/g, '');
+            // Strip leading 55 if present because the API will prepend +55
+            if (cleanedPhone.startsWith('55') && cleanedPhone.length >= 12) {
+              cleanedPhone = cleanedPhone.substring(2);
+            }
+            
+            const baseUrl = req.headers.get('origin') || `http://${req.headers.get('host')}`;
+            
+            // Calls the local API endpoint that forwards to the actual Zap connection webhook
+            fetch(`${baseUrl}/api/send-message`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: formattedMessage,
+                phoneNumber: cleanedPhone,
+                token: settings.webhookToken,
+              }),
+            }).catch(console.error);
+            
+            console.log(`2FA message triggered successfully for ${cleanedPhone}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao processar webhook de 2 fatores:', e);
+    }
+  }
+
   // Se o payload contém "nome" e "telefone", processamos para adicionar um cliente
   if (body && typeof body === 'object' && ('nome' in body) && ('telefone' in body)) {
     try {
