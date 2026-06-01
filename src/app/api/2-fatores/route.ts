@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { getZapToken } from '@/lib/zapToken';
 import { firestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firestore';
 
 /**
  * Expected payload:
@@ -29,9 +29,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch global 2‑Fatores settings (if any). This doc can be created via the UI page.
-    const settingsDoc = await getDoc(doc(firestore, 'settings', '2fatores'));
-    const settings = settingsDoc.exists() ? settingsDoc.data() : {};
+    // Find any user (we assume there is at least one) to get their 2‑Fatores config
+    const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)));
+    const firstUserDoc = usersSnap.docs[0];
+    const settingsDoc = firstUserDoc
+      ? await getDoc(doc(firestore, 'users', firstUserDoc.id, 'settings', '2fatores'))
+      : null;
+    const settings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
+
     const token = getZapToken(settings);
     const template: string = settings.messageTemplate ?? 'Seu código de verificação é {codigo}';
 
