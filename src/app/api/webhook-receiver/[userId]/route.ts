@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
         };
         console.log('Forwarding 2FA from webhook-receiver to n8n:', payload);
 
-        const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580';
+        const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook-test/21e6861b-643e-46e0-a12b-34bcfe31b778';
         const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

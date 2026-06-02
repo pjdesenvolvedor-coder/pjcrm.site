@@ -54,7 +54,7 @@ export default function TwoFactorSettings() {
       token: resolvedToken,
     };
     try {
-      const resp = await fetch('https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580', {
+      const resp = await fetch('https://n8nbeta.typeflow.app.br/webhook-test/21e6861b-643e-46e0-a12b-34bcfe31b778', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
