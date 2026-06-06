@@ -167,6 +167,8 @@ export type ScheduledMessage = {
   status: 'Scheduled' | 'Sent' | 'Error' | 'Sending';
   claimedAt?: Timestamp | null;
   useBillingZap?: boolean;
+  errorReason?: string;
+  retryCount?: number;
 };
 
 export type Token = {

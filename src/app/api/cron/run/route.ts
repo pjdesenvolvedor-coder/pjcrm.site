@@ -239,23 +239,76 @@ export async function GET(request: Request) {
                 } catch (e) {}
 
                 if (processed) {
-                    const msgToken = msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken 
-                        ? settings.billingWebhookToken 
-                        : settings.webhookToken;
+                    try {
+                        const msgToken = msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken 
+                            ? settings.billingWebhookToken 
+                            : settings.webhookToken;
 
-                    const response = await fetch(`${originUrl}/api/send-group-message`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken }),
-                    });
+                        const response = await fetch(`${originUrl}/api/send-group-message`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken }),
+                        });
 
-                    if (response.ok) {
-                        if (msg.repeatDaily) {
-                            runTransaction(db, async (txn) => txn.update(messageDocRef, { sendAt: Timestamp.fromDate(addDays(msg.sendAt.toDate(), 1)), status: 'Scheduled' }));
+                        if (response.ok) {
+                            if (msg.repeatDaily) {
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { 
+                                    sendAt: Timestamp.fromDate(addDays(msg.sendAt.toDate(), 1)), 
+                                    status: 'Scheduled',
+                                    retryCount: 0,
+                                    errorReason: null
+                                }));
+                            } else {
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { 
+                                    status: 'Sent',
+                                    errorReason: null
+                                }));
+                            }
                         } else {
-                            runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Sent' }));
+                            let errorMsg = 'Erro desconhecido';
+                            try {
+                                const errData = await response.json();
+                                errorMsg = errData.error || errData.details || response.statusText || `Status ${response.status}`;
+                            } catch {
+                                try {
+                                    const errText = await response.text();
+                                    errorMsg = errText || `Status ${response.status}`;
+                                } catch {}
+                            }
+
+                            const currentRetryCount = msg.retryCount || 0;
+                            if (currentRetryCount < 1) {
+                                const tomorrow = addDays(msg.sendAt.toDate(), 1);
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { 
+                                    status: 'Scheduled', 
+                                    sendAt: Timestamp.fromDate(tomorrow), 
+                                    retryCount: currentRetryCount + 1,
+                                    errorReason: errorMsg
+                                }));
+                            } else {
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { 
+                                    status: 'Error',
+                                    errorReason: errorMsg
+                                }));
+                            }
                         }
-                    } else {
-                        runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error' }));
+                    } catch (fetchErr: any) {
+                        console.error('Failed to dispatch scheduled message fetch:', fetchErr);
+                        const errorMsg = fetchErr.message || 'Erro de conexão/servidor';
+                        const currentRetryCount = msg.retryCount || 0;
+                        if (currentRetryCount < 1) {
+                            const tomorrow = addDays(msg.sendAt.toDate(), 1);
+                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { 
+                                status: 'Scheduled', 
+                                sendAt: Timestamp.fromDate(tomorrow), 
+                                retryCount: currentRetryCount + 1,
+                                errorReason: errorMsg
+                            }));
+                        } else {
+                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { 
+                                status: 'Error',
+                                errorReason: errorMsg
+                            }));
+                        }
                     }
                 }
             }

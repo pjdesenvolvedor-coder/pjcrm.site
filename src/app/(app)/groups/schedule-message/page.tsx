@@ -432,7 +432,24 @@ export default function ScheduleMessagePage() {
                             </TableCell>
                             <TableCell>{format(msg.sendAt.toDate(), 'dd/MM/yyyy HH:mm')}</TableCell>
                             <TableCell>
-                                <Badge variant={getStatusVariant(msg.status)} className={cn(msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30', msg.status === 'Sent' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30')}>{translateStatus(msg.status)}</Badge>
+                                <div className="flex flex-col gap-1 items-start">
+                                    <Badge 
+                                        variant={getStatusVariant(msg.status)} 
+                                        className={cn(
+                                            msg.status === 'Scheduled' && 'bg-blue-500/20 text-blue-700 hover:bg-blue-500/30', 
+                                            msg.status === 'Sent' && 'bg-green-500/20 text-green-700 hover:bg-green-500/30'
+                                        )}
+                                    >
+                                        {msg.status === 'Scheduled' && (msg.retryCount || 0) > 0 
+                                            ? `Retentando (${msg.retryCount}/1)` 
+                                            : translateStatus(msg.status)}
+                                    </Badge>
+                                    {msg.errorReason && (
+                                        <span className="text-[11px] text-destructive max-w-xs break-all leading-tight">
+                                            {msg.errorReason}
+                                        </span>
+                                    )}
+                                </div>
                             </TableCell>
                             <TableCell className="text-right">
                                 <AlertDialog>
