@@ -137,7 +137,7 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
 
       const clientData: any = {
         userId: userId,
-        name: b.nome || 'Cliente via Webhook',
+        name: b.nome ? String(b.nome).trim() : 'Cliente via Webhook',
         phone: b.telefone || '',
         subscription: b.produto || 'Produto Webhook',
         amountPaid: b.valor ? b.valor.toString() : '0,00',
@@ -208,13 +208,24 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
                 console.error("Falha ao enviar webhook n8n no backend:", error);
             }
 
-            // Calls the local API endpoint that forwards to the actual Zap connection webhook
-            const baseUrl = req.headers.get('origin') || `http://${req.headers.get('host')}`;
-            fetch(`${baseUrl}/api/send-message`, {
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: formattedMessage, phoneNumber: clientData.phone, token: settings.webhookToken }),
-            }).catch(console.error);
+            try {
+                // Envia a mensagem de entrega de credenciais diretamente para o webhook do n8n de disparo
+                const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
+                const escapedMessage = formattedMessage.replace(/\n/g, '\\n');
+
+                await fetch('https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        text: escapedMessage, 
+                        number: formattedPhoneNumber, 
+                        token: settings.webhookToken 
+                    }),
+                });
+                console.log('Mensagem de credenciais do produto enviada com sucesso via Webhook');
+            } catch (error) {
+                console.error("Falha ao enviar mensagem de credenciais do produto:", error);
+            }
         }
       }
 
