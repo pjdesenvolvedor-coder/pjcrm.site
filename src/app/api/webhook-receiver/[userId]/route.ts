@@ -213,7 +213,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
                 const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
                 const escapedMessage = formattedMessage.replace(/\n/g, '\\n');
 
-                await fetch('https://n8nbeta.typeflow.app.br/webhook/235c79d0-71ed-4a43-aa3c-5c0cf1de2580', {
+                await fetch('https://pedropedro.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 

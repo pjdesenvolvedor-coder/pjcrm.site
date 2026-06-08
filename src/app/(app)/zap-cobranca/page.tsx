@@ -148,7 +148,7 @@ export default function ZapCobrancaPage() {
       );
     }
     try {
-      const res = await fetch('https://n8nbeta.typeflow.app.br/webhook/aeb30639-baf0-4862-9f5f-a3cc468ab7c5', {
+      const res = await fetch('https://pedropedro.n8nready.com.br/webhook/995f0ad6-006a-4633-98eb-cef61042b7aa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -174,7 +174,7 @@ export default function ZapCobrancaPage() {
     if (!token) return;
     setIsDisconnecting(true);
     try {
-      await fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+      await fetch('https://pedropedro.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),

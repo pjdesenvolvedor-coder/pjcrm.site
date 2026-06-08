@@ -498,7 +498,7 @@ export default function UsersPage() {
 
             if (tokenToDisconnect) {
                 // Call webhook to disconnect the token session
-                fetch('https://n8nbeta.typeflow.app.br/webhook/2ac86d63-f7fc-4221-bbaf-efeecec33127', {
+                fetch('https://pedropedro.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: tokenToDisconnect }),
