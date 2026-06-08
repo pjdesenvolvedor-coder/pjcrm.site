@@ -37,8 +37,8 @@ function broadcast(userId: string, data: string) {
 }
 
 // POST — receives the webhook for a specific user
-export async function POST(req: NextRequest, { params }: { params: { userId: string } }) {
-  const userId = params.userId;
+export async function POST(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
   let body: unknown;
@@ -243,8 +243,8 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
 }
 
 // GET — returns logs or opens SSE stream for an user
-export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
-  const userId = params.userId;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
   const accept = req.headers.get('accept') || '';
@@ -284,8 +284,8 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
 }
 
 // DELETE — clear all logs for an user
-export async function DELETE(req: NextRequest, { params }: { params: { userId: string } }) {
-  const userId = params.userId;
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
   if (webhookLogsByUser[userId]) {

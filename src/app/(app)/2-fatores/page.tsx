@@ -1,7 +1,6 @@
 // src/app/(app)/2-fatores/page.tsx
 
 'use client';
-export const ssr = false;
 
 import { useState, useEffect } from 'react';
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';

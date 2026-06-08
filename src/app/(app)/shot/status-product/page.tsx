@@ -36,7 +36,7 @@ const availableVariables = [
     "{status}"
 ];
 
-export function ShotStatusProductPage() {
+function ShotStatusProductPage() {
   const { toast } = useToast();
   const { firestore, effectiveUserId } = useFirebase();
   const { user } = useUser();

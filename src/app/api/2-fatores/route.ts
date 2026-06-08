@@ -1,7 +1,12 @@
 // src/app/api/2-fatores/route.ts
 
 import { NextResponse } from 'next/server';
-import { firestore } from '@/firebase';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { firebaseConfig } from '@/firebase/config';
+
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const firestore = getFirestore(app);
 import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firestore';
 
 export const runtime = 'nodejs';

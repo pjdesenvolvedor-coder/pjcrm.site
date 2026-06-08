@@ -297,7 +297,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       console.error('Status polling error:', error);
       setLiveStatus({ status: 'disconnected' });
     }
-  }, [isLoadingSettings, settings, connectionStatus, setConnectionStatus, setQrCode]);
+  }, [isLoadingSettings, settings?.webhookToken, connectionStatus, setConnectionStatus, setQrCode]);
 
   useEffect(() => {
     if (settings?.webhookToken) {

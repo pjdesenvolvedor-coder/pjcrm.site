@@ -23,14 +23,24 @@ export async function POST(request: Request) {
     if (!webhookResponse.ok) {
       const errorText = await webhookResponse.text();
       console.error(`Webhook failed with status ${webhookResponse.status}: ${errorText}`);
-      return new Response(errorText, { status: webhookResponse.status });
+      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
     }
 
-    const data = await webhookResponse.json();
-    return NextResponse.json(data);
+    const rawText = await webhookResponse.text();
+    if (!rawText || rawText.trim() === '') {
+      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+    }
+
+    try {
+      const data = JSON.parse(rawText);
+      return NextResponse.json(data);
+    } catch (parseError) {
+      console.error('Failed to parse status response as JSON:', rawText, parseError);
+      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+    }
 
   } catch (error: any) {
     console.error('API route error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '', error: 'Internal Server Error' });
   }
 }

@@ -76,7 +76,7 @@ export default function ZapVendasConnectionPage() {
             console.error('Status polling error:', error);
             setLiveStatus({ status: 'disconnected' });
         }
-    }, [isLoadingSettings, settings, connectionStatus, setConnectionStatus, setQrCode]);
+    }, [isLoadingSettings, settings?.zapVendasToken, connectionStatus, setConnectionStatus, setQrCode]);
 
     useEffect(() => {
         if (settings?.zapVendasToken) {
