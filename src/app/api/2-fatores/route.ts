@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     console.log('Payload to webhook:', payload);
 
     // Dispatch message using the same webhook used by other menus
-    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/21e6861b-643e-46e0-a12b-34bcfe31b778';
+    const webhookUrl = 'https://pedropedro.n8nready.com.br/webhook/d8cc260e-3f3c-4643-88a6-bed8cefafba1';
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
