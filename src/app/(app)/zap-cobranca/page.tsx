@@ -86,7 +86,7 @@ export default function ZapCobrancaPage() {
 
   useEffect(() => {
     fetchStatus();
-    const id = setInterval(fetchStatus, 10000);
+    const id = setInterval(fetchStatus, 2000);
     return () => clearInterval(id);
   }, [fetchStatus]);
 

@@ -302,7 +302,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (settings?.webhookToken) {
       fetchStatus();
-      const intervalId = setInterval(fetchStatus, 10000);
+      const intervalId = setInterval(fetchStatus, 2000);
       return () => clearInterval(intervalId);
     }
   }, [settings?.webhookToken, fetchStatus]);

@@ -81,7 +81,7 @@ export default function ZapVendasConnectionPage() {
     useEffect(() => {
         if (settings?.zapVendasToken) {
             fetchStatus();
-            const intervalId = setInterval(fetchStatus, 10000);
+            const intervalId = setInterval(fetchStatus, 2000);
             return () => clearInterval(intervalId);
         }
     }, [settings?.zapVendasToken, fetchStatus]);
