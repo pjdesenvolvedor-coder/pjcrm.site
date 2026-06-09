@@ -246,7 +246,14 @@ export async function GET(request: Request) {
 
                         const response = await fetch(`${originUrl}/api/send-group-message`, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken }),
+                            body: JSON.stringify({ 
+                                jid: msg.jid, 
+                                message: msg.message, 
+                                imageUrl: msg.imageUrl, 
+                                token: msgToken,
+                                supportNumber: msg.supportNumber,
+                                siteLink: msg.siteLink
+                            }),
                         });
 
                         if (response.ok) {

@@ -169,6 +169,8 @@ export type ScheduledMessage = {
   useBillingZap?: boolean;
   errorReason?: string;
   retryCount?: number;
+  supportNumber?: string;
+  siteLink?: string;
 };
 
 export type Token = {

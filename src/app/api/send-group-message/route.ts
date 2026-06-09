@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { jid, message, token, imageUrl } = body;
+    const { jid, message, token, imageUrl, supportNumber, siteLink } = body;
 
     if (!jid || !message || !token) {
       return NextResponse.json({ error: 'jid, message, and token are required' }, { status: 400 });
@@ -13,13 +13,15 @@ export async function POST(request: Request) {
     // standard newline characters in JSON, we explicitly escape them.
     const formattedMessage = message.replace(/\n/g, '\\n');
 
-    const webhookUrl = 'https://n8nbeta.typeflow.app.br/webhook/6b70ac73-9025-4ace-b7c9-24db23376c4c';
+    const webhookUrl = 'https://pedropedro.n8nready.com.br/webhook/ee1b0bd3-9cf0-4074-baa6-4041148df145';
 
     const webhookPayload: {
         jid: string;
         message: string;
         token: string;
         imageUrl?: string;
+        supportNumber?: string;
+        siteLink?: string;
     } = {
         jid,
         message: formattedMessage,
@@ -28,6 +30,12 @@ export async function POST(request: Request) {
 
     if (imageUrl) {
         webhookPayload.imageUrl = imageUrl;
+    }
+    if (supportNumber) {
+        webhookPayload.supportNumber = supportNumber;
+    }
+    if (siteLink) {
+        webhookPayload.siteLink = siteLink;
     }
 
     const webhookResponse = await fetch(webhookUrl, {
@@ -44,7 +52,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to send group message via webhook.', details: errorText }, { status: webhookResponse.status });
     }
 
-    const responseData = await webhookResponse.json();
+    let responseData;
+    const responseText = await webhookResponse.text();
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      responseData = { message: responseText };
+    }
     return NextResponse.json({ success: true, data: responseData });
 
   } catch (error: any) {
