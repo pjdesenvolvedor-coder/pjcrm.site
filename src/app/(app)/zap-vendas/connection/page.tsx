@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from "@/components/ui/badge";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, QrCode, Zap } from 'lucide-react';
+import { Loader2, QrCode, Zap, RefreshCcw } from 'lucide-react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 
@@ -78,13 +78,36 @@ export default function ZapVendasConnectionPage() {
         }
     }, [isLoadingSettings, settings?.zapVendasToken, connectionStatus, setConnectionStatus, setQrCode]);
 
+    // Fetch status once when token is available or changes
     useEffect(() => {
         if (settings?.zapVendasToken) {
             fetchStatus();
-            const intervalId = setInterval(fetchStatus, 2000);
-            return () => clearInterval(intervalId);
         }
     }, [settings?.zapVendasToken, fetchStatus]);
+
+    // Poll only when trying to connect
+    useEffect(() => {
+        if (connectionStatus !== 'connecting' && connectionStatus !== 'qr_code') return;
+        if (liveStatus?.status === 'connected') return;
+
+        let active = true;
+        let timeoutId: NodeJS.Timeout;
+
+        const poll = async () => {
+            if (!active) return;
+            await fetchStatus();
+            if (active && liveStatus?.status !== 'connected' && (connectionStatus === 'connecting' || connectionStatus === 'qr_code')) {
+                timeoutId = setTimeout(poll, 5000);
+            }
+        };
+
+        poll();
+
+        return () => {
+            active = false;
+            clearTimeout(timeoutId);
+        };
+    }, [connectionStatus, liveStatus?.status, fetchStatus]);
 
     useEffect(() => {
         if (liveStatus?.status === 'connected' && (connectionStatus === 'qr_code' || connectionStatus === 'connecting')) {
@@ -206,10 +229,21 @@ export default function ZapVendasConnectionPage() {
         <div className="flex flex-col h-full">
             <PageHeader title="ZAP VENDAS" description="Conexão isolada do WhatsApp exclusiva para o módulo de vendas." />
             <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6 max-w-4xl mx-auto w-full">
-                <Card className="max-w-md mx-auto">
+                <Card className="max-w-md mx-auto relative">
                     <CardHeader className="text-center">
                         <CardTitle className="text-2xl flex items-center justify-center gap-2"><Zap className="text-primary" /> Conexão Zap Vendas</CardTitle>
                         <CardDescription>Escaneie o QR Code abaixo para conectar o WhatsApp de vendas.</CardDescription>
+                        {settings?.zapVendasToken && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground absolute right-6 top-6"
+                                onClick={fetchStatus}
+                                title="Atualizar status"
+                            >
+                                <RefreshCcw className="h-4 w-4" />
+                            </Button>
+                        )}
                     </CardHeader>
                     {renderContent()}
                     <CardFooter className="p-6 border-t bg-muted/50">

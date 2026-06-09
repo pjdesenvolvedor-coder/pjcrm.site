@@ -299,13 +299,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoadingSettings, settings?.webhookToken, connectionStatus, setConnectionStatus, setQrCode]);
 
+  // Fetch status once when webhook token is available
   useEffect(() => {
     if (settings?.webhookToken) {
       fetchStatus();
-      const intervalId = setInterval(fetchStatus, 2000);
-      return () => clearInterval(intervalId);
     }
   }, [settings?.webhookToken, fetchStatus]);
+
+  // Poll only when Zap Connect dialog is open and not connected
+  useEffect(() => {
+    if (!isZapConnectOpen || liveStatus?.status === 'connected') return;
+
+    let active = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const poll = async () => {
+      if (!active) return;
+      await fetchStatus();
+      if (active && liveStatus?.status !== 'connected' && isZapConnectOpen) {
+        timeoutId = setTimeout(poll, 5000);
+      }
+    };
+
+    poll();
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [isZapConnectOpen, liveStatus?.status, fetchStatus]);
 
   useEffect(() => {
     if (!isZapConnectOpen) {
@@ -662,7 +684,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                           <SidebarMenuSub>
-                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/shot/list'}><Link href="/shot/list">Lista de Disparo</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/shot/status-product'}><Link href="/shot/status-product">Por Produto</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
@@ -855,7 +876,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuItem>
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm">
-                <DialogHeader className="p-6 border-b"><DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle></DialogHeader>
+                <DialogHeader className="p-6 border-b flex flex-row items-center justify-between space-y-0">
+                    <DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle>
+                    {settings?.webhookToken && (
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground" 
+                            onClick={fetchStatus}
+                            title="Atualizar status"
+                        >
+                            <RefreshCcw className="h-4 w-4" />
+                        </Button>
+                    )}
+                </DialogHeader>
                 {renderContent()}
                 <DialogFooter className="p-6 border-t bg-muted/50">
                   {liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code' && (

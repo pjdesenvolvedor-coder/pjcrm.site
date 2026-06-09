@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Zap, Loader2, QrCode, DollarSign, CheckCircle2, AlertCircle, Link2Off } from 'lucide-react';
+import { Zap, Loader2, QrCode, DollarSign, CheckCircle2, AlertCircle, Link2Off, RefreshCcw } from 'lucide-react';
 import Image from 'next/image';
 import { doc } from 'firebase/firestore';
 
@@ -84,11 +84,37 @@ export default function ZapCobrancaPage() {
     }
   }, [useSeparate, settings?.billingWebhookToken, settings?.webhookToken]);
 
+  // Fetch status once when token is available or changes
   useEffect(() => {
-    fetchStatus();
-    const id = setInterval(fetchStatus, 2000);
-    return () => clearInterval(id);
-  }, [fetchStatus]);
+    const token = useSeparate ? (settings?.billingWebhookToken || '') : (settings?.webhookToken || '');
+    if (token) {
+      fetchStatus();
+    }
+  }, [useSeparate, settings?.billingWebhookToken, settings?.webhookToken, fetchStatus]);
+
+  // Poll only when trying to connect
+  useEffect(() => {
+    if (connectionState !== 'connecting' && connectionState !== 'qr_code') return;
+    if (liveStatus?.status === 'connected') return;
+
+    let active = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const poll = async () => {
+      if (!active) return;
+      await fetchStatus();
+      if (active && liveStatus?.status !== 'connected' && (connectionState === 'connecting' || connectionState === 'qr_code')) {
+        timeoutId = setTimeout(poll, 5000);
+      }
+    };
+
+    poll();
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [connectionState, liveStatus?.status, fetchStatus]);
 
   // Auto-close QR code flow when connected
   useEffect(() => {
@@ -309,16 +335,29 @@ export default function ZapCobrancaPage() {
 
         {/* Connection Card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <QrCode className="h-5 w-5" />
-              {useSeparate ? 'Conexão — ZAP Cobrança' : 'Conexão — Hub Principal'}
-            </CardTitle>
-            <CardDescription>
-              {useSeparate
-                ? 'Conecte o número de cobranças escaneando o QR Code.'
-                : 'Usando o mesmo ZAP do Hub Principal para cobranças. O status abaixo é o do Hub Principal.'}
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-base flex items-center gap-2">
+                <QrCode className="h-5 w-5" />
+                {useSeparate ? 'Conexão — ZAP Cobrança' : 'Conexão — Hub Principal'}
+              </CardTitle>
+              <CardDescription>
+                {useSeparate
+                  ? 'Conecte o número de cobranças escaneando o QR Code.'
+                  : 'Usando o mesmo ZAP do Hub Principal para cobranças. O status abaixo é o do Hub Principal.'}
+              </CardDescription>
+            </div>
+            {activeToken && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={fetchStatus}
+                title="Atualizar status"
+              >
+                <RefreshCcw className="h-4 w-4" />
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             {renderConnectionArea()}
