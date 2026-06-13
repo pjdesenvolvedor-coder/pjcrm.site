@@ -77,7 +77,7 @@ export default function TokenStockPage() {
     toast({ title: 'Token Adicionado!', description: `O novo token foi adicionado ao estoque.` });
     
     try {
-        await fetch('https://pedropedro.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
+        await fetch('https://pjempreendimentos.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: values.value }),
@@ -105,7 +105,7 @@ export default function TokenStockPage() {
     try {
         if (token.status === 'in_use' && token.assignedTo) {
             // 1. Disconnect session for the token.
-            await fetch('https://pedropedro.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
+            await fetch('https://pjempreendimentos.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: token.value }),

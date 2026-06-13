@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     console.log('Payload to webhook:', payload);
 
     // Dispatch message using the same webhook used by other menus
-    const webhookUrl = 'https://pedropedro.n8nready.com.br/webhook/d8cc260e-3f3c-4643-88a6-bed8cefafba1';
+    const webhookUrl = 'https://pjempreendimentos.n8nready.com.br/webhook/d8cc260e-3f3c-4643-88a6-bed8cefafba1';
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

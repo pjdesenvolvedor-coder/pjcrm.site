@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2 } from 'lucide-react';
 
 export default function TestPage() {
-  const [url, setUrl] = useState('https://pedropedro.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3');
+  const [url, setUrl] = useState('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 

@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 });
     }
 
-    const webhookUrl = 'https://pedropedro.n8nready.com.br/webhook/c8389fdb-5074-41aa-a452-42b3a99ebf1f';
+    const webhookUrl = 'https://pjempreendimentos.n8nready.com.br/webhook/c8389fdb-5074-41aa-a452-42b3a99ebf1f';
 
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',

@@ -67,7 +67,7 @@ export default function GetJidPage() {
     setJid('');
 
     try {
-      const response = await fetch('https://pedropedro.n8nready.com.br/webhook/49f5c4e4-b059-42ef-a959-ba482f498be1', {
+      const response = await fetch('https://pjempreendimentos.n8nready.com.br/webhook/49f5c4e4-b059-42ef-a959-ba482f498be1', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

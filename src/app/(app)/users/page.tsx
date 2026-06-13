@@ -498,7 +498,7 @@ export default function UsersPage() {
 
             if (tokenToDisconnect) {
                 // Call webhook to disconnect the token session
-                fetch('https://pedropedro.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
+                fetch('https://pjempreendimentos.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: tokenToDisconnect }),

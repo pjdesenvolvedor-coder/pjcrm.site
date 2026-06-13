@@ -109,7 +109,7 @@ export default function SaveContactsPage() {
             addLog(`Enviando ${primaryClient.name} (${primaryClient.phone})...`);
 
             try {
-                const response = await fetch('https://pedropedro.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                const response = await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

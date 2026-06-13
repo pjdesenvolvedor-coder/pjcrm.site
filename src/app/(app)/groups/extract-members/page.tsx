@@ -58,7 +58,7 @@ export default function ExtractMembersPage() {
     setIsSending(true);
 
     try {
-      const response = await fetch('https://pedropedro.n8nready.com.br/webhook/ff59002f-0865-4a65-bce4-029280c13d01', {
+      const response = await fetch('https://pjempreendimentos.n8nready.com.br/webhook/ff59002f-0865-4a65-bce4-029280c13d01', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jid: jid, token: settings.webhookToken }),

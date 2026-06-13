@@ -325,7 +325,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 
             try {
                 // Envia os dados do cliente para o webhook n8n antes de enviar a mensagem no zap
-                await fetch('https://pedropedro.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -833,7 +833,7 @@ export default function CustomersPage() {
       }
       
       try {
-          const response = await fetch('https://pedropedro.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+          const response = await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

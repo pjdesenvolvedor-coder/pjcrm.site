@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
         };
         console.log('Forwarding 2FA from webhook-receiver to n8n:', payload);
 
-        const webhookUrl = 'https://pedropedro.n8nready.com.br/webhook/d8cc260e-3f3c-4643-88a6-bed8cefafba1';
+        const webhookUrl = 'https://pjempreendimentos.n8nready.com.br/webhook/d8cc260e-3f3c-4643-88a6-bed8cefafba1';
         const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
 
             try {
                 // Envia os dados para a automação principal (n8n webhook)
-                await fetch('https://pedropedro.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
                 const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
                 const escapedMessage = formattedMessage.replace(/\n/g, '\\n');
 
-                await fetch('https://pedropedro.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e', {
+                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 

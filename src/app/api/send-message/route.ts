@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     // standard newline characters in JSON, we explicitly escape them.
     const formattedMessage = message.replace(/\n/g, '\\n');
 
-    const webhookUrl = 'https://pedropedro.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e';
+    const webhookUrl = 'https://pjempreendimentos.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e';
 
     const webhookResponse = await fetch(webhookUrl, {
       method: 'POST',
