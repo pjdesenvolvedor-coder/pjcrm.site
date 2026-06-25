@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Trash2, Webhook, Copy, CheckCircle2, Clock, Globe } from 'lucide-react';
+import { Loader2, Trash2, Webhook, Copy, CheckCircle2, Clock, Globe, RefreshCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFirebase } from '@/firebase';
@@ -22,10 +22,27 @@ export default function WebhookReceiverPage() {
   const [logs, setLogs] = useState<WebhookLog[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const { toast } = useToast();
   const { effectiveUserId } = useFirebase();
 
   const [webhookUrl, setWebhookUrl] = useState('');
+
+  const fetchLogs = async () => {
+    if (!effectiveUserId) return;
+    setIsLoadingLogs(true);
+    try {
+      const response = await fetch(`/api/webhook-receiver/${effectiveUserId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch logs manually', e);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
 
   useEffect(() => {
     if (!effectiveUserId) return;
@@ -33,6 +50,9 @@ export default function WebhookReceiverPage() {
     if (typeof window !== 'undefined') {
       setWebhookUrl(`${window.location.origin}/api/webhook-receiver/${effectiveUserId}`);
     }
+
+    // Load initial logs immediately on page open
+    fetchLogs();
 
     const eventSource = new EventSource(`/api/webhook-receiver/${effectiveUserId}`);
 
@@ -59,12 +79,9 @@ export default function WebhookReceiverPage() {
       console.error('SSE Error:', err);
       setIsConnected(false);
       eventSource.close();
-      // Reconnection logic could be added here
+      // Fallback: poll logs manually if SSE fails
       setTimeout(() => {
-         if (typeof window !== 'undefined') {
-           // Basic reconnection attempt by re-mounting or just relying on browser
-           // In React, better to handle via a ref or recursive function, but EventSource auto-reconnects natively
-         }
+         fetchLogs();
       }, 5000);
     };
 
@@ -101,6 +118,10 @@ export default function WebhookReceiverPage() {
             {isConnected ? 'Escutando...' : 'Desconectado'}
             {isConnected && <Loader2 className="ml-2 h-3 w-3 animate-spin inline" />}
           </Badge>
+          <Button variant="outline" onClick={fetchLogs} disabled={isLoadingLogs}>
+            {isLoadingLogs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+            Atualizar
+          </Button>
           <Button variant="outline" onClick={clearLogs} disabled={logs.length === 0}>
             <Trash2 className="mr-2 h-4 w-4" />
             Limpar

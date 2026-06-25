@@ -36,6 +36,59 @@ function broadcast(userId: string, data: string) {
   }
 }
 
+function extractWebhookData(body: unknown) {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, any>;
+
+  // Case-insensitive key lookup helper (checks root level and common sub-objects)
+  const getVal = (keys: string[]): any => {
+    for (const k of keys) {
+      for (const bk of Object.keys(b)) {
+        if (bk.toLowerCase() === k.toLowerCase()) {
+          const val = b[bk];
+          if (val !== null && val !== undefined) return val;
+        }
+      }
+    }
+
+    const subObjects = ['customer', 'buyer', 'data', 'client', 'usuario', 'user'];
+    for (const sub of subObjects) {
+      for (const bk of Object.keys(b)) {
+        if (bk.toLowerCase() === sub) {
+          const subObj = b[bk];
+          if (subObj && typeof subObj === 'object') {
+            for (const k of keys) {
+              for (const sk of Object.keys(subObj)) {
+                if (sk.toLowerCase() === k.toLowerCase()) {
+                  const val = subObj[sk];
+                  if (val !== null && val !== undefined) return val;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  const name = getVal(['nome', 'name', 'cliente', 'customer_name', 'buyer_name', 'first_name']);
+  const phone = getVal(['telefone', 'phone', 'whatsapp', 'celular', 'buyer_phone', 'mobile', 'phone_number']);
+
+  if (!phone) return null;
+
+  return {
+    name: name ? String(name).trim() : 'Cliente via Webhook',
+    phone: String(phone).replace(/\D/g, ''),
+    product: getVal(['produto', 'product', 'item', 'product_name', 'nome_produto']) || 'Produto Webhook',
+    value: getVal(['valor', 'value', 'price', 'amount', 'valor_pago']) || '0,00',
+    email: getVal(['email', 'emailConta', 'email_conta', 'buyer_email', 'customer_email']),
+    password: getVal(['senha', 'senhaConta', 'senha_conta', 'password', 'senha_acesso']),
+    screen: getVal(['tela', 'perfil', 'screen', 'profile', 'perfil_tela']),
+    pinScreen: getVal(['senhaPerfil', 'senha_perfil', 'screen_password', 'pin', 'pin_tela']),
+  };
+}
+
 // POST — receives the webhook for a specific user
 export async function POST(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params;
@@ -78,11 +131,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
   }
 
   // Se o payload for de 2-fatores, encaminha para o webhook de mensagem individual
-  if (body && typeof body === 'object' && ('Conteudo' in body) && (body as any).Conteudo === '2fatores') {
+  const is2FA = body && typeof body === 'object' &&
+    ((('Conteudo' in (body as any)) && (body as any).Conteudo === '2fatores') ||
+     (('conteudo' in (body as any)) && (body as any).conteudo === '2fatores'));
+
+  if (is2FA) {
     try {
       const b = body as any;
-      const codigofa = b.codigofa;
-      const NumeroCliente = b.NumeroCliente;
+      const codigofa = b.codigofa || b.codigoFa || b.codigo_fa;
+      const NumeroCliente = b.NumeroCliente || b.numeroCliente || b.numero_cliente;
 
       if (codigofa && NumeroCliente) {
         // Buscar configurações de 2FA e gerais do usuário no Firestore
@@ -128,35 +185,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
     }
   }
 
-  // Se o payload contém "nome" e "telefone", processamos para adicionar um cliente
-  if (body && typeof body === 'object' && ('nome' in body) && ('telefone' in body)) {
+  // Processamento inteligente do payload para adicionar cliente
+  const webhookData = extractWebhookData(body);
+  if (webhookData) {
     try {
-      const b = body as any;
       const dueDate = new Date();
       dueDate.setMonth(dueDate.getMonth() + 1);
 
       const clientData: any = {
         userId: userId,
-        name: b.nome ? String(b.nome).trim() : 'Cliente via Webhook',
-        phone: b.telefone || '',
-        subscription: b.produto || 'Produto Webhook',
-        amountPaid: b.valor ? b.valor.toString() : '0,00',
-        email: (b.email || b.emailConta) ? [b.email || b.emailConta] : [],
-        password: b.senha || b.senhaConta || null,
+        name: webhookData.name,
+        phone: webhookData.phone,
+        subscription: webhookData.product,
+        amountPaid: String(webhookData.value),
+        email: webhookData.email ? [String(webhookData.email).trim()] : [],
+        password: webhookData.password ? String(webhookData.password).trim() : null,
         screen: (() => {
-          const raw = b.tela || b.perfil || null;
+          const raw = webhookData.screen;
           if (!raw) return null;
           const str = String(raw).trim();
           const match = str.match(/\d+/);
           return match ? match[0] : str;
         })(),
-        pinScreen: b.senhaPerfil || null,
+        pinScreen: webhookData.pinScreen ? String(webhookData.pinScreen).trim() : null,
         accessLink: null,
         deliveryMethod: 'credentials',
         paymentMethod: 'PIX',
         status: 'Ativo',
         needsSupport: false,
-        createdAt: new Date(), // Using Date object simplifies Upsell logic on client
+        createdAt: new Date(),
         dueDate: Timestamp.fromDate(dueDate),
         upsellSent: false,
         sentUpsellIds: [],
