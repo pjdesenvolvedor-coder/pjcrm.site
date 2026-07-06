@@ -2,7 +2,7 @@
 // deploy: 2026-04-14
 'use client';
 
-import { useState, useMemo, type ReactNode, useEffect } from 'react';
+import { useState, useMemo, type ReactNode, useEffect, useRef } from 'react';
 import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload, Webhook, Loader2, ChevronDown, Check } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -236,7 +236,68 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const [activeTab, setActiveTab] = useState('dados');
   const { isSubmitting } = form.formState;
   const [productSearch, setProductSearch] = useState('');
-  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
+  const lastKeyTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (!isSelectOpen) return;
+      
+      // Ignore if user is typing inside any input or textarea
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return;
+      }
+
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        setProductSearch(prev => prev.slice(0, -1));
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        setIsSelectOpen(false);
+        return;
+      }
+
+      const filtered = subscriptions?.filter(s =>
+        s.name.toLowerCase().startsWith(productSearch.toLowerCase())
+      ) || [];
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filtered.length > 0) {
+          const first = filtered[0];
+          form.setValue('subscription', first.name);
+          const sub = subscriptions?.find(x => x.name === first.name);
+          if (sub) form.setValue('amountPaid', sub.value);
+          setIsSelectOpen(false);
+        }
+        return;
+      }
+
+      // Capture alphanumeric keys and space
+      if (e.key.length === 1 && /^[a-zA-Z0-9\s]$/.test(e.key)) {
+        e.preventDefault();
+        const now = Date.now();
+        const timeDiff = now - lastKeyTimeRef.current;
+        lastKeyTimeRef.current = now;
+
+        setProductSearch(prev => {
+          return timeDiff > 1500 ? e.key : prev + e.key;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [isSelectOpen, productSearch, subscriptions, form]);
 
   useEffect(() => {
     if (!isEditing && settings !== undefined) {
@@ -370,7 +431,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="max-h-[60vh] overflow-y-auto pr-2 py-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dados">Dados</TabsTrigger>
             <TabsTrigger value="vencimento">Vencimento</TabsTrigger>
@@ -581,80 +643,57 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="subscription" render={({ field }) => (
                   <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
                     <FormLabel className="md:text-right">Plano *</FormLabel>
-                    <div className="md:col-span-3">
-                      <Popover open={isProductPopoverOpen} onOpenChange={(open) => {
-                        setIsProductPopoverOpen(open);
-                        if (open) setProductSearch(''); // Reset search when opening
-                      }}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={cn(
-                                "w-full justify-between font-normal text-left truncate",
-                                !field.value && "text-muted-foreground"
-                              )}
+                    <Select 
+                      onValueChange={(v) => { 
+                        field.onChange(v); 
+                        const s = subscriptions?.find(x => x.name === v); 
+                        if (s) form.setValue('amountPaid', s.value); 
+                      }} 
+                      value={field.value}
+                      open={isSelectOpen}
+                      onOpenChange={(open) => {
+                        setIsSelectOpen(open);
+                        if (open) setProductSearch('');
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="md:col-span-3">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {productSearch && (
+                          <div className="bg-muted px-2 py-1 text-[10px] text-muted-foreground flex justify-between items-center border-b sticky top-0 z-10">
+                            <span>Filtrando por: <strong className="text-foreground uppercase">{productSearch}</strong></span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProductSearch('');
+                              }}
+                              className="hover:text-foreground font-semibold underline ml-2"
                             >
-                              <span className="truncate">{field.value || "Selecione o plano..."}</span>
-                              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-0" align="start">
-                          <div className="flex flex-col">
-                            {/* Search Input */}
-                            <div className="flex items-center border-b px-3 py-2">
-                              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                              <input
-                                placeholder="Buscar produto..."
-                                className="flex h-9 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                value={productSearch}
-                                onChange={(e) => setProductSearch(e.target.value)}
-                                autoFocus
-                              />
-                            </div>
-                            {/* Scrollable list */}
-                            <ScrollArea className="h-60 overflow-y-auto">
-                              <div className="p-1">
-                                {(() => {
-                                  const filtered = subscriptions?.filter(s =>
-                                    s.name.toLowerCase().includes(productSearch.toLowerCase())
-                                  ) || [];
-
-                                  if (filtered.length === 0) {
-                                    return <div className="py-6 text-center text-sm text-muted-foreground">Nenhum produto encontrado.</div>;
-                                  }
-
-                                  return filtered.map(s => {
-                                    const isSelected = field.value === s.name;
-                                    return (
-                                      <button
-                                        key={s.id}
-                                        type="button"
-                                        className={cn(
-                                          "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground text-left",
-                                          isSelected && "bg-accent text-accent-foreground font-semibold"
-                                        )}
-                                        onClick={() => {
-                                          field.onChange(s.name);
-                                          const sub = subscriptions?.find(x => x.name === s.name);
-                                          if (sub) form.setValue('amountPaid', sub.value);
-                                          setIsProductPopoverOpen(false);
-                                        }}
-                                      >
-                                        <span className="flex-1 truncate">{s.name}</span>
-                                        {isSelected && <Check className="ml-auto h-4 w-4" />}
-                                      </button>
-                                    );
-                                  });
-                                })()}
-                              </div>
-                            </ScrollArea>
+                              Limpar
+                            </button>
                           </div>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                        )}
+                        {(() => {
+                          const filtered = subscriptions?.filter(s =>
+                            s.name.toLowerCase().startsWith(productSearch.toLowerCase())
+                          ) || [];
+
+                          if (filtered.length === 0) {
+                            return <div className="py-4 text-center text-xs text-muted-foreground">Nenhum plano iniciando com &ldquo;{productSearch}&rdquo;.</div>;
+                          }
+
+                          return filtered.map(s => (
+                            <SelectItem key={s.id} value={s.name}>
+                              {s.name}
+                            </SelectItem>
+                          ));
+                        })()}
+                      </SelectContent>
+                    </Select>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => (
@@ -680,7 +719,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Valor</FormLabel><div className="relative md:col-span-3"><span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span><FormControl><Input {...field} placeholder="0,00" className="pl-9" /></FormControl></div></FormItem> )} />
           </TabsContent>
         </Tabs>
-        <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
+      </div>
+      <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
           <div className="flex gap-2 w-full sm:w-auto">
             {activeTab !== 'dados' && (
               <Button 
@@ -1137,7 +1177,8 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <TooltipProvider>
+      <div className="flex flex-col h-full">
       <PageHeader title="Todos os Clientes">
         <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar por nome, tel ou e-mail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 md:w-[240px]" /></div>
         <div className="flex items-center gap-2">
@@ -1221,38 +1262,32 @@ export default function CustomersPage() {
                         ) : '-'}
                     </TableCell>
                     <TableCell className="text-right space-x-1 whitespace-nowrap">
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-8 w-8 text-pink-600 border-pink-200 hover:bg-pink-50" onClick={() => handleManualWebhook(client)}>
-                                        <Webhook className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Enviar Webhook (n8n)</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-pink-600 border-pink-200 hover:bg-pink-50" onClick={() => handleManualWebhook(client)}>
+                                    <Webhook className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Enviar Webhook (n8n)</TooltipContent>
+                        </Tooltip>
 
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => handleResendAccess(client)}>
-                                        <Key className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Reenviar Acesso</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => handleResendAccess(client)}>
+                                    <Key className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Reenviar Acesso</TooltipContent>
+                        </Tooltip>
 
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-8 w-8 text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => setDialogState({ view: 'add', client: { name: client.name, phone: client.phone, telegramUser: client.telegramUser } })}>
-                                        <ShoppingCart className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Nova Compra (Mesmo Cliente)</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={() => setDialogState({ view: 'add', client: { name: client.name, phone: client.phone, telegramUser: client.telegramUser } })}>
+                                    <ShoppingCart className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Nova Compra (Mesmo Cliente)</TooltipContent>
+                        </Tooltip>
 
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => setDialogState({ view: 'message', client })}>
                             <MessageSquare className="h-4 w-4" />
@@ -1300,5 +1335,6 @@ export default function CustomersPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }
