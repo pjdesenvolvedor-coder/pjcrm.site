@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload, Webhook, Loader2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload, Webhook, Loader2, ChevronDown, Check } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useFirebase, useUser, setDocumentNonBlocking, deleteDocumentNonBlocking, useDoc, addDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
 import type { Client, Settings, Subscription } from '@/lib/types';
 import { Label } from '@/components/ui/label';
@@ -234,6 +235,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const deliveryMethod = form.watch('deliveryMethod');
   const [activeTab, setActiveTab] = useState('dados');
   const { isSubmitting } = form.formState;
+  const [productSearch, setProductSearch] = useState('');
+  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
 
   useEffect(() => {
     if (!isEditing && settings !== undefined) {
@@ -578,16 +581,80 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="subscription" render={({ field }) => (
                   <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
                     <FormLabel className="md:text-right">Plano *</FormLabel>
-                    <Select onValueChange={(v) => { field.onChange(v); const s = subscriptions?.find(x => x.name === v); if (s) form.setValue('amountPaid', s.value); }} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="md:col-span-3">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {subscriptions?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="md:col-span-3">
+                      <Popover open={isProductPopoverOpen} onOpenChange={(open) => {
+                        setIsProductPopoverOpen(open);
+                        if (open) setProductSearch(''); // Reset search when opening
+                      }}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn(
+                                "w-full justify-between font-normal text-left truncate",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              <span className="truncate">{field.value || "Selecione o plano..."}</span>
+                              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          <div className="flex flex-col">
+                            {/* Search Input */}
+                            <div className="flex items-center border-b px-3 py-2">
+                              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                              <input
+                                placeholder="Buscar produto..."
+                                className="flex h-9 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                                value={productSearch}
+                                onChange={(e) => setProductSearch(e.target.value)}
+                                autoFocus
+                              />
+                            </div>
+                            {/* Scrollable list */}
+                            <ScrollArea className="h-60 overflow-y-auto">
+                              <div className="p-1">
+                                {(() => {
+                                  const filtered = subscriptions?.filter(s =>
+                                    s.name.toLowerCase().includes(productSearch.toLowerCase())
+                                  ) || [];
+
+                                  if (filtered.length === 0) {
+                                    return <div className="py-6 text-center text-sm text-muted-foreground">Nenhum produto encontrado.</div>;
+                                  }
+
+                                  return filtered.map(s => {
+                                    const isSelected = field.value === s.name;
+                                    return (
+                                      <button
+                                        key={s.id}
+                                        type="button"
+                                        className={cn(
+                                          "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground text-left",
+                                          isSelected && "bg-accent text-accent-foreground font-semibold"
+                                        )}
+                                        onClick={() => {
+                                          field.onChange(s.name);
+                                          const sub = subscriptions?.find(x => x.name === s.name);
+                                          if (sub) form.setValue('amountPaid', sub.value);
+                                          setIsProductPopoverOpen(false);
+                                        }}
+                                      >
+                                        <span className="flex-1 truncate">{s.name}</span>
+                                        {isSelected && <Check className="ml-auto h-4 w-4" />}
+                                      </button>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => (
