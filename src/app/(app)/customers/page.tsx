@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useMemo, type ReactNode, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload, Webhook } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, ArrowUpDown, CalendarIcon, MessageSquare, Trash2, User, Phone, Mail, CheckCircle2, ShoppingCart, CalendarDays, Banknote, Wallet, FilePenLine, RefreshCw, X, Eye, LifeBuoy, Plus, ArrowUp, ArrowDown, Search, Key, Monitor, Clock, RotateCw, Send, Link2, ShieldEllipsis, Download, Upload, Webhook, Loader2 } from 'lucide-react';
 import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -65,13 +65,16 @@ const deliveryMethods = ["credentials", "link"] as const;
 
 // Helper to format CPF or Email
 const formatEmailOrCPF = (value: string) => {
+    // Trim leading/trailing whitespace immediately
+    const trimmed = value.trim();
+    
     // Se o valor contém letras ou o símbolo @, ignoramos a formatação de CPF
     // Isso permite e-mails com números (ex: joao123@gmail.com)
-    if (/[a-zA-Z@]/.test(value)) {
-        return value;
+    if (/[a-zA-Z@]/.test(trimmed)) {
+        return trimmed;
     }
 
-    const cleanValue = value.replace(/\D/g, '');
+    const cleanValue = trimmed.replace(/\D/g, '');
     
     // Só aplica máscara se o que sobrar forem apenas números e não tiver cara de e-mail
     if (cleanValue.length > 0) {
@@ -82,7 +85,7 @@ const formatEmailOrCPF = (value: string) => {
         return formatted.slice(0, 14);
     }
     
-    return value;
+    return trimmed;
 };
 
 const clientSchema = z.object({
@@ -129,8 +132,9 @@ const clientSchema = z.object({
         
         data.emails.forEach((e, idx) => {
             if (e.value) {
-                const isEmail = emailRegex.test(e.value);
-                const isCpf = cpfRegex.test(e.value);
+                const trimmedValue = e.value.trim();
+                const isEmail = emailRegex.test(trimmedValue);
+                const isCpf = cpfRegex.test(trimmedValue);
                 
                 if (!isEmail && !isCpf) {
                     ctx.addIssue({
@@ -228,6 +232,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'emails' });
   const clientType = form.watch('clientType');
   const deliveryMethod = form.watch('deliveryMethod');
+  const [activeTab, setActiveTab] = useState('dados');
+  const { isSubmitting } = form.formState;
 
   useEffect(() => {
     if (!isEditing && settings !== undefined) {
@@ -258,9 +264,22 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const onSubmit = async (values: z.infer<typeof clientSchema>) => {
     if (!effectiveUserId || !user) return;
     
+    // Trim all strings in values safely
+    const trimmedName = values.name.trim();
+    const trimmedPhone = values.phone.trim();
+    const trimmedPassword = values.password ? values.password.trim() : '';
+    const trimmedScreen = values.screen ? values.screen.trim() : '';
+    const trimmedPinScreen = values.pinScreen ? values.pinScreen.trim() : '';
+    const trimmedAccessLink = values.accessLink ? values.accessLink.trim() : '';
+    const trimmedDueDate = values.dueDate ? values.dueDate.trim() : '';
+    const trimmedNotes = values.notes ? values.notes.trim() : '';
+    const trimmedSubscription = values.subscription.trim();
+    const trimmedAmountPaid = values.amountPaid ? values.amountPaid.trim() : '';
+    const trimmedTelegramUser = values.telegramUser ? values.telegramUser.trim() : '';
+
     let dueDateTimestamp: Timestamp | undefined = undefined;
-    if (values.dueDate && values.dueDate.length === 8) {
-        const [day, month, year] = values.dueDate.split('/');
+    if (trimmedDueDate && trimmedDueDate.length === 8) {
+        const [day, month, year] = trimmedDueDate.split('/');
         const date = new Date(parseInt(year, 10) + 2000, parseInt(month, 10) - 1, parseInt(day, 10));
         if (!isNaN(date.getTime())) {
             date.setHours(parseInt(values.dueTimeHour || '0', 10), parseInt(values.dueTimeMinute || '0', 10));
@@ -269,27 +288,27 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
     }
 
     const emailList = values.emails 
-        ? values.emails.map(email => email.value).filter(Boolean) as string[]
+        ? values.emails.map(email => email.value ? email.value.trim() : '').filter(Boolean) as string[]
         : [];
 
     const clientData: any = {
       userId: effectiveUserId,
-      name: values.name,
+      name: trimmedName,
       email: emailList,
-      phone: values.phone,
-      password: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.password || null) : null,
-      screen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.screen || null) : null,
-      pinScreen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (values.pinScreen || null) : null,
-      accessLink: values.deliveryMethod === 'link' ? (values.accessLink || null) : null,
+      phone: trimmedPhone,
+      password: (values.deliveryMethod === 'credentials' && !values.clientType) ? (trimmedPassword || null) : null,
+      screen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (trimmedScreen || null) : null,
+      pinScreen: (values.deliveryMethod === 'credentials' && !values.clientType) ? (trimmedPinScreen || null) : null,
+      accessLink: values.deliveryMethod === 'link' ? (trimmedAccessLink || null) : null,
       deliveryMethod: values.deliveryMethod,
-      telegramUser: values.telegramUser ?? null,
+      telegramUser: trimmedTelegramUser || null,
       clientType: values.clientType ?? null,
       dueDate: dueDateTimestamp ?? null,
-      notes: values.notes ?? null,
+      notes: trimmedNotes || null,
       quantity: emailList.length || 1,
-      subscription: values.subscription,
+      subscription: trimmedSubscription,
       paymentMethod: values.paymentMethod ?? null,
-      amountPaid: values.amountPaid ?? null,
+      amountPaid: trimmedAmountPaid || null,
       agentId: user.uid,
       agentName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Sistema',
     };
@@ -314,33 +333,31 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 
         if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
-                .replace(/{cliente}/g, values.name).replace(/{telefone}/g, values.phone)
+                .replace(/{cliente}/g, trimmedName).replace(/{telefone}/g, trimmedPhone)
                 .replace(/{email}/g, emailList.join(', '))
-                .replace(/{senha}/g, values.password || 'N/A').replace(/{tela}/g, values.screen || 'N/A')
-                .replace(/{pin_tela}/g, values.pinScreen || 'N/A')
-                .replace(/{link}/g, values.accessLink || 'N/A')
-                .replace(/{assinatura}/g, values.subscription)
+                .replace(/{senha}/g, trimmedPassword || 'N/A').replace(/{tela}/g, trimmedScreen || 'N/A')
+                .replace(/{pin_tela}/g, trimmedPinScreen || 'N/A')
+                .replace(/{link}/g, trimmedAccessLink || 'N/A')
+                .replace(/{assinatura}/g, trimmedSubscription)
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
-                .replace(/{valor}/g, values.amountPaid || '0,00').replace(/{status}/g, newStatus);
+                .replace(/{valor}/g, trimmedAmountPaid || '0,00').replace(/{status}/g, newStatus);
 
-            try {
-                // Envia os dados do cliente para o webhook n8n antes de enviar a mensagem no zap
-                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nome: values.name,
-                        numero: values.phone,
-                        token: settings.webhookToken
-                    })
-                });
-            } catch (error) {
+            // Envia os dados do cliente para o webhook n8n em segundo plano (sem await) para evitar delay
+            fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nome: trimmedName,
+                    numero: trimmedPhone,
+                    token: settings.webhookToken
+                })
+            }).catch(error => {
                 console.error("Falha ao enviar webhook n8n:", error);
-            }
+            });
 
             fetch('/api/send-message', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: formattedMessage, phoneNumber: values.phone, token: settings.webhookToken }),
+                body: JSON.stringify({ message: formattedMessage, phoneNumber: trimmedPhone, token: settings.webhookToken }),
             }).catch(console.error);
         }
     }
@@ -350,7 +367,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <Tabs defaultValue="dados" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dados">Dados</TabsTrigger>
             <TabsTrigger value="vencimento">Vencimento</TabsTrigger>
@@ -596,7 +613,66 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 <FormField control={form.control} name="amountPaid" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Valor</FormLabel><div className="relative md:col-span-3"><span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">R$</span><FormControl><Input {...field} placeholder="0,00" className="pl-9" /></FormControl></div></FormItem> )} />
           </TabsContent>
         </Tabs>
-        <DialogFooter className='pt-4'><Button variant="ghost" type="button" onClick={onFinished}>Cancelar</Button><Button type="submit">{isEditing ? 'Salvar' : 'Cadastrar'}</Button></DialogFooter>
+        <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
+            {activeTab !== 'dados' && (
+              <Button 
+                variant="outline" 
+                type="button" 
+                className="flex-1 sm:flex-none"
+                onClick={() => {
+                  if (activeTab === 'pagamento') setActiveTab('vencimento');
+                  else if (activeTab === 'vencimento') setActiveTab('dados');
+                }}
+              >
+                Voltar
+              </Button>
+            )}
+            <Button variant="ghost" type="button" className="flex-1 sm:flex-none" onClick={onFinished}>Cancelar</Button>
+          </div>
+          
+          <div className="flex w-full sm:w-auto">
+            {activeTab === 'dados' && (
+              <Button 
+                type="button" 
+                className="w-full sm:w-auto"
+                onClick={async () => {
+                  const isValid = await form.trigger(['name', 'phone', 'emails', 'password', 'screen', 'pinScreen', 'accessLink']);
+                  if (isValid) {
+                    setActiveTab('vencimento');
+                  }
+                }}
+              >
+                Próximo
+              </Button>
+            )}
+            
+            {activeTab === 'vencimento' && (
+              <Button 
+                type="button" 
+                className="w-full sm:w-auto"
+                onClick={async () => {
+                  const isValid = await form.trigger(['dueDate']);
+                  if (isValid) {
+                    setActiveTab('pagamento');
+                  }
+                }}
+              >
+                Avançar
+              </Button>
+            )}
+            
+            {activeTab === 'pagamento' && (
+              <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+                {isSubmitting ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isEditing ? 'Salvando...' : 'Cadastrando...'}</>
+                ) : (
+                  isEditing ? 'Salvar' : 'Cadastrar'
+                )}
+              </Button>
+            )}
+          </div>
+        </DialogFooter>
       </form>
     </Form>
   )
