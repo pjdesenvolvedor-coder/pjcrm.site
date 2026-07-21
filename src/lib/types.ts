@@ -122,8 +122,10 @@ export type Settings = {
   supportFinishedMessage?: string;
   isDeliveryAutomationActive?: boolean;
   deliveryMessage?: string;
+  customDeliveryMessages?: { [key: string]: string };
   isDeliveryLinkAutomationActive?: boolean;
   deliveryLinkMessage?: string;
+  customDeliveryLinkMessages?: { [key: string]: string };
   isLeadAutomationActive?: boolean;
   leadInitialMessage?: string;
   leadConvertedMessage?: string;

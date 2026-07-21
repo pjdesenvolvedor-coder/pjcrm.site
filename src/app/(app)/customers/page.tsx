@@ -393,7 +393,9 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         toast({ title: "Cliente adicionado!" });
 
         const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
-        const deliveryMessageTemplate = values.deliveryMethod === 'credentials' ? settings?.deliveryMessage : settings?.deliveryLinkMessage;
+        const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
+            ? (settings?.customDeliveryMessages?.[trimmedSubscription] || settings?.deliveryMessage)
+            : (settings?.customDeliveryLinkMessages?.[trimmedSubscription] || settings?.deliveryLinkMessage);
 
         if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
@@ -1041,7 +1043,10 @@ export default function CustomersPage() {
       }
 
       const deliveryMethod = client.deliveryMethod || 'credentials';
-      const messageTemplate = deliveryMethod === 'credentials' ? settings.deliveryMessage : settings.deliveryLinkMessage;
+      const subName = client.subscription || '';
+      const messageTemplate = deliveryMethod === 'credentials'
+          ? (settings.customDeliveryMessages?.[subName] || settings.deliveryMessage)
+          : (settings.customDeliveryLinkMessages?.[subName] || settings.deliveryLinkMessage);
 
       if (!messageTemplate) {
           toast({ variant: 'destructive', title: 'Erro', description: 'Mensagem de entrega não configurada nas Configurações.' });

@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useEffect } from 'react';
-import { doc } from 'firebase/firestore';
-import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
+import { useEffect, useState } from 'react';
+import { doc, collection, query, orderBy } from 'firebase/firestore';
+import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase, useCollection } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,7 +14,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, Trash2, Edit } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -78,7 +79,53 @@ export default function DeliveryCredentialsPage() {
       });
     }
   };
-  
+  const subscriptionsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'subscriptions'), orderBy('name'));
+  }, [firestore, user]);
+
+  const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
+
+  const [selectedSub, setSelectedSub] = useState<string>('');
+  const [specificMessage, setSpecificMessage] = useState<string>('');
+
+  const handleSaveSpecific = () => {
+    if (!selectedSub) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, selecione uma assinatura.' });
+      return;
+    }
+    if (!settingsDocRef || !settings) return;
+
+    const currentMap = settings.customDeliveryMessages || {};
+    const updatedMap = {
+      ...currentMap,
+      [selectedSub]: specificMessage
+    };
+
+    setDocumentNonBlocking(settingsDocRef, { customDeliveryMessages: updatedMap }, { merge: true });
+    toast({
+      title: 'Entrega específica salva!',
+      description: `Mensagem personalizada definida para o produto "${selectedSub}".`
+    });
+
+    setSelectedSub('');
+    setSpecificMessage('');
+  };
+
+  const handleRemoveSpecific = (subName: string) => {
+    if (!settingsDocRef || !settings) return;
+
+    const currentMap = settings.customDeliveryMessages || {};
+    const updatedMap = { ...currentMap };
+    delete updatedMap[subName];
+
+    setDocumentNonBlocking(settingsDocRef, { customDeliveryMessages: updatedMap }, { merge: true });
+    toast({
+      title: 'Entrega específica removida!',
+      description: `Mensagem personalizada removida para "${subName}". Voltará a usar a mensagem geral.`
+    });
+  };
+
   const copyVariableToClipboard = (variable: string) => {
     navigator.clipboard.writeText(variable);
     toast({
@@ -191,6 +238,101 @@ export default function DeliveryCredentialsPage() {
             </Card>
           </form>
         </Form>
+
+        {/* Card for specific product delivery messages */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Entrega por Produto (Específica)
+            </CardTitle>
+            <CardDescription>
+              Defina mensagens de entrega personalizadas para assinaturas específicas. Se configurado, o cliente receberá esta mensagem específica em vez da mensagem geral.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end rounded-md border p-4 bg-muted/20">
+              <div className="space-y-2">
+                <Label>Selecione a Assinatura</Label>
+                <Select value={selectedSub} onValueChange={(val) => {
+                  setSelectedSub(val);
+                  setSpecificMessage(settings?.customDeliveryMessages?.[val] || '');
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o plano/assinatura" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subscriptions?.map(sub => (
+                      <SelectItem key={sub.id} value={sub.name}>
+                        {sub.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="md:col-span-2 space-y-2">
+                <Label>Mensagem de Entrega Específica</Label>
+                <Textarea 
+                  placeholder="Mensagem personalizada para este produto..."
+                  value={specificMessage}
+                  onChange={(e) => setSpecificMessage(e.target.value)}
+                  className="min-h-[100px]"
+                />
+              </div>
+
+              <div className="md:col-span-3 flex justify-end">
+                <Button 
+                  type="button" 
+                  onClick={handleSaveSpecific}
+                  disabled={!selectedSub || !specificMessage.trim()}
+                >
+                  Salvar Entrega Específica
+                </Button>
+              </div>
+            </div>
+
+            {/* List of configured specific messages */}
+            <div className="space-y-4">
+              <Label className="text-base font-semibold">Configurações Ativas</Label>
+              {(!settings?.customDeliveryMessages || Object.keys(settings.customDeliveryMessages).length === 0) ? (
+                <p className="text-sm text-muted-foreground italic">Nenhuma entrega específica configurada. Todos os planos usam a mensagem geral.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {Object.entries(settings.customDeliveryMessages).map(([subName, msg]) => (
+                    <div key={subName} className="flex flex-col md:flex-row md:items-start justify-between p-4 rounded-md border gap-4 bg-background">
+                      <div className="space-y-1 flex-1">
+                        <Badge variant="outline" className="font-semibold text-primary">{subName}</Badge>
+                        <pre className="text-xs text-muted-foreground font-sans whitespace-pre-wrap mt-2 bg-muted/40 p-2 rounded">
+                          {msg}
+                        </pre>
+                      </div>
+                      <div className="flex gap-2 self-end md:self-start">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => {
+                            setSelectedSub(subName);
+                            setSpecificMessage(msg);
+                          }}
+                        >
+                          <Edit className="h-4 w-4 mr-1" /> Editar
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          onClick={() => handleRemoveSpecific(subName)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Remover
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

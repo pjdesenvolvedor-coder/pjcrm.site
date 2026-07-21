@@ -234,7 +234,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
         const settings = settingsSnap.data();
         
         const isDeliveryActive = settings.isDeliveryAutomationActive;
-        const deliveryMessageTemplate = settings.deliveryMessage;
+        const subName = clientData.subscription || '';
+        const deliveryMessageTemplate = (settings.customDeliveryMessages && settings.customDeliveryMessages[subName])
+            ? settings.customDeliveryMessages[subName]
+            : settings.deliveryMessage;
 
         if (isDeliveryActive && deliveryMessageTemplate && settings.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
