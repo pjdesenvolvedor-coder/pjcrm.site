@@ -89,6 +89,39 @@ const formatEmailOrCPF = (value: string) => {
     return trimmed;
 };
 
+// Helper to resolve custom delivery message templates with partial case-insensitive matching
+function getCustomDeliveryMessage(
+  customMessages: Record<string, string> | undefined,
+  subscriptionName: string | undefined,
+  defaultMessage: string | undefined
+): string | undefined {
+  if (!customMessages || !subscriptionName) return defaultMessage;
+  const subNameLower = subscriptionName.trim().toLowerCase();
+  
+  // 1. Exact match (case-insensitive)
+  for (const [key, msg] of Object.entries(customMessages)) {
+    if (key.trim().toLowerCase() === subNameLower) {
+      return msg;
+    }
+  }
+  
+  // 2. Partial match (longest key matching wins)
+  let bestMatchKey = '';
+  let bestMatchMsg: string | undefined = undefined;
+  
+  for (const [key, msg] of Object.entries(customMessages)) {
+    const keyLower = key.trim().toLowerCase();
+    if (keyLower && (subNameLower.includes(keyLower) || keyLower.includes(subNameLower))) {
+      if (keyLower.length > bestMatchKey.length) {
+        bestMatchKey = keyLower;
+        bestMatchMsg = msg;
+      }
+    }
+  }
+  
+  return bestMatchMsg !== undefined ? bestMatchMsg : defaultMessage;
+}
+
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   telegramUser: z.string().optional(),
@@ -394,8 +427,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
 
         const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
         const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
-            ? (settings?.customDeliveryMessages?.[trimmedSubscription] || settings?.deliveryMessage)
-            : (settings?.customDeliveryLinkMessages?.[trimmedSubscription] || settings?.deliveryLinkMessage);
+            ? getCustomDeliveryMessage(settings?.customDeliveryMessages, trimmedSubscription, settings?.deliveryMessage)
+            : getCustomDeliveryMessage(settings?.customDeliveryLinkMessages, trimmedSubscription, settings?.deliveryLinkMessage);
 
         if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
@@ -1045,8 +1078,8 @@ export default function CustomersPage() {
       const deliveryMethod = client.deliveryMethod || 'credentials';
       const subName = client.subscription || '';
       const messageTemplate = deliveryMethod === 'credentials'
-          ? (settings.customDeliveryMessages?.[subName] || settings.deliveryMessage)
-          : (settings.customDeliveryLinkMessages?.[subName] || settings.deliveryLinkMessage);
+          ? getCustomDeliveryMessage(settings.customDeliveryMessages, subName, settings.deliveryMessage)
+          : getCustomDeliveryMessage(settings.customDeliveryLinkMessages, subName, settings.deliveryLinkMessage);
 
       if (!messageTemplate) {
           toast({ variant: 'destructive', title: 'Erro', description: 'Mensagem de entrega não configurada nas Configurações.' });

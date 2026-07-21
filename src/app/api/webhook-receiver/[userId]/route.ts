@@ -10,6 +10,39 @@ export const dynamic = 'force-dynamic';
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Helper to resolve custom delivery message templates with partial case-insensitive matching
+function getCustomDeliveryMessage(
+  customMessages: Record<string, string> | undefined,
+  subscriptionName: string | undefined,
+  defaultMessage: string | undefined
+): string | undefined {
+  if (!customMessages || !subscriptionName) return defaultMessage;
+  const subNameLower = subscriptionName.trim().toLowerCase();
+  
+  // 1. Exact match (case-insensitive)
+  for (const [key, msg] of Object.entries(customMessages)) {
+    if (key.trim().toLowerCase() === subNameLower) {
+      return msg;
+    }
+  }
+  
+  // 2. Partial match (longest key matching wins)
+  let bestMatchKey = '';
+  let bestMatchMsg: string | undefined = undefined;
+  
+  for (const [key, msg] of Object.entries(customMessages)) {
+    const keyLower = key.trim().toLowerCase();
+    if (keyLower && (subNameLower.includes(keyLower) || keyLower.includes(subNameLower))) {
+      if (keyLower.length > bestMatchKey.length) {
+        bestMatchKey = keyLower;
+        bestMatchMsg = msg;
+      }
+    }
+  }
+  
+  return bestMatchMsg !== undefined ? bestMatchMsg : defaultMessage;
+}
+
 interface WebhookLog {
   id: string;
   timestamp: string;
@@ -235,9 +268,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
         
         const isDeliveryActive = settings.isDeliveryAutomationActive;
         const subName = clientData.subscription || '';
-        const deliveryMessageTemplate = (settings.customDeliveryMessages && settings.customDeliveryMessages[subName])
-            ? settings.customDeliveryMessages[subName]
-            : settings.deliveryMessage;
+        const deliveryMessageTemplate = getCustomDeliveryMessage(settings.customDeliveryMessages, subName, settings.deliveryMessage);
 
         if (isDeliveryActive && deliveryMessageTemplate && settings.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
