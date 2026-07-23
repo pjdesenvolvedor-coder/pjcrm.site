@@ -824,19 +824,31 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
     const { firestore, effectiveUserId, userProfile } = useFirebase();
     const { user } = useUser();
     const { toast } = useToast();
-    const [emails, setEmails] = useState(client.email.join(', '));
+    const [emails, setEmails] = useState(Array.isArray(client.email) ? client.email.join(', ') : (client.email || ''));
+    const [password, setPassword] = useState(client.password || '');
+    const [subscription, setSubscription] = useState(client.subscription || '');
     const [amount, setAmount] = useState(client.amountPaid || '0,00');
     const [period, setPeriod] = useState('1');
+
+    const subscriptionsQuery = useMemoFirebase(() => {
+        if (!effectiveUserId) return null;
+        return query(collection(firestore, 'users', effectiveUserId, 'subscriptions'), orderBy('name'));
+    }, [firestore, effectiveUserId]);
+    const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
     const handleRenewAction = () => {
         if (!effectiveUserId || !user) return;
         const clientDocRef = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
         
-        const newDueDate = add(new Date(), { months: 1 });
+        const monthsToAdd = parseInt(period, 10) || 1;
+        const baseDate = (client.dueDate && (client.dueDate as any).toDate() > new Date()) ? (client.dueDate as any).toDate() : new Date();
+        const newDueDate = add(baseDate, { months: monthsToAdd });
         
         setDocumentNonBlocking(clientDocRef, {
             status: 'Ativo',
             email: emails.split(',').map(e => e.trim()).filter(Boolean),
+            password: password.trim() || null,
+            subscription: subscription.trim() || null,
             amountPaid: amount,
             dueDate: Timestamp.fromDate(newDueDate),
             createdAt: serverTimestamp(),
@@ -846,13 +858,46 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
             agentName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Sistema',
         }, { merge: true });
 
-        toast({ title: "Cliente Renovado!", description: `Acesso estendido por 1 mês para ${client.name}.` });
+        toast({ title: "Cliente Renovado!", description: `Acesso estendido para ${client.name}.` });
         onFinished();
     };
 
     return (
         <div className="space-y-6 pt-4">
             <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label>Plano / Produto *</Label>
+                    {subscriptions && subscriptions.length > 0 ? (
+                        <Select 
+                            value={subscription} 
+                            onValueChange={(val) => {
+                                setSubscription(val);
+                                const selectedSub = subscriptions.find(s => s.name === val);
+                                if (selectedSub) {
+                                    setAmount(selectedSub.value);
+                                }
+                            }}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione o plano/produto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {subscriptions.map(sub => (
+                                    <SelectItem key={sub.id} value={sub.name}>
+                                        {sub.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    ) : (
+                        <Input 
+                            value={subscription} 
+                            onChange={(e) => setSubscription(e.target.value)} 
+                            placeholder="Nome do produto/plano" 
+                        />
+                    )}
+                </div>
+
                 <div className="space-y-2">
                     <Label>E-mails/CPF em uso (Separe por vírgula se houver mais de um)</Label>
                     <Input 
@@ -861,6 +906,16 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
                         placeholder="email@exemplo.com ou CPF" 
                     />
                 </div>
+
+                <div className="space-y-2">
+                    <Label>Senha da Conta</Label>
+                    <Input 
+                        value={password} 
+                        onChange={(e) => setPassword(e.target.value)} 
+                        placeholder="Senha da conta" 
+                    />
+                </div>
+
                 <div className="space-y-2">
                     <Label>Valor da Renovação (R$)</Label>
                     <div className="relative">
@@ -873,6 +928,7 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
                         />
                     </div>
                 </div>
+
                 <div className="space-y-2">
                     <Label>Período de Renovação</Label>
                     <Select value={period} onValueChange={setPeriod}>
@@ -881,6 +937,10 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="1">1 Mês</SelectItem>
+                            <SelectItem value="2">2 Meses</SelectItem>
+                            <SelectItem value="3">3 Meses</SelectItem>
+                            <SelectItem value="6">6 Meses</SelectItem>
+                            <SelectItem value="12">1 Ano</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
