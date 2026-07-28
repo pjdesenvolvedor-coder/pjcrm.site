@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds between multiple sends
@@ -125,15 +125,30 @@ export function Upsell2MessageHandler() {
                     const logRef = collection(firestore, 'users', user.uid, 'logs');
 
                     try {
-                        const currentSentIds = client.sentUpsell2Ids || [];
-                        if (currentSentIds.includes(upsell.id)) return;
+                        let claimSuccessful = false;
 
-                        const updatedSentIds = Array.from(new Set([...currentSentIds, upsell.id]));
+                        // ATOMIC CONCURRENCY LOCK (runTransaction): Prevents duplicate sends across 200 open tabs
+                        await runTransaction(firestore, async (transaction) => {
+                            const clientSnap = await transaction.get(clientDocRef);
+                            if (!clientSnap.exists()) return;
+                            const clientData = clientSnap.data() as Client;
+                            const currentSentIds = clientData.sentUpsell2Ids || [];
 
-                        // Mark as sent in Firestore so it's only processed once
-                        await updateDoc(clientDocRef, { sentUpsell2Ids: updatedSentIds }).catch(() => {
-                            setDocumentNonBlocking(clientDocRef, { sentUpsell2Ids: updatedSentIds }, { merge: true });
+                            if (currentSentIds.includes(upsell.id)) {
+                                throw new Error('ALREADY_CLAIMED');
+                            }
+
+                            const updatedSentIds = Array.from(new Set([...currentSentIds, upsell.id]));
+                            transaction.update(clientDocRef, { sentUpsell2Ids: updatedSentIds });
+                            claimSuccessful = true;
+                        }).catch(() => {
+                            claimSuccessful = false;
                         });
+
+                        // If another tab/thread won the transaction first, ABORT DISPATCH IMMEDIATELY!
+                        if (!claimSuccessful) {
+                            return;
+                        }
 
                         addDocumentNonBlocking(logRef, {
                             userId: user.uid,
@@ -168,6 +183,7 @@ export function Upsell2MessageHandler() {
 
                             let formattedFooter = upsell.footerText ? upsell.footerText.replace(/{cliente}/g, client.name || '') : undefined;
 
+                            // DISPATCH ONLY TO /api/send-menu FOR BUTTON CARDS (NO DOUBLE TEXT MESSAGE)
                             response = await fetch('/api/send-menu', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -182,6 +198,7 @@ export function Upsell2MessageHandler() {
                                 }),
                             });
                         } else {
+                            // DISPATCH ONLY TO /api/send-message FOR TEXT MESSAGES
                             response = await fetch('/api/send-message', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
