@@ -78,14 +78,14 @@ export function Upsell2MessageHandler() {
             try {
                 isProcessing.current = true;
                 const now = Date.now();
-                const cutoff24h = now - (24 * 60 * 60 * 1000); // Clients created in last 24h
+                const STRICT_CUTOFF_MS = 1770008444000; // 28/07/2026 00:40:44
                 
                 const tasks: { client: Client, upsell: UpsellConfig }[] = [];
                 for (const client of activeClients) {
                     const clientCreatedMs = getTimestampMs(client.createdAt) || now;
 
-                    // Skip historical clients created more than 24 hours ago
-                    if (clientCreatedMs < cutoff24h) {
+                    // Skip all clients created before July 28, 2026 00:40:44
+                    if (clientCreatedMs < STRICT_CUTOFF_MS) {
                         continue;
                     }
 

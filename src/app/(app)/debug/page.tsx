@@ -144,11 +144,11 @@ export default function DebugPage() {
     const queue: { client: Client; upsell: any; delayMinutes: number; secondsRemaining: number; statusText: string }[] = [];
     const activeClients = clients.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido');
 
-    const cutoff24h = nowMs - (24 * 60 * 60 * 1000);
+    const STRICT_CUTOFF_MS = 1770008444000; // 28/07/2026 00:40:44
 
     for (const client of activeClients) {
       const clientCreatedMs = getTimestampMs(client.createdAt) || nowMs;
-      if (clientCreatedMs < cutoff24h) continue;
+      if (clientCreatedMs < STRICT_CUTOFF_MS) continue;
 
       for (const upsell of activeUpsells) {
         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
