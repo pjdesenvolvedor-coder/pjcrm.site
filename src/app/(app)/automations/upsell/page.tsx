@@ -193,9 +193,6 @@ export default function UpsellPage() {
                                             checked={field.value}
                                             onCheckedChange={(checked) => {
                                                 field.onChange(checked);
-                                                if (checked) {
-                                                    form.setValue(`upsells.${index}.createdAt`, Date.now(), { shouldDirty: true });
-                                                }
                                             }}
                                         />
                                         </FormControl>

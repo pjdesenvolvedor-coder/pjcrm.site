@@ -1,15 +1,12 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, where, doc, runTransaction, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, runTransaction, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-
-import { getZapToken } from '@/lib/zapToken';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds
@@ -44,13 +41,13 @@ export function UpsellMessageHandler() {
     const isProcessing = useRef(false);
 
     const settingsDocRef = useMemoFirebase(() => {
-        if (!user) return null;
+        if (!user || !firestore) return null;
         return doc(firestore, 'users', user.uid, 'settings', 'config');
     }, [firestore, user]);
     const { data: settings } = useDoc<Settings>(settingsDocRef);
     
     const userDocRef = useMemoFirebase(() => {
-        if (!user) return null;
+        if (!user || !firestore) return null;
         return doc(firestore, 'users', user.uid);
     }, [firestore, user]);
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
@@ -65,18 +62,19 @@ export function UpsellMessageHandler() {
         const processUpsellQueue = async () => {
             if (isProcessing.current) return;
 
-            if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < new Date()) {
-                return;
+            if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate) {
+                const subEndMs = getTimestampMs(userProfile.subscriptionEndDate);
+                if (subEndMs && subEndMs < Date.now()) return;
             }
 
             let activeUpsells: UpsellConfig[] = [];
             if (settings?.upsells && settings.upsells.length > 0) {
-                activeUpsells = settings.upsells.filter(u => u.isActive && u.upsellMessage);
+                activeUpsells = settings.upsells.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
             } else if (settings?.isUpsellActive && settings?.upsellMessage) {
                 activeUpsells = [{
                     id: 'legacy-1',
                     isActive: true,
-                    upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
+                    upsellDelayMinutes: Number(settings.upsellDelayMinutes) || 5,
                     upsellMessage: settings.upsellMessage,
                     createdAt: 0,
                 }];
@@ -91,23 +89,23 @@ export function UpsellMessageHandler() {
 
             try {
                 isProcessing.current = true;
-                const now = new Date();
+                const now = Date.now();
+                const cutoff24h = now - (24 * 60 * 60 * 1000); // 24 hours ago
                 
                 const tasks: { client: Client, upsell: UpsellConfig }[] = [];
                 for (const client of activeClients) {
-                    const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
+                    const clientCreatedMs = getTimestampMs(client.createdAt) || now;
+
+                    // Skip historical clients created more than 24 hours ago
+                    if (clientCreatedMs < cutoff24h) {
+                        continue;
+                    }
 
                     for (const upsell of activeUpsells) {
-                        const upsellCreatedMs = Number(upsell.createdAt) || 0;
-                        // Strictly skip any client created BEFORE the upsell rule was created
-                        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) {
-                            continue;
-                        }
-
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
                         
-                        if ((now.getTime() - clientCreatedMs) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
+                        if ((now - clientCreatedMs) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
                             tasks.push({ client, upsell });
                         }
                     }
@@ -211,11 +209,11 @@ export function UpsellMessageHandler() {
             }
         };
 
-        const intervalId = setInterval(processUpsellQueue, 5000); // Check every 5 seconds for instant responsiveness
+        const intervalId = setInterval(processUpsellQueue, 5000); // Check every 5 seconds
         processUpsellQueue();
         return () => clearInterval(intervalId);
 
-    }, [activeClients, settings, firestore, user, toast, userProfile]);
+    }, [clients, settings, firestore, user, toast, userProfile]);
 
     return null;
 }
