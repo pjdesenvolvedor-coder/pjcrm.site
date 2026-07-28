@@ -1,5 +1,16 @@
 import { NextResponse } from 'next/server';
 
+function formatPhoneWith55(phone: string): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  // If digits doesn't start with 55 and length is 10 or 11 (Brazilian DDD + number), prepend 55
+  if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
+    digits = '55' + digits;
+  }
+  return digits;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -9,8 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Message, phoneNumber, and token are required' }, { status: 400 });
     }
 
-    // Ensure the phone number contains only digits.
-    const formattedPhoneNumber = phoneNumber.replace(/\D/g, '');
+    const formattedPhoneNumber = formatPhoneWith55(phoneNumber);
 
     const apiUrl = 'https://pjcontas.uazapi.com/send/text';
 

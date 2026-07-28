@@ -154,8 +154,7 @@ export default function DebugPage() {
     const activeClients = clients.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido');
 
     for (const client of activeClients) {
-      const clientCreatedMs = getTimestampMs(client.createdAt);
-      if (!clientCreatedMs) continue;
+      const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
 
       for (const upsell of activeUpsells) {
         const upsellCreatedMs = Number(upsell.createdAt) || 0;

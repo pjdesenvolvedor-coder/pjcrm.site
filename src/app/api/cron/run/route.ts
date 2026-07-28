@@ -156,8 +156,7 @@ export async function GET(request: Request) {
                 let upsellsDone = 0;
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
-                    const clientCreatedMs = getTimestampMs(client.createdAt);
-                    if (!clientCreatedMs) continue;
+                    const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
 
                     for (const upsell of activeUpsells) {
                         if (upsellsDone >= QUEUE_LIMIT) break;
