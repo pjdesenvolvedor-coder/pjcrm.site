@@ -176,10 +176,26 @@ export async function GET(request: Request) {
                                 upsellsDone++;
                                 let formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
-                                await fetch(`${originUrl}/api/send-message`, {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: upsellToken }),
-                                }).catch(console.error);
+                                if (upsell.messageType === 'button' && upsell.buttons && upsell.buttons.length > 0) {
+                                    const choices = upsell.buttons.map(b => `${formatMessageWithClient(b.label, client).trim()}|${b.url.trim()}`);
+                                    await fetch(`${originUrl}/api/send-menu`, {
+                                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            phoneNumber: client.phone,
+                                            type: 'button',
+                                            text: formattedMessage,
+                                            choices: choices,
+                                            imageButton: upsell.imageButton,
+                                            footerText: upsell.footerText ? formatMessageWithClient(upsell.footerText, client) : undefined,
+                                            token: upsellToken
+                                        }),
+                                    }).catch(console.error);
+                                } else {
+                                    await fetch(`${originUrl}/api/send-message`, {
+                                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: upsellToken }),
+                                    }).catch(console.error);
+                                }
                             }
                         }
                     }

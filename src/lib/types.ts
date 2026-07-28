@@ -145,11 +145,21 @@ export type RemarketingConfig = {
   createdAt?: number;
 };
 
+export type UpsellButtonConfig = {
+  id: string;
+  label: string;
+  url: string;
+};
+
 export type UpsellConfig = {
   id: string;
   isActive: boolean;
   upsellDelayMinutes: number;
   upsellMessage: string;
+  messageType?: 'message' | 'button';
+  imageButton?: string;
+  footerText?: string;
+  buttons?: UpsellButtonConfig[];
   createdAt?: number;
 };
 

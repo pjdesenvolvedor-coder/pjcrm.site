@@ -157,15 +157,41 @@ export function Upsell2MessageHandler() {
                             .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
                             .replace(/{status}/g, client.status || 'Ativo');
 
-                        const response = await fetch('/api/send-message', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                message: formattedMessage,
-                                phoneNumber: client.phone,
-                                token: mainToken,
-                            }),
-                        });
+                        let response;
+                        if (upsell.messageType === 'button' && upsell.buttons && upsell.buttons.length > 0) {
+                            const choices = upsell.buttons.map(b => {
+                                const formattedLabel = b.label
+                                    .replace(/{cliente}/g, client.name || '')
+                                    .replace(/{assinatura}/g, client.subscription || '');
+                                return `${formattedLabel.trim()}|${b.url.trim()}`;
+                            });
+
+                            let formattedFooter = upsell.footerText ? upsell.footerText.replace(/{cliente}/g, client.name || '') : undefined;
+
+                            response = await fetch('/api/send-menu', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    phoneNumber: client.phone,
+                                    type: 'button',
+                                    text: formattedMessage,
+                                    choices: choices,
+                                    imageButton: upsell.imageButton,
+                                    footerText: formattedFooter,
+                                    token: mainToken,
+                                }),
+                            });
+                        } else {
+                            response = await fetch('/api/send-message', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    message: formattedMessage,
+                                    phoneNumber: client.phone,
+                                    token: mainToken,
+                                }),
+                            });
+                        }
 
                         const resData = await response.json().catch(() => ({}));
 

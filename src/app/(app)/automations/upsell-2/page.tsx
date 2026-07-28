@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -24,15 +24,26 @@ import type { Settings, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
-import { Copy, Plus, Trash2, Rocket, Sparkles, CheckCircle2, Zap, Clock, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Copy, Plus, Trash2, Rocket, Sparkles, CheckCircle2, Zap, Clock, ShieldCheck, HelpCircle, Link as LinkIcon, Image as ImageIcon, MessageSquare, MousePointerClick } from 'lucide-react';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+const upsellButtonSchema = z.object({
+  id: z.string(),
+  label: z.string().min(1, 'O texto do botão é obrigatório.'),
+  url: z.string().min(1, 'O link do botão é obrigatório.'),
+});
 
 const upsellItemSchema = z.object({
   id: z.string(),
   isActive: z.boolean(),
   upsellDelayMinutes: z.coerce.number().min(0, 'O tempo deve ser no mínimo 0 minutos.'),
   upsellMessage: z.string().min(1, 'A mensagem de upsell é obrigatória.'),
+  messageType: z.enum(['message', 'button']).default('message'),
+  imageButton: z.string().optional(),
+  footerText: z.string().optional(),
+  buttons: z.array(upsellButtonSchema).optional(),
   createdAt: z.number().optional(),
 });
 
@@ -41,6 +52,96 @@ const upsellFormSchema = z.object({
 });
 
 type UpsellFormData = z.infer<typeof upsellFormSchema>;
+
+function ButtonsArrayField({ nestIndex, control }: { nestIndex: number; control: any }) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `upsells2.${nestIndex}.buttons`,
+  });
+
+  return (
+    <div className="space-y-4 pt-2 border-t border-emerald-500/20">
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="font-bold text-sm text-foreground flex items-center gap-2">
+            <MousePointerClick className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            Botões Interativos com Link (HREF)
+          </Label>
+          <p className="text-xs text-muted-foreground">Adicione ao menos 1 botão com o texto e o link de destino.</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => append({ id: crypto.randomUUID(), label: 'Comprar Agora', url: 'https://' })}
+          className="gap-1.5 text-xs border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Adicionar Outro Botão
+        </Button>
+      </div>
+
+      {fields.length === 0 && (
+        <div className="p-4 rounded-xl border border-dashed text-center text-xs text-muted-foreground bg-muted/20">
+          Nenhum botão adicionado. Clique no botão acima para incluir um botão com link.
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {fields.map((item, btnIndex) => (
+          <div key={item.id} className="p-3.5 rounded-xl border bg-background flex flex-col sm:flex-row items-start sm:items-center gap-3 relative group">
+            <div className="flex-1 w-full space-y-1">
+              <Label className="text-xs font-semibold">Texto do Botão #{btnIndex + 1}</Label>
+              <FormField
+                control={control}
+                name={`upsells2.${nestIndex}.buttons.${btnIndex}.label`}
+                render={({ field }) => (
+                  <FormItem className="m-0">
+                    <FormControl>
+                      <Input placeholder="Ex: Comprar Agora 🛒" className="text-xs font-medium" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="flex-1 w-full space-y-1">
+              <Label className="text-xs font-semibold">Link (HREF / URL)</Label>
+              <FormField
+                control={control}
+                name={`upsells2.${nestIndex}.buttons.${btnIndex}.url`}
+                render={({ field }) => (
+                  <FormItem className="m-0">
+                    <FormControl>
+                      <div className="flex items-center gap-1.5">
+                        <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <Input placeholder="https://seusite.com/oferta" className="text-xs font-mono" {...field} />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {fields.length > 1 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => remove(btnIndex)}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 self-end sm:self-center shrink-0"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Upsell2Page() {
   const { firestore, user } = useFirebase();
@@ -76,6 +177,10 @@ export default function Upsell2Page() {
             isActive: false,
             upsellDelayMinutes: 5,
             upsellMessage: 'Olá {cliente}! Temos uma oferta especial exclusiva para a sua assinatura {assinatura}. Clique no link para aproveitar!',
+            messageType: 'message',
+            imageButton: '',
+            footerText: '',
+            buttons: [{ id: crypto.randomUUID(), label: 'Comprar Agora 🚀', url: 'https://' }],
             createdAt: Date.now(),
           }],
         });
@@ -92,6 +197,7 @@ export default function Upsell2Page() {
         return {
           ...u,
           upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
+          messageType: u.messageType || 'message',
           createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
         };
       });
@@ -118,6 +224,10 @@ export default function Upsell2Page() {
       isActive: false,
       upsellDelayMinutes: 5,
       upsellMessage: '',
+      messageType: 'message',
+      imageButton: '',
+      footerText: '',
+      buttons: [{ id: crypto.randomUUID(), label: 'Comprar Agora 🚀', url: 'https://' }],
       createdAt: Date.now(),
     });
   };
@@ -145,7 +255,7 @@ export default function Upsell2Page() {
     <div className="flex flex-col h-full">
       <PageHeader
         title="Funil Upsell 2.0 🚀"
-        description="Engine de disparo direto na API UAZAPI com suporte nativo a JSON e regras dinâmicas."
+        description="Engine de disparo direto na API UAZAPI com suporte a mensagens de texto e botões interativos."
       >
         <Button size="sm" onClick={handleAddUpsell} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow-md shadow-emerald-500/10">
           <Plus className="h-4 w-4" />
@@ -166,7 +276,7 @@ export default function Upsell2Page() {
                 <Zap className="h-3.5 w-3.5 text-emerald-400" /> API UAZAPI Direta
               </Badge>
               <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 font-mono text-xs px-2.5 py-1 flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-cyan-400" /> Sanitização JSON
+                <MousePointerClick className="h-3.5 w-3.5 text-cyan-400" /> Suporte a Botões Interativos
               </Badge>
               <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 font-mono text-xs px-2.5 py-1 flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 text-blue-400" /> Regra Ativa Pós-Criação
@@ -178,7 +288,7 @@ export default function Upsell2Page() {
                 Como Funciona o Funil Upsell 2.0 🚀
               </h2>
               <p className="text-slate-300 text-sm mt-1 max-w-2xl leading-relaxed">
-                Assim que um novo cliente é adicionado no CRM, o temporizador começa a contar o tempo configurado. Quando o delay expira, a mensagem é enviada via requisição direta na API da UAZAPI com sanitização total de quebras de linha e caracteres especiais.
+                Configure mensagens em formato apenas texto ou em formato <strong>interativo com botões e imagem</strong>. O CRM dispara a requisição na API da UAZAPI assim que o tempo configurado expirar.
               </p>
             </div>
 
@@ -201,8 +311,8 @@ export default function Upsell2Page() {
               <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-sm">3</div>
                 <div>
-                  <p className="text-xs font-semibold text-white">Disparo Direto UAZAPI</p>
-                  <p className="text-[11px] text-slate-400">Mensagem entregue via WhatsApp</p>
+                  <p className="text-xs font-semibold text-white">Disparo UAZAPI (/send/menu)</p>
+                  <p className="text-[11px] text-slate-400">Mensagem ou botões interativos</p>
                 </div>
               </div>
             </div>
@@ -216,6 +326,7 @@ export default function Upsell2Page() {
               {fields.map((field, index) => {
                 const isActive = form.watch(`upsells2.${index}.isActive`);
                 const delay = form.watch(`upsells2.${index}.upsellDelayMinutes`);
+                const messageType = form.watch(`upsells2.${index}.messageType`) || 'message';
 
                 return (
                   <Card key={field.id} className={`transition-all duration-200 overflow-hidden ${
@@ -323,14 +434,100 @@ export default function Upsell2Page() {
                         />
                       </div>
 
-                      {/* Mensagem de Upsell 2.0 */}
+                      {/* Seleção do Tipo de Mensagem: Apenas Texto VS Botão Interativo */}
+                      <FormField
+                        control={form.control}
+                        name={`upsells2.${index}.messageType`}
+                        render={({ field }) => (
+                          <FormItem className="space-y-3">
+                            <FormLabel className="font-semibold text-sm">Formato de Envio da Mensagem</FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value || 'message'}
+                                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                              >
+                                <div>
+                                  <RadioGroupItem value="message" id={`type-msg-${index}`} className="peer sr-only" />
+                                  <Label
+                                    htmlFor={`type-msg-${index}`}
+                                    className="flex items-center gap-3 rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-emerald-500 [&:has([data-state=checked])]:border-emerald-500 cursor-pointer transition-all"
+                                  >
+                                    <MessageSquare className="h-5 w-5 text-emerald-600 shrink-0" />
+                                    <div>
+                                      <p className="font-bold text-sm">Mensagem Apenas Texto</p>
+                                      <p className="text-xs text-muted-foreground">Texto formatado padrão via WhatsApp</p>
+                                    </div>
+                                  </Label>
+                                </div>
+
+                                <div>
+                                  <RadioGroupItem value="button" id={`type-btn-${index}`} className="peer sr-only" />
+                                  <Label
+                                    htmlFor={`type-btn-${index}`}
+                                    className="flex items-center gap-3 rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-emerald-500 [&:has([data-state=checked])]:border-emerald-500 cursor-pointer transition-all"
+                                  >
+                                    <MousePointerClick className="h-5 w-5 text-teal-600 shrink-0" />
+                                    <div>
+                                      <p className="font-bold text-sm">Mensagem Interativa com Botões 🚀</p>
+                                      <p className="text-xs text-muted-foreground">Botões clicáveis com links (HREF) e Imagem</p>
+                                    </div>
+                                  </Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Se for com botões: Imagem opcional */}
+                      {messageType === 'button' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl border bg-muted/10">
+                          <FormField
+                            control={form.control}
+                            name={`upsells2.${index}.imageButton`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-semibold flex items-center gap-1.5">
+                                  <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
+                                  URL da Imagem da Mensagem (Opcional)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input placeholder="https://exemplo.com/imagem.jpg" className="text-xs font-mono" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`upsells2.${index}.footerText`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-semibold flex items-center gap-1.5">
+                                  Texto de Rodapé (Opcional)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ex: Oferta por tempo limitado" className="text-xs" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
+
+                      {/* Campo do Texto da Mensagem */}
                       <FormField
                         control={form.control}
                         name={`upsells2.${index}.upsellMessage`}
                         render={({ field }) => (
                           <FormItem>
                             <div className="flex items-center justify-between mb-1.5">
-                              <FormLabel className="font-semibold text-sm">Mensagem de Upsell 2.0</FormLabel>
+                              <FormLabel className="font-semibold text-sm">
+                                {messageType === 'button' ? 'Texto Principal da Mensagem (Acima dos Botões)' : 'Mensagem de Upsell 2.0'}
+                              </FormLabel>
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <HelpCircle className="h-3.5 w-3.5" /> Padrão de Envio JSON Ativo
                               </span>
@@ -338,7 +535,7 @@ export default function Upsell2Page() {
                             <FormControl>
                               <Textarea
                                 placeholder="Olá {cliente}! Temos uma oferta imperdível exclusiva para o seu plano {assinatura}..."
-                                className="min-h-[150px] font-mono text-sm leading-relaxed p-4 border-emerald-500/20 focus:border-emerald-500 rounded-xl"
+                                className="min-h-[140px] font-mono text-sm leading-relaxed p-4 border-emerald-500/20 focus:border-emerald-500 rounded-xl"
                                 {...field}
                               />
                             </FormControl>
@@ -346,6 +543,11 @@ export default function Upsell2Page() {
                           </FormItem>
                         )}
                       />
+
+                      {/* Se for formato de botões: Renderiza o sub-formulário de botões */}
+                      {messageType === 'button' && (
+                        <ButtonsArrayField nestIndex={index} control={form.control} />
+                      )}
 
                       {/* Variáveis Dinâmicas para Copiar */}
                       <div className="space-y-2.5 pt-4 border-t">
