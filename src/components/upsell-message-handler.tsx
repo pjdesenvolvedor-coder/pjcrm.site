@@ -212,7 +212,7 @@ export function UpsellMessageHandler() {
             }
         };
 
-        const intervalId = setInterval(processUpsellQueue, 60000); // Check every minute
+        const intervalId = setInterval(processUpsellQueue, 5000); // Check every 5 seconds for instant responsiveness
         processUpsellQueue();
         return () => clearInterval(intervalId);
 

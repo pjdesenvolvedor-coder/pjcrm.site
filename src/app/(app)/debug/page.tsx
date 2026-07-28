@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { doc, collection, query, limit, writeBatch } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
@@ -26,7 +26,8 @@ import {
   Clock, 
   Terminal, 
   Search,
-  ShieldCheck
+  ShieldCheck,
+  Timer
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -74,7 +75,14 @@ export default function DebugPage() {
   const [activeTab, setActiveTab] = useState('logs');
   const [logFilter, setLogFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [nowMs, setNowMs] = useState(Date.now());
   
+  // Live ticker for countdown
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Test states
   const [testJid, setTestJid] = useState('');
   const [testGroupMsg, setTestGroupMsg] = useState('Mensagem de teste para grupo via DEBUG CRM');
@@ -96,7 +104,7 @@ export default function DebugPage() {
 
   const clientsQuery = useMemoFirebase(() => {
     if (!user || !firestore) return null;
-    return query(collection(firestore, 'users', user.uid, 'clients'), limit(50));
+    return query(collection(firestore, 'users', user.uid, 'clients'), limit(100));
   }, [user, firestore]);
   const { data: clients } = useCollection<Client>(clientsQuery);
 
@@ -125,7 +133,7 @@ export default function DebugPage() {
   // Active upsells
   const activeUpsells = useMemo(() => {
     if (settings?.upsells && settings.upsells.length > 0) {
-      return settings.upsells.filter(u => u.isActive);
+      return settings.upsells.filter(u => u.isActive && u.upsellMessage);
     }
     if (settings?.isUpsellActive && settings?.upsellMessage) {
       return [{
@@ -133,10 +141,46 @@ export default function DebugPage() {
         isActive: true,
         upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
         upsellMessage: settings.upsellMessage,
+        createdAt: 0,
       }];
     }
     return [];
   }, [settings]);
+
+  // Pending Upsell Queue Countdown
+  const pendingUpsellQueue = useMemo(() => {
+    if (!clients || activeUpsells.length === 0) return [];
+    const queue: { client: Client; upsell: any; delayMinutes: number; secondsRemaining: number; statusText: string }[] = [];
+    const activeClients = clients.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido');
+
+    for (const client of activeClients) {
+      const clientCreatedMs = getTimestampMs(client.createdAt);
+      if (!clientCreatedMs) continue;
+
+      for (const upsell of activeUpsells) {
+        const upsellCreatedMs = Number(upsell.createdAt) || 0;
+        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) continue;
+
+        const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
+        const delayMs = delayMinutes * 60 * 1000;
+        const elapsedMs = nowMs - clientCreatedMs;
+        const remainingMs = delayMs - elapsedMs;
+        const alreadySent = client.sentUpsellIds?.includes(upsell.id);
+
+        if (!alreadySent) {
+          const secRem = Math.max(0, Math.ceil(remainingMs / 1000));
+          queue.push({
+            client,
+            upsell,
+            delayMinutes,
+            secondsRemaining: secRem,
+            statusText: secRem <= 0 ? 'Pronto (Disparando...)' : `Faltam ${secRem}s para disparo`
+          });
+        }
+      }
+    }
+    return queue;
+  }, [clients, activeUpsells, nowMs]);
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
@@ -277,7 +321,7 @@ export default function DebugPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <PageHeader title="DEBUG & Diagnóstico" description="Painel em tempo real para auditoria de automações, logs de disparo e testes imediatos.">
+      <PageHeader title="DEBUG & Diagnóstico" description="Painel em tempo real para auditoria de automações, logs de disparo e contagem regressiva do Upsell.">
         <Badge variant="outline" className="gap-1 border-rose-500/30 bg-rose-500/10 text-rose-600 font-mono">
           <Bug className="h-3.5 w-3.5" /> PAINEL DEBUG LIVE
         </Badge>
@@ -352,7 +396,7 @@ export default function DebugPage() {
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground mt-1">
-                Disparos apenas para novos cadastros
+                Fila em tempo real: {pendingUpsellQueue.length} cliente(s) aguardando
               </p>
             </CardContent>
           </Card>
@@ -377,6 +421,53 @@ export default function DebugPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* MONITOR EM TEMPO REAL DA FILA DE UPSELL */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Timer className="h-4 w-4 text-primary animate-spin" /> 
+                FILA DE UPSELL EM TEMPO REAL (Contagem Regressiva)
+              </span>
+              <Badge variant="outline" className="bg-background">
+                {pendingUpsellQueue.length} em espera
+              </Badge>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Mapeia novos clientes cadastrados e a contagem regressiva em segundos até o disparo do Upsell.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pendingUpsellQueue.length === 0 ? (
+              <div className="p-3 text-center text-xs text-muted-foreground bg-background/50 rounded-lg border border-dashed">
+                Nenhum novo cliente na fila de contagem regressiva de Upsell no momento. Adicione um cliente para ver o cronômetro.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {pendingUpsellQueue.map(({ client, delayMinutes, secondsRemaining, statusText }, idx) => (
+                  <div key={`${client.id}-${idx}`} className="flex items-center justify-between p-2.5 rounded-lg border bg-background text-xs font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-foreground">{client.name}</span>
+                      <span className="text-muted-foreground">({client.phone})</span>
+                      <Badge variant="outline" className="text-[10px]">Delay: {delayMinutes}m</Badge>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {secondsRemaining <= 0 ? (
+                        <Badge className="bg-emerald-600 animate-pulse">{statusText}</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                          ⏱️ {statusText}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* TABS DE LOGS E TESTES */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
