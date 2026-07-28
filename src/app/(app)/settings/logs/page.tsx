@@ -19,19 +19,48 @@ import type { MessageLog } from '@/lib/types';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
+function getTimestampMs(val: any): number | null {
+  if (!val) return null;
+  if (typeof val === 'number') return val;
+  if (typeof val.toMillis === 'function') return val.toMillis();
+  if (typeof val.toDate === 'function') return val.toDate().getTime();
+  if (val.seconds !== undefined) return val.seconds * 1000;
+  if (val instanceof Date) return val.getTime();
+  if (typeof val === 'string') {
+    const ms = new Date(val).getTime();
+    return isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
 export default function LogsPage() {
   const { firestore, effectiveUserId } = useFirebase();
 
   const logsQuery = useMemoFirebase(() => {
-    if (!effectiveUserId) return null;
-    return query(
-        collection(firestore, 'users', effectiveUserId, 'logs'), 
-        orderBy('timestamp', 'desc'),
-        limit(50)
-    );
+    if (!effectiveUserId || !firestore) return null;
+    return collection(firestore, 'users', effectiveUserId, 'logs');
   }, [firestore, effectiveUserId]);
 
-  const { data: logs, isLoading } = useCollection<MessageLog>(logsQuery);
+  const { data: rawLogs, isLoading } = useCollection<MessageLog>(logsQuery);
+
+  const logs = useMemo(() => {
+    if (!rawLogs) return [];
+    return [...rawLogs].sort((a, b) => {
+      const timeA = getTimestampMs(a.timestamp) || 0;
+      const timeB = getTimestampMs(b.timestamp) || 0;
+      return timeB - timeA;
+    }).slice(0, 50);
+  }, [rawLogs]);
+
+  const formatLogTime = (ts: any) => {
+    const ms = getTimestampMs(ts);
+    if (!ms) return '-';
+    try {
+      return format(new Date(ms), 'HH:mm:ss (dd/MM)');
+    } catch {
+      return '-';
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -67,7 +96,7 @@ export default function LogsPage() {
                 ) : logs?.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="text-xs text-muted-foreground">
-                        {log.timestamp ? format(log.timestamp.toDate(), 'HH:mm:ss (dd/MM)') : '-'}
+                        {formatLogTime(log.timestamp)}
                     </TableCell>
                     <TableCell>
                         <Badge variant="outline" className="text-[10px] uppercase">{log.type}</Badge>

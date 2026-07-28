@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { doc, collection, query, orderBy, limit, deleteDoc, getDocs } from 'firebase/firestore';
+import { doc, collection, query, limit, writeBatch } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,30 @@ type LogItem = {
   details?: string;
 };
 
+function getTimestampMs(val: any): number | null {
+  if (!val) return null;
+  if (typeof val === 'number') return val;
+  if (typeof val.toMillis === 'function') return val.toMillis();
+  if (typeof val.toDate === 'function') return val.toDate().getTime();
+  if (val.seconds !== undefined) return val.seconds * 1000;
+  if (val instanceof Date) return val.getTime();
+  if (typeof val === 'string') {
+    const ms = new Date(val).getTime();
+    return isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
+function formatDateSafe(val: any): string {
+  const ms = getTimestampMs(val);
+  if (!ms) return 'N/A';
+  try {
+    return format(new Date(ms), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR });
+  } catch {
+    return 'N/A';
+  }
+}
+
 export default function DebugPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
@@ -65,31 +89,54 @@ export default function DebugPage() {
 
   // Firestore Queries
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
+    if (!user || !firestore) return null;
     return doc(firestore, 'users', user.uid, 'settings', 'config');
   }, [firestore, user]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
   const clientsQuery = useMemoFirebase(() => {
-    if (!user) return null;
+    if (!user || !firestore) return null;
     return query(collection(firestore, 'users', user.uid, 'clients'), limit(50));
   }, [user, firestore]);
   const { data: clients } = useCollection<Client>(clientsQuery);
 
   const scheduledMessagesQuery = useMemoFirebase(() => {
-    if (!user) return null;
+    if (!user || !firestore) return null;
     return query(collection(firestore, 'users', user.uid, 'scheduled_messages'), limit(50));
   }, [user, firestore]);
   const { data: scheduledMessages } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
 
-  const logsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'logs'), orderBy('timestamp', 'desc'), limit(100));
+  const rawLogsQuery = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, 'users', user.uid, 'logs');
   }, [user, firestore]);
-  const { data: logs, isLoading: isLogsLoading } = useCollection<LogItem>(logsQuery);
+  const { data: rawLogs, isLoading: isLogsLoading } = useCollection<LogItem>(rawLogsQuery);
+
+  // Safe in-memory sorting
+  const logs = useMemo(() => {
+    if (!rawLogs) return [];
+    return [...rawLogs].sort((a, b) => {
+      const timeA = getTimestampMs(a.timestamp) || 0;
+      const timeB = getTimestampMs(b.timestamp) || 0;
+      return timeB - timeA;
+    }).slice(0, 100);
+  }, [rawLogs]);
 
   // Active upsells
-  const activeUpsells = settings?.upsells?.filter(u => u.isActive) || [];
+  const activeUpsells = useMemo(() => {
+    if (settings?.upsells && settings.upsells.length > 0) {
+      return settings.upsells.filter(u => u.isActive);
+    }
+    if (settings?.isUpsellActive && settings?.upsellMessage) {
+      return [{
+        id: 'legacy-1',
+        isActive: true,
+        upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
+        upsellMessage: settings.upsellMessage,
+      }];
+    }
+    return [];
+  }, [settings]);
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
@@ -162,7 +209,7 @@ export default function DebugPage() {
       return;
     }
 
-    const token = settings?.webhookToken;
+    const token = settings?.webhookToken || settings?.billingWebhookToken;
     if (!token) {
       toast({ title: 'Sem Token Principal', description: 'Cadastre o token do Hub Principal.', variant: 'destructive' });
       return;
@@ -207,34 +254,24 @@ export default function DebugPage() {
     }
   };
 
-  // Clear Logs
+  // Clear Logs Safely
   const handleClearLogs = async () => {
-    if (!user || !logs || logs.length === 0) return;
+    if (!user || !firestore || !rawLogs || rawLogs.length === 0) return;
     if (!confirm('Tem certeza que deseja apagar todos os logs de histórico?')) return;
 
     setIsClearingLogs(true);
     try {
-      const logsSnap = await getDocs(collection(firestore, 'users', user.uid, 'logs'));
-      const deletePromises = logsSnap.docs.map(docSnap => deleteDoc(docSnap.ref));
-      await Promise.all(deletePromises);
+      const batch = writeBatch(firestore);
+      rawLogs.forEach(l => {
+        batch.delete(doc(firestore, 'users', user.uid, 'logs', l.id));
+      });
+      await batch.commit();
       toast({ title: 'Logs limpos', description: 'Todo o histórico de logs foi removido.' });
     } catch (err: any) {
-      toast({ title: 'Erro ao limpar', description: err.message, variant: 'destructive' });
+      console.error('Erro ao limpar logs:', err);
+      toast({ title: 'Erro ao limpar', description: err?.message || 'Falha ao apagar logs.', variant: 'destructive' });
     } finally {
       setIsClearingLogs(false);
-    }
-  };
-
-  const formatTimestamp = (ts: any) => {
-    if (!ts) return 'Agora';
-    try {
-      let date: Date | null = null;
-      if (typeof ts.toDate === 'function') date = ts.toDate();
-      else if (ts.seconds) date = new Date(ts.seconds * 1000);
-      else date = new Date(ts);
-      return format(date, 'dd/MM/yyyy HH:mm:ss', { locale: ptBR });
-    } catch {
-      return 'N/A';
     }
   };
 
@@ -371,7 +408,7 @@ export default function DebugPage() {
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleClearLogs} disabled={isClearingLogs || !logs || logs.length === 0} className="text-destructive hover:bg-destructive/10">
-                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Limpar Logs
+                      {isClearingLogs ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />} Limpar Logs
                     </Button>
                   </div>
                 </div>
@@ -410,7 +447,7 @@ export default function DebugPage() {
                 ) : filteredLogs.length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground border border-dashed rounded-lg">
                     <Bug className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="font-semibold">Nenhum log registrado ainda</p>
+                    <p className="font-semibold">Nenhum log registrado no momento</p>
                     <p className="text-xs text-muted-foreground">Quando as automações rodarem, os eventos aparecerão aqui automaticamente.</p>
                   </div>
                 ) : (
@@ -442,7 +479,7 @@ export default function DebugPage() {
                         </div>
 
                         <div className="text-right text-xs text-muted-foreground font-mono">
-                          {formatTimestamp(log.timestamp)}
+                          {formatDateSafe(log.timestamp)}
                         </div>
                       </div>
                     ))}
