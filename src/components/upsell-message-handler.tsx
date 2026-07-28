@@ -95,14 +95,16 @@ export function UpsellMessageHandler() {
                 
                 const tasks: { client: Client, upsell: UpsellConfig }[] = [];
                 for (const client of activeClients) {
-                    const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
-
-                    // Skip historical clients created more than 24 hours ago
-                    if (clientCreatedMs < (now.getTime() - 24 * 60 * 60 * 1000)) {
-                        continue;
-                    }
+                    const clientCreatedMs = getTimestampMs(client.createdAt);
+                    if (!clientCreatedMs) continue;
 
                     for (const upsell of activeUpsells) {
+                        const upsellCreatedMs = Number(upsell.createdAt) || 0;
+                        // Strictly skip any client created BEFORE the upsell rule was created
+                        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) {
+                            continue;
+                        }
+
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
                         
