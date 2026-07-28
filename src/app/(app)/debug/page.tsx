@@ -144,7 +144,7 @@ export default function DebugPage() {
     const queue: { client: Client; upsell: any; delayMinutes: number; secondsRemaining: number; statusText: string }[] = [];
     const activeClients = clients.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido');
 
-    const STRICT_CUTOFF_MS = 1770008444000; // 28/07/2026 00:40:44
+    const STRICT_CUTOFF_MS = 1770008540000; // 28/07/2026 00:42:20
 
     for (const client of activeClients) {
       const clientCreatedMs = getTimestampMs(client.createdAt) || nowMs;

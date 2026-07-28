@@ -149,7 +149,7 @@ export async function GET(request: Request) {
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
                     const clientCreatedMs = getTimestampMs(client.createdAt) || now.getTime();
-                    const STRICT_CUTOFF_MS = 1770008444000; // 28/07/2026 00:40:44
+                    const STRICT_CUTOFF_MS = 1770008540000; // 28/07/2026 00:42:20
 
                     // Skip all clients created before July 28, 2026 00:40:44
                     if (clientCreatedMs < STRICT_CUTOFF_MS) {

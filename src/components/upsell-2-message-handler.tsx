@@ -10,6 +10,7 @@ import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-b
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds between multiple sends
+const STRICT_CUTOFF_MS = 1770008540000; // 28/07/2026 00:42:20 - ZERO messages to clients created before this time
 
 function getTimestampMs(val: any): number | null {
     if (!val) return null;
@@ -67,24 +68,28 @@ export function Upsell2MessageHandler() {
                 if (subEndMs && subEndMs < Date.now()) return;
             }
 
+            // KILL SWITCH: If no upsell 2.0 rule is active, HALT IMMEDIATELY AND DO NOTHING
             const activeUpsells2 = settings?.upsells2?.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim())) || [];
+            if (activeUpsells2.length === 0) {
+                return;
+            }
+
             const mainToken = settings?.webhookToken || settings?.billingWebhookToken;
             const activeClients = clients?.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido') || [];
 
-            if (activeClients.length === 0 || activeUpsells2.length === 0 || !mainToken || !user || !firestore) {
+            if (activeClients.length === 0 || !mainToken || !user || !firestore) {
                 return;
             }
 
             try {
                 isProcessing.current = true;
                 const now = Date.now();
-                const STRICT_CUTOFF_MS = 1770008444000; // 28/07/2026 00:40:44
                 
                 const tasks: { client: Client, upsell: UpsellConfig }[] = [];
                 for (const client of activeClients) {
                     const clientCreatedMs = getTimestampMs(client.createdAt) || now;
 
-                    // Skip all clients created before July 28, 2026 00:40:44
+                    // STRICT CUTOFF: Skip ALL clients created before 28/07/2026 00:42:20
                     if (clientCreatedMs < STRICT_CUTOFF_MS) {
                         continue;
                     }
@@ -107,6 +112,13 @@ export function Upsell2MessageHandler() {
 
                 const processTask = async (task: typeof tasks[0], isLast: boolean) => {
                     const { client, upsell } = task;
+
+                    // LIVE CHECK: Re-verify if rule is STILL active before sending
+                    const currentRuleState = settings?.upsells2?.find(u => u.id === upsell.id);
+                    if (!currentRuleState || !currentRuleState.isActive) {
+                        return; // Discard immediately if turned off
+                    }
+
                     const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
                     const logRef = collection(firestore, 'users', user.uid, 'logs');
 
@@ -199,7 +211,7 @@ export function Upsell2MessageHandler() {
             }
         };
 
-        const intervalId = setInterval(processUpsell2Queue, 5000); // Check every 5s
+        const intervalId = setInterval(processUpsell2Queue, 5000);
         processUpsell2Queue();
         return () => clearInterval(intervalId);
 
