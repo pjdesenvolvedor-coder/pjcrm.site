@@ -43,9 +43,16 @@ export function RemarketingMessageHandler() {
                 return;
             }
 
-            const activeSignupRemarketings = settings?.postSignupRemarketings?.filter(r => r.isActive && r.message) || [];
-            const activeDueDateRemarketings = settings?.postDueDateRemarketings?.filter(r => r.isActive && r.message) || [];
+            const isOverallActive = settings?.isRemarketingActive ?? true;
+            const isSignupGlobalActive = settings?.isPostSignupRemarketingActive ?? true;
+            const isDueDateGlobalActive = settings?.isPostDueDateRemarketingActive ?? true;
 
+            const activeSignupRemarketings = (isOverallActive && isSignupGlobalActive)
+                ? (settings?.postSignupRemarketings?.filter(r => r.isActive && r.message) || [])
+                : [];
+            const activeDueDateRemarketings = (isOverallActive && isDueDateGlobalActive)
+                ? (settings?.postDueDateRemarketings?.filter(r => r.isActive && r.message) || [])
+                : [];
 
             if (!clients || clients.length === 0 || (activeSignupRemarketings.length === 0 && activeDueDateRemarketings.length === 0) || !settings?.webhookToken || !user || !firestore) {
                 return;

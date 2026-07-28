@@ -207,8 +207,16 @@ export async function GET(request: Request) {
             }
 
             /* --- 3. PROCESSAR REMARKETING --- */
-            const activeSignupRemarketings = settings.postSignupRemarketings?.filter(r => r.isActive && r.message) || [];
-            const activeDueDateRemarketings = settings.postDueDateRemarketings?.filter(r => r.isActive && r.message) || [];
+            const isOverallRemarketingActive = settings.isRemarketingActive ?? true;
+            const isSignupGlobalActive = settings.isPostSignupRemarketingActive ?? true;
+            const isDueDateGlobalActive = settings.isPostDueDateRemarketingActive ?? true;
+
+            const activeSignupRemarketings = (isOverallRemarketingActive && isSignupGlobalActive)
+                ? (settings.postSignupRemarketings?.filter(r => r.isActive && r.message) || [])
+                : [];
+            const activeDueDateRemarketings = (isOverallRemarketingActive && isDueDateGlobalActive)
+                ? (settings.postDueDateRemarketings?.filter(r => r.isActive && r.message) || [])
+                : [];
             let rmkDone = 0;
             
             // Remarketing de Cadastro
