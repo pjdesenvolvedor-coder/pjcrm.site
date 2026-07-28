@@ -300,22 +300,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
             }
 
             try {
-                // Envia a mensagem de entrega de credenciais diretamente para o webhook do n8n de disparo
+                // Envia a mensagem de entrega de credenciais diretamente para a API UAZAPI
                 const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
-                const escapedMessage = formattedMessage.replace(/\n/g, '\\n');
 
-                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e', {
+                await fetch('https://pjcontas.uazapi.com/send/text', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'token': settings.webhookToken,
+                        'apikey': settings.webhookToken,
+                    },
                     body: JSON.stringify({ 
-                        text: escapedMessage, 
-                        number: formattedPhoneNumber, 
-                        token: settings.webhookToken 
+                        text: formattedMessage, 
+                        number: formattedPhoneNumber,
                     }),
                 });
-                console.log('Mensagem de credenciais do produto enviada com sucesso via Webhook');
+                console.log('Mensagem de credenciais do produto enviada com sucesso via UAZAPI');
             } catch (error) {
-                console.error("Falha ao enviar mensagem de credenciais do produto:", error);
+                console.error("Falha ao enviar mensagem de credenciais do produto via UAZAPI:", error);
             }
         }
       }

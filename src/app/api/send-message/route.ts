@@ -9,39 +9,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Message, phoneNumber, and token are required' }, { status: 400 });
     }
 
-    // Ensure the phone number contains only digits and has no +55 prefix added.
+    // Ensure the phone number contains only digits.
     const formattedPhoneNumber = phoneNumber.replace(/\D/g, '');
 
-    // To ensure compatibility with some webhooks that might not correctly interpret
-    // standard newline characters in JSON, we explicitly escape them.
-    const formattedMessage = message.replace(/\n/g, '\\n');
+    const apiUrl = 'https://pjcontas.uazapi.com/send/text';
 
-    const webhookUrl = 'https://pjempreendimentos.n8nready.com.br/webhook/c77db165-367d-430a-a055-8f86879b107e';
-
-    const webhookResponse = await fetch(webhookUrl, {
+    const apiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'token': token,
+        'apikey': token,
       },
       body: JSON.stringify({
-        text: formattedMessage,
         number: formattedPhoneNumber,
-        token: token,
+        text: message,
       }),
     });
 
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      console.error(`Webhook failed with status ${webhookResponse.status}: ${errorText}`);
-      // Return a more specific error to the client
-      return NextResponse.json({ error: 'Failed to send message via webhook.', details: errorText }, { status: webhookResponse.status });
+    let responseData;
+    const responseText = await apiResponse.text();
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      responseData = { message: responseText };
     }
 
-    const responseData = await webhookResponse.json();
+    if (!apiResponse.ok) {
+      console.error(`UAZAPI failed with status ${apiResponse.status}: ${responseText}`);
+      return NextResponse.json(
+        { error: 'Failed to send message via UAZAPI.', details: responseData },
+        { status: apiResponse.status }
+      );
+    }
+
     return NextResponse.json({ success: true, data: responseData });
 
   } catch (error: any) {
-    console.error('API route error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('API route /api/send-message error:', error);
+    return NextResponse.json({ error: 'Internal Server Error', details: error?.message || String(error) }, { status: 500 });
   }
 }
