@@ -89,12 +89,14 @@ export function Upsell2MessageHandler() {
                 for (const client of activeClients) {
                     const clientCreatedMs = getTimestampMs(client.createdAt) || now;
 
-                    // STRICT CUTOFF: Skip ALL clients created before 28/07/2026 00:42:20
-                    if (clientCreatedMs < STRICT_CUTOFF_MS) {
-                        continue;
-                    }
-
                     for (const upsell of activeUpsells2) {
+                        const upsellCreatedMs = Number(upsell.createdAt) || STRICT_CUTOFF_MS;
+                        
+                        // UNIVERSAL RULE: Skip any client created BEFORE this specific upsell rule was created
+                        if (clientCreatedMs < upsellCreatedMs) {
+                            continue;
+                        }
+
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
                         

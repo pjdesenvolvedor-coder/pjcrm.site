@@ -85,12 +85,16 @@ export default function Upsell2Page() {
 
   const onSubmit = (data: UpsellFormData) => {
     if (settingsDocRef) {
+      const existingUpsellsMap = new Map((settings?.upsells2 || []).map(u => [u.id, u.createdAt]));
       const now = Date.now();
-      const updatedUpsells = data.upsells2.map(u => ({
-        ...u,
-        upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
-        createdAt: u.createdAt || now,
-      }));
+      const updatedUpsells = data.upsells2.map(u => {
+        const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
+        return {
+          ...u,
+          upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
+          createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
+        };
+      });
 
       setDocumentNonBlocking(settingsDocRef, { upsells2: updatedUpsells }, { merge: true });
       toast({

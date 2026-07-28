@@ -148,9 +148,10 @@ export default function DebugPage() {
 
     for (const client of activeClients) {
       const clientCreatedMs = getTimestampMs(client.createdAt) || nowMs;
-      if (clientCreatedMs < STRICT_CUTOFF_MS) continue;
 
       for (const upsell of activeUpsells) {
+        const upsellCreatedMs = Number(upsell.createdAt) || STRICT_CUTOFF_MS;
+        if (clientCreatedMs < upsellCreatedMs) continue;
         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
         const delayMs = delayMinutes * 60 * 1000;
         const elapsedMs = nowMs - clientCreatedMs;
