@@ -81,6 +81,7 @@ export type Client = {
   createdAt?: Timestamp | null;
   upsellSent?: boolean;
   sentUpsellIds?: string[];
+  sentUpsell2Ids?: string[];
   sentRemarketingIds?: string[];
   agentId?: string;
   agentName?: string;
@@ -117,6 +118,7 @@ export type Settings = {
   upsellDelayMinutes?: number;
   upsellMessage?: string;
   upsells?: UpsellConfig[];
+  upsells2?: UpsellConfig[];
   isSupportAutomationActive?: boolean;
   supportStartedMessage?: string;
   supportFinishedMessage?: string;

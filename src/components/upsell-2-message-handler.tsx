@@ -1,0 +1,209 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import { collection, doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { useFirebase, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import type { Client, Settings, UserProfile, UpsellConfig } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const MANDATORY_DELAY = 30000; // 30 seconds between multiple sends
+
+function getTimestampMs(val: any): number | null {
+    if (!val) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val.toMillis === 'function') return val.toMillis();
+    if (typeof val.toDate === 'function') return val.toDate().getTime();
+    if (val.seconds !== undefined) return val.seconds * 1000;
+    if (val instanceof Date) return val.getTime();
+    if (typeof val === 'string') {
+        const ms = new Date(val).getTime();
+        return isNaN(ms) ? null : ms;
+    }
+    return null;
+}
+
+function formatDateSafe(val: any): string {
+    const ms = getTimestampMs(val);
+    if (!ms) return 'N/A';
+    try {
+        return format(new Date(ms), 'dd/MM/yyyy');
+    } catch {
+        return 'N/A';
+    }
+}
+
+export function Upsell2MessageHandler() {
+    const { firestore, user } = useFirebase();
+    const { toast } = useToast();
+    const isProcessing = useRef(false);
+
+    const settingsDocRef = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return doc(firestore, 'users', user.uid, 'settings', 'config');
+    }, [firestore, user]);
+    const { data: settings } = useDoc<Settings>(settingsDocRef);
+    
+    const userDocRef = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+    const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+
+    const allClientsQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return collection(firestore, 'users', user.uid, 'clients');
+    }, [user, firestore]);
+    const { data: clients } = useCollection<Client>(allClientsQuery);
+
+    useEffect(() => {
+        const processUpsell2Queue = async () => {
+            if (isProcessing.current) return;
+
+            if (userProfile && userProfile.role !== 'Admin' && userProfile.subscriptionEndDate) {
+                const subEndMs = getTimestampMs(userProfile.subscriptionEndDate);
+                if (subEndMs && subEndMs < Date.now()) return;
+            }
+
+            const activeUpsells2 = settings?.upsells2?.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim())) || [];
+            const mainToken = settings?.webhookToken || settings?.billingWebhookToken;
+            const activeClients = clients?.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido') || [];
+
+            if (activeClients.length === 0 || activeUpsells2.length === 0 || !mainToken || !user || !firestore) {
+                return;
+            }
+
+            try {
+                isProcessing.current = true;
+                const now = Date.now();
+                const cutoff24h = now - (24 * 60 * 60 * 1000); // Clients created in last 24h
+                
+                const tasks: { client: Client, upsell: UpsellConfig }[] = [];
+                for (const client of activeClients) {
+                    const clientCreatedMs = getTimestampMs(client.createdAt) || now;
+
+                    // Skip historical clients created more than 24 hours ago
+                    if (clientCreatedMs < cutoff24h) {
+                        continue;
+                    }
+
+                    for (const upsell of activeUpsells2) {
+                        const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
+                        const delayMs = delayMinutes * 60 * 1000;
+                        
+                        if ((now - clientCreatedMs) >= delayMs && !client.sentUpsell2Ids?.includes(upsell.id)) {
+                            tasks.push({ client, upsell });
+                        }
+                    }
+                }
+
+                if (tasks.length === 0) {
+                    return;
+                }
+
+                const currentDelay = tasks.length > 1 ? MANDATORY_DELAY : 0;
+
+                const processTask = async (task: typeof tasks[0], isLast: boolean) => {
+                    const { client, upsell } = task;
+                    const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
+                    const logRef = collection(firestore, 'users', user.uid, 'logs');
+
+                    try {
+                        const currentSentIds = client.sentUpsell2Ids || [];
+                        if (currentSentIds.includes(upsell.id)) return;
+
+                        const updatedSentIds = Array.from(new Set([...currentSentIds, upsell.id]));
+
+                        // Mark as sent in Firestore so it's only processed once
+                        await updateDoc(clientDocRef, { sentUpsell2Ids: updatedSentIds }).catch(() => {
+                            setDocumentNonBlocking(clientDocRef, { sentUpsell2Ids: updatedSentIds }, { merge: true });
+                        });
+
+                        addDocumentNonBlocking(logRef, {
+                            userId: user.uid,
+                            type: 'Upsell 2.0',
+                            clientName: client.name,
+                            target: client.phone,
+                            status: 'Enviando',
+                            delayApplied: currentDelay / 1000,
+                            timestamp: serverTimestamp(),
+                        });
+
+                        let formattedMessage = upsell.upsellMessage
+                            .replace(/{cliente}/g, client.name || '')
+                            .replace(/{telefone}/g, client.phone || '')
+                            .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : (client.email || ''))
+                            .replace(/{assinatura}/g, client.subscription || '')
+                            .replace(/{vencimento}/g, formatDateSafe(client.dueDate))
+                            .replace(/{valor}/g, client.amountPaid || '0,00')
+                            .replace(/{senha}/g, client.password || 'N/A')
+                            .replace(/{tela}/g, client.screen || 'N/A')
+                            .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
+                            .replace(/{status}/g, client.status || 'Ativo');
+
+                        const response = await fetch('/api/send-message', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: formattedMessage,
+                                phoneNumber: client.phone,
+                                token: mainToken,
+                            }),
+                        });
+
+                        const resData = await response.json().catch(() => ({}));
+
+                        if (response.ok) {
+                            addDocumentNonBlocking(logRef, {
+                                userId: user.uid,
+                                type: 'Upsell 2.0',
+                                clientName: client.name,
+                                target: client.phone,
+                                status: 'Enviado',
+                                delayApplied: currentDelay / 1000,
+                                timestamp: serverTimestamp(),
+                            });
+                            toast({ title: "Upsell 2.0 Enviado! 🚀", description: `Entregue para ${client.name}.` });
+                        } else {
+                            console.error("Falha ao enviar Upsell 2.0:", resData);
+                            addDocumentNonBlocking(logRef, {
+                                userId: user.uid,
+                                type: 'Upsell 2.0',
+                                clientName: client.name,
+                                target: client.phone,
+                                status: 'Erro',
+                                delayApplied: currentDelay / 1000,
+                                timestamp: serverTimestamp(),
+                                details: resData?.error || resData?.details || 'Erro no envio da API',
+                            });
+                        }
+
+                        if (!isLast && currentDelay > 0) {
+                            await sleep(currentDelay);
+                        }
+
+                    } catch (error: any) {
+                        console.error("Error processing upsell 2.0 task:", error);
+                    }
+                };
+
+                for (let i = 0; i < tasks.length; i++) {
+                    await processTask(tasks[i], i === tasks.length - 1);
+                }
+            } catch (err) {
+                console.error("Error in processUpsell2Queue:", err);
+            } finally {
+                isProcessing.current = false;
+            }
+        };
+
+        const intervalId = setInterval(processUpsell2Queue, 5000); // Check every 5s
+        processUpsell2Queue();
+        return () => clearInterval(intervalId);
+
+    }, [clients, settings, firestore, user, toast, userProfile]);
+
+    return null;
+}

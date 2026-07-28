@@ -55,6 +55,7 @@ import {
   Bug,
 } from 'lucide-react';
 import Image from 'next/image';
+import { Upsell2MessageHandler } from '@/components/upsell-2-message-handler';
 
 import {
   SidebarProvider,
@@ -663,7 +664,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/due-date'}><Link href="/automations/due-date">Avisos Re-Cobrança</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Funil Upsell</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Funil Upsell (1.0)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell-2'}><Link href="/automations/upsell-2" className="text-emerald-600 dark:text-emerald-400 font-semibold">Funil Upsell 2.0 🚀</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-credentials'}><Link href="/automations/delivery-credentials">Envio Acesso (Dados)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-link'}><Link href="/automations/delivery-link">Envio Acesso (Link)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Msg Suporte</Link></SidebarMenuSubButton></SidebarMenuSubItem>
@@ -934,13 +936,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SystemNotification />
         {children}
       </SidebarInset>
-      {/* 
-        <ScheduledMessageHandler />
-        <DueDateMessageHandler />
-        <UpsellMessageHandler />
-        <RemarketingMessageHandler /> 
-      */}
       <SubscriptionTimer />
+      <Upsell2MessageHandler />
     </SidebarProvider>
   );
 }

@@ -130,24 +130,15 @@ export default function DebugPage() {
     }).slice(0, 100);
   }, [rawLogs]);
 
-  // Active upsells
+  // Active upsells 2.0
   const activeUpsells = useMemo(() => {
-    if (settings?.upsells && settings.upsells.length > 0) {
-      return settings.upsells.filter(u => u.isActive && u.upsellMessage);
-    }
-    if (settings?.isUpsellActive && settings?.upsellMessage) {
-      return [{
-        id: 'legacy-1',
-        isActive: true,
-        upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
-        upsellMessage: settings.upsellMessage,
-        createdAt: 0,
-      }];
+    if (settings?.upsells2 && settings.upsells2.length > 0) {
+      return settings.upsells2.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage));
     }
     return [];
   }, [settings]);
 
-  // Pending Upsell Queue Countdown
+  // Pending Upsell 2.0 Queue Countdown
   const pendingUpsellQueue = useMemo(() => {
     if (!clients || activeUpsells.length === 0) return [];
     const queue: { client: Client; upsell: any; delayMinutes: number; secondsRemaining: number; statusText: string }[] = [];
@@ -160,12 +151,11 @@ export default function DebugPage() {
       if (clientCreatedMs < cutoff24h) continue;
 
       for (const upsell of activeUpsells) {
-
         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
         const delayMs = delayMinutes * 60 * 1000;
         const elapsedMs = nowMs - clientCreatedMs;
         const remainingMs = delayMs - elapsedMs;
-        const alreadySent = client.sentUpsellIds?.includes(upsell.id);
+        const alreadySent = client.sentUpsell2Ids?.includes(upsell.id);
 
         if (!alreadySent) {
           const secRem = Math.max(0, Math.ceil(remainingMs / 1000));

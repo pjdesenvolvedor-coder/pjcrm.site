@@ -138,16 +138,8 @@ export async function GET(request: Request) {
 
             /* --- 2. PROCESSAR UPSELL --- */
             let activeUpsells: UpsellConfig[] = [];
-            if (settings?.upsells && settings.upsells.length > 0) {
-                activeUpsells = settings.upsells.filter(u => u.isActive && u.upsellMessage);
-            } else if (settings?.isUpsellActive && settings?.upsellMessage) {
-                activeUpsells = [{
-                    id: 'legacy-1',
-                    isActive: true,
-                    upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
-                    upsellMessage: settings.upsellMessage,
-                    createdAt: 0,
-                }];
+            if (settings?.upsells2 && settings.upsells2.length > 0) {
+                activeUpsells = settings.upsells2.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
             }
 
             const upsellToken = settings.webhookToken || settings.billingWebhookToken;
@@ -170,15 +162,15 @@ export async function GET(request: Request) {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        if ((now.getTime() - clientCreatedMs) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
+                        if ((now.getTime() - clientCreatedMs) >= delayMs && !client.sentUpsell2Ids?.includes(upsell.id)) {
                             let processed = false;
                             const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
                             
                             try {
                                 await runTransaction(db, async (txn) => {
                                     const cSnap = await txn.get(clientDocRef);
-                                    if (cSnap.data()?.sentUpsellIds?.includes(upsell.id)) throw new Error('Sent');
-                                    txn.update(clientDocRef, { sentUpsellIds: arrayUnion(upsell.id) });
+                                    if (cSnap.data()?.sentUpsell2Ids?.includes(upsell.id)) throw new Error('Sent');
+                                    txn.update(clientDocRef, { sentUpsell2Ids: arrayUnion(upsell.id) });
                                     processed = true;
                                 });
                             } catch (e) {}
