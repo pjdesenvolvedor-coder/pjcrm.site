@@ -154,12 +154,11 @@ export default function DebugPage() {
     const activeClients = clients.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido');
 
     for (const client of activeClients) {
-      const clientCreatedMs = getTimestampMs(client.createdAt);
-      if (!clientCreatedMs) continue;
+      const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
 
       for (const upsell of activeUpsells) {
         const upsellCreatedMs = Number(upsell.createdAt) || 0;
-        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) continue;
+        if (upsellCreatedMs > 0 && clientCreatedMs < (upsellCreatedMs - 120000)) continue;
 
         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
         const delayMs = delayMinutes * 60 * 1000;
