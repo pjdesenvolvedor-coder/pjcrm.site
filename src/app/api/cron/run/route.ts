@@ -162,10 +162,9 @@ export async function GET(request: Request) {
                     for (const upsell of activeUpsells) {
                         if (upsellsDone >= QUEUE_LIMIT) break;
                         const upsellCreatedMs = Number(upsell.createdAt) || 0;
-                        // Skip historical clients created more than 10 minutes before the upsell rule was created
-                        if (upsellCreatedMs > 0) {
-                            const cutoffMs = upsellCreatedMs - (10 * 60 * 1000);
-                            if (clientCreatedMs < cutoffMs) continue;
+                        // Skip historical clients created BEFORE the upsell rule was created
+                        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) {
+                            continue;
                         }
                         
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;

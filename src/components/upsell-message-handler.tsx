@@ -55,12 +55,11 @@ export function UpsellMessageHandler() {
     }, [firestore, user]);
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-    const activeClientsQuery = useMemoFirebase(() => {
+    const allClientsQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
-        const clientsRef = collection(firestore, 'users', user.uid, 'clients');
-        return query(clientsRef, where("status", "==", "Ativo"));
+        return collection(firestore, 'users', user.uid, 'clients');
     }, [user, firestore]);
-    const { data: activeClients } = useCollection<Client>(activeClientsQuery);
+    const { data: clients } = useCollection<Client>(allClientsQuery);
 
     useEffect(() => {
         const processUpsellQueue = async () => {
@@ -84,8 +83,9 @@ export function UpsellMessageHandler() {
             }
 
             const mainToken = settings?.webhookToken || settings?.billingWebhookToken;
+            const activeClients = clients?.filter(c => c.status !== 'Inativo' && c.status !== 'Vencido') || [];
 
-            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !mainToken || !user || !firestore) {
+            if (activeClients.length === 0 || activeUpsells.length === 0 || !mainToken || !user || !firestore) {
                 return;
             }
 
@@ -100,10 +100,9 @@ export function UpsellMessageHandler() {
 
                     for (const upsell of activeUpsells) {
                         const upsellCreatedMs = Number(upsell.createdAt) || 0;
-                        // Skip historical clients created more than 10 minutes before the upsell rule was created
-                        if (upsellCreatedMs > 0) {
-                            const cutoffMs = upsellCreatedMs - (10 * 60 * 1000);
-                            if (clientCreatedMs < cutoffMs) continue;
+                        // Skip historical clients created BEFORE the upsell rule was created
+                        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) {
+                            continue;
                         }
 
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
