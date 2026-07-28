@@ -191,7 +191,11 @@ export function Upsell2MessageHandler() {
                                 const formattedLabel = b.label
                                     .replace(/{cliente}/g, client.name || '')
                                     .replace(/{assinatura}/g, client.subscription || '');
-                                return `${formattedLabel.trim()}|${b.url.trim()}`;
+                                let cleanUrl = (b.url || '').trim();
+                                if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                                    cleanUrl = `https://${cleanUrl}`;
+                                }
+                                return cleanUrl ? `${formattedLabel.trim()}|${cleanUrl}` : `${formattedLabel.trim()}`;
                             });
 
                             let formattedFooter = liveFooter ? liveFooter.replace(/{cliente}/g, client.name || '') : undefined;

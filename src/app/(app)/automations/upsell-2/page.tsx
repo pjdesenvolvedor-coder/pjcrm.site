@@ -29,10 +29,14 @@ import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (val: string) => void }) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = React.useState(false);
+  const { firebaseApp } = useFirebase();
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -41,14 +45,24 @@ function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (va
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      if (base64) {
-        onChange(base64);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      setIsUploading(true);
+      const storage = getStorage(firebaseApp);
+      const fileRef = storageRef(storage, `upsell-2-images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+      await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(fileRef);
+      onChange(downloadUrl);
+    } catch (err) {
+      console.error("Erro ao carregar foto no Firebase Storage, usando fallback:", err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        if (base64) onChange(base64);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -71,11 +85,12 @@ function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (va
           type="button"
           variant="outline"
           size="sm"
+          disabled={isUploading}
           onClick={() => fileInputRef.current?.click()}
           className="gap-1.5 text-xs shrink-0 border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold"
         >
           <Upload className="h-3.5 w-3.5" />
-          Escolher Foto do Dispositivo
+          {isUploading ? 'Enviando foto...' : 'Escolher Foto do Dispositivo'}
         </Button>
       </div>
 

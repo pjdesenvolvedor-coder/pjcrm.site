@@ -181,7 +181,14 @@ export async function GET(request: Request) {
                                 let formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
                                 if (upsell.messageType === 'button' || (upsell.buttons && upsell.buttons.length > 0)) {
-                                    const choices = (upsell.buttons || []).map(b => `${formatMessageWithClient(b.label, client).trim()}|${b.url.trim()}`);
+                                    const choices = (upsell.buttons || []).map(b => {
+                                        const label = formatMessageWithClient(b.label, client).trim();
+                                        let cleanUrl = (b.url || '').trim();
+                                        if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                                            cleanUrl = `https://${cleanUrl}`;
+                                        }
+                                        return cleanUrl ? `${label}|${cleanUrl}` : `${label}`;
+                                    });
                                     await fetch(`${originUrl}/api/send-menu`, {
                                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({

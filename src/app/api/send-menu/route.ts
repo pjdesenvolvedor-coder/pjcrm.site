@@ -31,7 +31,12 @@ export async function POST(request: Request) {
     };
 
     if (imageButton && typeof imageButton === 'string' && imageButton.trim()) {
-      payload.imageButton = imageButton.trim();
+      const cleanImg = imageButton.trim();
+      if (cleanImg.startsWith('http://') || cleanImg.startsWith('https://')) {
+        payload.imageButton = cleanImg;
+      } else {
+        console.warn('send-menu: Ignored non-HTTP imageButton payload (e.g. data URI) to prevent UAZAPI API 400 error.');
+      }
     }
 
     if (footerText && typeof footerText === 'string' && footerText.trim()) {
