@@ -26,6 +26,30 @@ function addServerLog(userId: string, type: string, clientName: string, target: 
     // We will await logs sequentially to be safe.
 }
 
+function getTimestampMs(val: any): number | null {
+    if (!val) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val.toMillis === 'function') return val.toMillis();
+    if (typeof val.toDate === 'function') return val.toDate().getTime();
+    if (val.seconds !== undefined) return val.seconds * 1000;
+    if (val instanceof Date) return val.getTime();
+    if (typeof val === 'string') {
+        const ms = new Date(val).getTime();
+        return isNaN(ms) ? null : ms;
+    }
+    return null;
+}
+
+function formatDateSafe(val: any): string {
+    const ms = getTimestampMs(val);
+    if (!ms) return 'N/A';
+    try {
+        return format(new Date(ms), 'dd/MM/yyyy');
+    } catch {
+        return 'N/A';
+    }
+}
+
 function formatMessageWithClient(template: string, client: Client): string {
     if (!template) return '';
     return template
@@ -37,7 +61,7 @@ function formatMessageWithClient(template: string, client: Client): string {
         .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
         .replace(/{link}/g, client.accessLink || 'N/A')
         .replace(/{assinatura}/g, client.subscription || 'N/A')
-        .replace(/{vencimento}/g, client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : 'N/A')
+        .replace(/{vencimento}/g, formatDateSafe(client.dueDate))
         .replace(/{valor}/g, client.amountPaid || '0,00')
         .replace(/{status}/g, client.status || 'Ativo');
 }
@@ -118,16 +142,18 @@ export async function GET(request: Request) {
                 let upsellsDone = 0;
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
-                    if (!client.createdAt) continue;
+                    const clientCreatedMs = getTimestampMs(client.createdAt);
+                    if (!clientCreatedMs) continue;
                     
                     for (const upsell of activeUpsells) {
                         if (upsellsDone >= QUEUE_LIMIT) break;
-                        if (upsell.createdAt && client.createdAt.toMillis() < upsell.createdAt) continue;
+                        const upsellCreatedMs = upsell.createdAt || 0;
+                        // Skip clients created BEFORE the upsell rule was created/activated
+                        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) continue;
                         
                         const delayMs = (upsell.upsellDelayMinutes || 0) * 60 * 1000;
-                        const creationTime = client.createdAt.toDate().getTime();
 
-                        if ((now.getTime() - creationTime) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
+                        if ((now.getTime() - clientCreatedMs) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
                             let processed = false;
                             const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
                             
