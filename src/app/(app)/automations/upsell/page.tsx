@@ -151,24 +151,31 @@ export default function UpsellPage() {
             Adicionar Mais Upsell
         </Button>
       </PageHeader>
-      <main className="flex-1 overflow-auto p-4 md:p-6 relative">
-        {/* Transparent Disabled Overlay */}
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 gap-4 border rounded-xl m-4">
-          <div className="p-4 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-lg animate-pulse">
-            <Rocket className="h-10 w-10" />
+      <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
+        {/* Read-Only Informative Banner */}
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400">
+              <Rocket className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                Modo Somente Leitura (Funil Upsell 1.0)
+                <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">Desativado</Badge>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Esta tela serve apenas para você visualizar e copiar as mensagens antigas. Nenhuma lógica do Upsell 1.0 está em execução.
+              </p>
+            </div>
           </div>
-          <h2 className="text-2xl font-bold text-foreground">Funil Upsell 1.0 Desativado</h2>
-          <p className="text-muted-foreground max-w-md">
-            Esta versão legada do Upsell foi desativada. Por favor, utilize o novo <strong>Funil Upsell 2.0</strong> disponível no menu de automações.
-          </p>
-          <Button size="lg" className="gap-2 bg-primary text-primary-foreground font-semibold shadow-md" onClick={() => window.location.href = '/automations/upsell-2'}>
-            <Rocket className="h-5 w-5" />
+          <Button size="sm" className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={() => window.location.href = '/automations/upsell-2'}>
+            <Rocket className="h-4 w-4" />
             Ir para Funil Upsell 2.0 🚀
           </Button>
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 opacity-40 pointer-events-none">
+          <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
             <div className="space-y-6">
                 {fields.map((field, index) => (
                     <Card key={field.id}>
@@ -206,9 +213,7 @@ export default function UpsellPage() {
                                         <FormControl>
                                         <Switch
                                             checked={field.value}
-                                            onCheckedChange={(checked) => {
-                                                field.onChange(checked);
-                                            }}
+                                            disabled={true}
                                         />
                                         </FormControl>
                                     </div>
@@ -224,7 +229,7 @@ export default function UpsellPage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormControl>
-                                                <Input type="number" className="w-20" {...field} />
+                                                <Input type="number" className="w-20" disabled={true} {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -238,11 +243,12 @@ export default function UpsellPage() {
                                 name={`upsells.${index}.upsellMessage`}
                                 render={({ field }) => (
                                     <FormItem>
-                                    <FormLabel>Mensagem de UPSELL</FormLabel>
+                                    <FormLabel>Mensagem de UPSELL (Modo Leitura)</FormLabel>
                                     <FormControl>
                                         <Textarea
                                         placeholder="Olá {cliente}, vi que você acabou de entrar! Tenho uma oferta especial..."
-                                        className="min-h-32"
+                                        className="min-h-32 bg-muted/20"
+                                        readOnly={true}
                                         {...field}
                                         />
                                     </FormControl>
