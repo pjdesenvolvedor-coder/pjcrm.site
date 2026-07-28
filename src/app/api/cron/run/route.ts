@@ -172,7 +172,7 @@ export async function GET(request: Request) {
 
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: settings.webhookToken }),
+                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: billingToken || settings.webhookToken }),
                                 }).catch(console.error);
                             }
                         }

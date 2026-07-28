@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
+import { getZapToken } from '@/lib/zapToken';
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds
 
@@ -69,8 +71,9 @@ export function UpsellMessageHandler() {
             }
 
             const activeUpsells = settings?.upsells?.filter(u => u.isActive && u.upsellMessage) || [];
+            const activeToken = getZapToken(settings);
 
-            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !settings?.webhookToken || !user || !firestore) {
+            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !activeToken || !user || !firestore) {
                 return;
             }
 
@@ -148,7 +151,7 @@ export function UpsellMessageHandler() {
                             body: JSON.stringify({
                                 message: formattedMessage,
                                 phoneNumber: client.phone,
-                                token: settings?.webhookToken,
+                                token: activeToken,
                             }),
                         });
 
