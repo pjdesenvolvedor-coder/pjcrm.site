@@ -270,10 +270,13 @@ export default function Upsell2Page() {
       const now = Date.now();
       const updatedUpsells = data.upsells2.map(u => {
         const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
+        const hasButtons = Array.isArray(u.buttons) && u.buttons.length > 0;
+        const finalMessageType = (u.messageType === 'button' || hasButtons) ? 'button' : 'message';
+
         return {
           ...u,
           upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
-          messageType: u.messageType || 'message',
+          messageType: finalMessageType,
           createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
         };
       });
