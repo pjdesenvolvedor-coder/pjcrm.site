@@ -173,8 +173,8 @@ export function Upsell2MessageHandler() {
                             .replace(/{status}/g, client.status || 'Ativo');
 
                         let response;
-                        if (upsell.messageType === 'button' && upsell.buttons && upsell.buttons.length > 0) {
-                            const choices = upsell.buttons.map(b => {
+                        if (upsell.messageType === 'button' || (upsell.buttons && upsell.buttons.length > 0)) {
+                            const choices = (upsell.buttons || []).map(b => {
                                 const formattedLabel = b.label
                                     .replace(/{cliente}/g, client.name || '')
                                     .replace(/{assinatura}/g, client.subscription || '');

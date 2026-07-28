@@ -176,8 +176,8 @@ export async function GET(request: Request) {
                                 upsellsDone++;
                                 let formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
-                                if (upsell.messageType === 'button' && upsell.buttons && upsell.buttons.length > 0) {
-                                    const choices = upsell.buttons.map(b => `${formatMessageWithClient(b.label, client).trim()}|${b.url.trim()}`);
+                                if (upsell.messageType === 'button' || (upsell.buttons && upsell.buttons.length > 0)) {
+                                    const choices = (upsell.buttons || []).map(b => `${formatMessageWithClient(b.label, client).trim()}|${b.url.trim()}`);
                                     await fetch(`${originUrl}/api/send-menu`, {
                                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({
