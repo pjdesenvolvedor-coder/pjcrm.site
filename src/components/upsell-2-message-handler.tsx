@@ -130,8 +130,15 @@ export function Upsell2MessageHandler() {
                         // ATOMIC CONCURRENCY LOCK (runTransaction): Prevents duplicate sends across 200 open tabs
                         await runTransaction(firestore, async (transaction) => {
                             const clientSnap = await transaction.get(clientDocRef);
-                            if (!clientSnap.exists()) return;
+                            if (!clientSnap.exists()) {
+                                throw new Error('CLIENT_DELETED');
+                            }
                             const clientData = clientSnap.data() as Client;
+
+                            if (clientData.status === 'Inativo' || clientData.status === 'Vencido') {
+                                throw new Error('CLIENT_INACTIVE');
+                            }
+
                             const currentSentIds = clientData.sentUpsell2Ids || [];
 
                             if (currentSentIds.includes(upsell.id)) {

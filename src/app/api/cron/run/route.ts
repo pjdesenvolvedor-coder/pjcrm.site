@@ -166,7 +166,11 @@ export async function GET(request: Request) {
                             try {
                                 await runTransaction(db, async (txn) => {
                                     const cSnap = await txn.get(clientDocRef);
-                                    if (cSnap.data()?.sentUpsell2Ids?.includes(upsell.id)) throw new Error('Sent');
+                                    if (!cSnap.exists()) throw new Error('Deleted');
+                                    const cData = cSnap.data();
+                                    if (cData?.status === 'Inativo' || cData?.status === 'Vencido') throw new Error('Inactive');
+                                    if (cData?.sentUpsell2Ids?.includes(upsell.id)) throw new Error('Sent');
+                                    
                                     txn.update(clientDocRef, { sentUpsell2Ids: arrayUnion(upsell.id) });
                                     processed = true;
                                 });
