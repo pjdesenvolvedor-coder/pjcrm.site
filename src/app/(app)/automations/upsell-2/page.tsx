@@ -290,6 +290,7 @@ export default function Upsell2Page() {
 
         return {
           ...u,
+          id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
           upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
           messageType: finalMessageType,
           createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,

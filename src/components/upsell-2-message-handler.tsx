@@ -89,7 +89,8 @@ export function Upsell2MessageHandler() {
                 for (const client of activeClients) {
                     const clientCreatedMs = getTimestampMs(client.createdAt) || now;
 
-                    for (const upsell of activeUpsells2) {
+                    for (let idx = 0; idx < activeUpsells2.length; idx++) {
+                        const upsell = activeUpsells2[idx];
                         const upsellCreatedMs = Number(upsell.createdAt) || STRICT_CUTOFF_MS;
                         
                         // UNIVERSAL RULE: Skip any client created BEFORE this specific upsell rule was created
@@ -97,10 +98,19 @@ export function Upsell2MessageHandler() {
                             continue;
                         }
 
+                        const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim()) 
+                            ? upsell.id.trim() 
+                            : `rule_${upsell.createdAt || idx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`;
+
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
                         
-                        if ((now - clientCreatedMs) >= delayMs && !client.sentUpsell2Ids?.includes(upsell.id)) {
+                        const alreadySent = Boolean(
+                            (upsell.id && client.sentUpsell2Ids?.includes(upsell.id)) ||
+                            client.sentUpsell2Ids?.includes(ruleId)
+                        );
+
+                        if ((now - clientCreatedMs) >= delayMs && !alreadySent) {
                             tasks.push({ client, upsell });
                         }
                     }
@@ -115,8 +125,12 @@ export function Upsell2MessageHandler() {
                 const processTask = async (task: typeof tasks[0], isLast: boolean) => {
                     const { client, upsell } = task;
 
+                    const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim()) 
+                        ? upsell.id.trim() 
+                        : `rule_${upsell.createdAt || 0}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`;
+
                     // LIVE CHECK: Re-verify if rule is STILL active before sending
-                    const currentRuleState = settings?.upsells2?.find(u => u.id === upsell.id);
+                    const currentRuleState = settings?.upsells2?.find(u => (u.id && u.id === upsell.id) || u.upsellMessage === upsell.upsellMessage);
                     if (!currentRuleState || !currentRuleState.isActive) {
                         return; // Discard immediately if turned off
                     }
@@ -141,11 +155,11 @@ export function Upsell2MessageHandler() {
 
                             const currentSentIds = clientData.sentUpsell2Ids || [];
 
-                            if (currentSentIds.includes(upsell.id)) {
+                            if (currentSentIds.includes(ruleId) || (upsell.id && currentSentIds.includes(upsell.id))) {
                                 throw new Error('ALREADY_CLAIMED');
                             }
 
-                            const updatedSentIds = Array.from(new Set([...currentSentIds, upsell.id]));
+                            const updatedSentIds = Array.from(new Set([...currentSentIds, ruleId, upsell.id].filter(Boolean))) as string[];
                             transaction.update(clientDocRef, { sentUpsell2Ids: updatedSentIds });
                             claimSuccessful = true;
                         }).catch(() => {

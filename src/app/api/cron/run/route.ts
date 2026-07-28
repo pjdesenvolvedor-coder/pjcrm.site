@@ -151,15 +151,25 @@ export async function GET(request: Request) {
                     const clientCreatedMs = getTimestampMs(client.createdAt) || now.getTime();
                     const STRICT_CUTOFF_MS = 1770008540000; // 28/07/2026 00:42:20
 
-                    for (const upsell of activeUpsells) {
+                    for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
+                        const upsell = activeUpsells[uIdx];
                         if (upsellsDone >= QUEUE_LIMIT) break;
                         const upsellCreatedMs = Number(upsell.createdAt) || STRICT_CUTOFF_MS;
                         if (clientCreatedMs < upsellCreatedMs) continue;
                         
+                        const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
+                            ? upsell.id.trim()
+                            : `rule_${upsell.createdAt || uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`;
+
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        if ((now.getTime() - clientCreatedMs) >= delayMs && !client.sentUpsell2Ids?.includes(upsell.id)) {
+                        const alreadySent = Boolean(
+                            (upsell.id && client.sentUpsell2Ids?.includes(upsell.id)) ||
+                            client.sentUpsell2Ids?.includes(ruleId)
+                        );
+
+                        if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySent) {
                             let processed = false;
                             const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
                             
@@ -169,9 +179,10 @@ export async function GET(request: Request) {
                                     if (!cSnap.exists()) throw new Error('Deleted');
                                     const cData = cSnap.data();
                                     if (cData?.status === 'Inativo' || cData?.status === 'Vencido') throw new Error('Inactive');
-                                    if (cData?.sentUpsell2Ids?.includes(upsell.id)) throw new Error('Sent');
+                                    const sentList = cData?.sentUpsell2Ids || [];
+                                    if (sentList.includes(ruleId) || (upsell.id && sentList.includes(upsell.id))) throw new Error('Sent');
                                     
-                                    txn.update(clientDocRef, { sentUpsell2Ids: arrayUnion(upsell.id) });
+                                    txn.update(clientDocRef, { sentUpsell2Ids: arrayUnion(ruleId, upsell.id || ruleId) });
                                     processed = true;
                                 });
                             } catch (e) {}
