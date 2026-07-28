@@ -160,7 +160,13 @@ export function Upsell2MessageHandler() {
                             timestamp: serverTimestamp(),
                         });
 
-                        let formattedMessage = upsell.upsellMessage
+                        const liveMessageType = currentRuleState.messageType || upsell.messageType || 'message';
+                        const liveButtons = currentRuleState.buttons || upsell.buttons || [];
+                        const liveImage = currentRuleState.imageButton || upsell.imageButton;
+                        const liveFooter = currentRuleState.footerText || upsell.footerText;
+                        const liveMessageText = currentRuleState.upsellMessage || upsell.upsellMessage;
+
+                        let formattedMessage = liveMessageText
                             .replace(/{cliente}/g, client.name || '')
                             .replace(/{telefone}/g, client.phone || '')
                             .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : (client.email || ''))
@@ -173,15 +179,15 @@ export function Upsell2MessageHandler() {
                             .replace(/{status}/g, client.status || 'Ativo');
 
                         let response;
-                        if (upsell.messageType === 'button' || (upsell.buttons && upsell.buttons.length > 0)) {
-                            const choices = (upsell.buttons || []).map(b => {
+                        if (liveMessageType === 'button' || liveButtons.length > 0) {
+                            const choices = liveButtons.map(b => {
                                 const formattedLabel = b.label
                                     .replace(/{cliente}/g, client.name || '')
                                     .replace(/{assinatura}/g, client.subscription || '');
                                 return `${formattedLabel.trim()}|${b.url.trim()}`;
                             });
 
-                            let formattedFooter = upsell.footerText ? upsell.footerText.replace(/{cliente}/g, client.name || '') : undefined;
+                            let formattedFooter = liveFooter ? liveFooter.replace(/{cliente}/g, client.name || '') : undefined;
 
                             // DISPATCH ONLY TO /api/send-menu FOR BUTTON CARDS (NO DOUBLE TEXT MESSAGE)
                             response = await fetch('/api/send-menu', {
@@ -192,7 +198,7 @@ export function Upsell2MessageHandler() {
                                     type: 'button',
                                     text: formattedMessage,
                                     choices: choices,
-                                    imageButton: upsell.imageButton,
+                                    imageButton: liveImage,
                                     footerText: formattedFooter,
                                     token: mainToken,
                                 }),
