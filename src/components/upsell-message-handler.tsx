@@ -70,8 +70,20 @@ export function UpsellMessageHandler() {
                 return;
             }
 
-            const activeUpsells = settings?.upsells?.filter(u => u.isActive && u.upsellMessage) || [];
-            const mainToken = settings?.webhookToken;
+            let activeUpsells: UpsellConfig[] = [];
+            if (settings?.upsells && settings.upsells.length > 0) {
+                activeUpsells = settings.upsells.filter(u => u.isActive && u.upsellMessage);
+            } else if (settings?.isUpsellActive && settings?.upsellMessage) {
+                activeUpsells = [{
+                    id: 'legacy-1',
+                    isActive: true,
+                    upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
+                    upsellMessage: settings.upsellMessage,
+                    createdAt: 0,
+                }];
+            }
+
+            const mainToken = settings?.webhookToken || settings?.billingWebhookToken;
 
             if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !mainToken || !user || !firestore) {
                 return;

@@ -137,8 +137,22 @@ export async function GET(request: Request) {
             */
 
             /* --- 2. PROCESSAR UPSELL --- */
-            const activeUpsells = settings.upsells?.filter(u => u.isActive && u.upsellMessage) || [];
-            if (activeUpsells.length > 0) {
+            let activeUpsells: UpsellConfig[] = [];
+            if (settings?.upsells && settings.upsells.length > 0) {
+                activeUpsells = settings.upsells.filter(u => u.isActive && u.upsellMessage);
+            } else if (settings?.isUpsellActive && settings?.upsellMessage) {
+                activeUpsells = [{
+                    id: 'legacy-1',
+                    isActive: true,
+                    upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
+                    upsellMessage: settings.upsellMessage,
+                    createdAt: 0,
+                }];
+            }
+
+            const upsellToken = settings.webhookToken || settings.billingWebhookToken;
+
+            if (activeUpsells.length > 0 && upsellToken) {
                 let upsellsDone = 0;
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
@@ -172,7 +186,7 @@ export async function GET(request: Request) {
 
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: settings.webhookToken }),
+                                    body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: upsellToken }),
                                 }).catch(console.error);
                             }
                         }
