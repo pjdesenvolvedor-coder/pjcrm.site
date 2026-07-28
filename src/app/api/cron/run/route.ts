@@ -164,9 +164,13 @@ export async function GET(request: Request) {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
+                        const clientSentList = Array.isArray(client.sentUpsell2Ids) 
+                            ? client.sentUpsell2Ids 
+                            : (typeof client.sentUpsell2Ids === 'string' ? [client.sentUpsell2Ids] : []);
+
                         const alreadySent = Boolean(
-                            (upsell.id && client.sentUpsell2Ids?.includes(upsell.id)) ||
-                            client.sentUpsell2Ids?.includes(ruleId)
+                            (upsell.id && clientSentList.includes(upsell.id)) ||
+                            clientSentList.includes(ruleId)
                         );
 
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySent) {
@@ -179,10 +183,16 @@ export async function GET(request: Request) {
                                     if (!cSnap.exists()) throw new Error('Deleted');
                                     const cData = cSnap.data();
                                     if (cData?.status === 'Inativo' || cData?.status === 'Vencido') throw new Error('Inactive');
-                                    const sentList = cData?.sentUpsell2Ids || [];
+                                    
+                                    const rawSent = cData?.sentUpsell2Ids;
+                                    const sentList = Array.isArray(rawSent) 
+                                        ? rawSent 
+                                        : (typeof rawSent === 'string' ? [rawSent] : []);
+
                                     if (sentList.includes(ruleId) || (upsell.id && sentList.includes(upsell.id))) throw new Error('Sent');
                                     
-                                    txn.update(clientDocRef, { sentUpsell2Ids: arrayUnion(ruleId, upsell.id || ruleId) });
+                                    const updatedList = Array.from(new Set([...sentList, ruleId, upsell.id].filter(Boolean))) as string[];
+                                    txn.update(clientDocRef, { sentUpsell2Ids: updatedList });
                                     processed = true;
                                 });
                             } catch (e) {}

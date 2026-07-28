@@ -105,9 +105,13 @@ export function Upsell2MessageHandler() {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
                         
+                        const sentList = Array.isArray(client.sentUpsell2Ids) 
+                            ? client.sentUpsell2Ids 
+                            : (typeof client.sentUpsell2Ids === 'string' ? [client.sentUpsell2Ids] : []);
+
                         const alreadySent = Boolean(
-                            (upsell.id && client.sentUpsell2Ids?.includes(upsell.id)) ||
-                            client.sentUpsell2Ids?.includes(ruleId)
+                            (upsell.id && sentList.includes(upsell.id)) ||
+                            sentList.includes(ruleId)
                         );
 
                         if ((now - clientCreatedMs) >= delayMs && !alreadySent) {
@@ -153,7 +157,10 @@ export function Upsell2MessageHandler() {
                                 throw new Error('CLIENT_INACTIVE');
                             }
 
-                            const currentSentIds = clientData.sentUpsell2Ids || [];
+                            const rawSent = clientData.sentUpsell2Ids;
+                            const currentSentIds = Array.isArray(rawSent) 
+                                ? rawSent 
+                                : (typeof rawSent === 'string' ? [rawSent] : []);
 
                             if (currentSentIds.includes(ruleId) || (upsell.id && currentSentIds.includes(upsell.id))) {
                                 throw new Error('ALREADY_CLAIMED');
@@ -162,7 +169,8 @@ export function Upsell2MessageHandler() {
                             const updatedSentIds = Array.from(new Set([...currentSentIds, ruleId, upsell.id].filter(Boolean))) as string[];
                             transaction.update(clientDocRef, { sentUpsell2Ids: updatedSentIds });
                             claimSuccessful = true;
-                        }).catch(() => {
+                        }).catch((err) => {
+                            console.error('runTransaction failed for client:', client.id, err);
                             claimSuccessful = false;
                         });
 
