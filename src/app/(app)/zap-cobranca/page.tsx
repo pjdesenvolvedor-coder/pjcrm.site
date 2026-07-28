@@ -282,7 +282,7 @@ export default function ZapCobrancaPage() {
               Qual ZAP usar para cobranças?
             </CardTitle>
             <CardDescription>
-              Escolha se as mensagens de cobrança (vencimento, remarketing, upsell) serão enviadas pelo ZAP principal ou por um número separado.
+              Escolha se as mensagens de cobrança (vencimento, remarketing) serão enviadas pelo ZAP principal ou por um número separado.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex gap-3">

@@ -71,9 +71,9 @@ export function UpsellMessageHandler() {
             }
 
             const activeUpsells = settings?.upsells?.filter(u => u.isActive && u.upsellMessage) || [];
-            const activeToken = getZapToken(settings);
+            const mainToken = settings?.webhookToken;
 
-            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !activeToken || !user || !firestore) {
+            if (!activeClients || activeClients.length === 0 || activeUpsells.length === 0 || !mainToken || !user || !firestore) {
                 return;
             }
 
@@ -151,7 +151,7 @@ export function UpsellMessageHandler() {
                             body: JSON.stringify({
                                 message: formattedMessage,
                                 phoneNumber: client.phone,
-                                token: activeToken,
+                                token: mainToken,
                             }),
                         });
 
