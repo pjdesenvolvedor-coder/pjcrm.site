@@ -97,13 +97,12 @@ export function UpsellMessageHandler() {
                 for (const client of activeClients) {
                     const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
 
-                    for (const upsell of activeUpsells) {
-                        const upsellCreatedMs = Number(upsell.createdAt) || 0;
-                        // Skip historical clients created more than 2 minutes before the upsell rule was created
-                        if (upsellCreatedMs > 0 && clientCreatedMs < (upsellCreatedMs - 120000)) {
-                            continue;
-                        }
+                    // Skip historical clients created more than 24 hours ago
+                    if (clientCreatedMs < (now.getTime() - 24 * 60 * 60 * 1000)) {
+                        continue;
+                    }
 
+                    for (const upsell of activeUpsells) {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
                         

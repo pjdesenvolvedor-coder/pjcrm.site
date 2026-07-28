@@ -158,13 +158,13 @@ export async function GET(request: Request) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
                     const clientCreatedMs = getTimestampMs(client.createdAt) || Date.now();
                     
+                    // Skip historical clients created more than 24 hours ago
+                    if (clientCreatedMs < (now.getTime() - 24 * 60 * 60 * 1000)) {
+                        continue;
+                    }
+
                     for (const upsell of activeUpsells) {
                         if (upsellsDone >= QUEUE_LIMIT) break;
-                        const upsellCreatedMs = Number(upsell.createdAt) || 0;
-                        // Skip historical clients created more than 2 minutes before the upsell rule was created
-                        if (upsellCreatedMs > 0 && clientCreatedMs < (upsellCreatedMs - 120000)) {
-                            continue;
-                        }
                         
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
