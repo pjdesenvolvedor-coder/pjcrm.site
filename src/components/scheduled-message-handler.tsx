@@ -43,12 +43,13 @@ export function ScheduledMessageHandler() {
                 return;
             }
 
-            if (!messagesToCheck || messagesToCheck.length === 0 || !settings?.webhookToken || !user || !firestore) {
+            const availableToken = settings?.webhookToken || settings?.billingWebhookToken;
+
+            if (!messagesToCheck || messagesToCheck.length === 0 || !availableToken || !user || !firestore) {
                 return;
             }
 
             const now = new Date();
-            const token = settings.webhookToken;
             const STALE_TIMEOUT_MS = 2 * 60 * 1000;
             
             const dueMessages = messagesToCheck.filter(msg => {
@@ -107,9 +108,9 @@ export function ScheduledMessageHandler() {
                         timestamp: serverTimestamp(),
                     });
 
-                    const msgToken = msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken 
+                    const msgToken = (msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken) 
                         ? settings.billingWebhookToken 
-                        : token;
+                        : (settings?.webhookToken || settings?.billingWebhookToken || '');
 
                     const response = await fetch('/api/send-group-message', {
                         method: 'POST',

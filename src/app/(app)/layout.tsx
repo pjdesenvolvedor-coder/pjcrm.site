@@ -52,6 +52,7 @@ import {
   SaveAll,
   Link2,
   ShieldCheck,
+  Bug,
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -816,6 +817,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </Collapsible>
                 </SidebarMenuItem>
               )}
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/debug'} tooltip="DEBUG / Logs do Sistema">
+                  <Link href="/debug">
+                    <Bug className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    <span className="flex-1 text-[13px] font-bold text-rose-600 dark:text-rose-400">DEBUG & Logs</span>
+                    <Badge variant="destructive" className="h-4 px-1.5 text-[9px] font-mono bg-rose-600">LIVE</Badge>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               
               {permissions.users && (
                 <SidebarMenuItem>
