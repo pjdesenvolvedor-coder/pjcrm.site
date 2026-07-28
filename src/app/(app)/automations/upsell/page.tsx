@@ -83,16 +83,22 @@ export default function UpsellPage() {
 
   const onSubmit = (data: UpsellFormData) => {
     if (settingsDocRef) {
+      const existingUpsellsMap = new Map((settings?.upsells || []).map(u => [u.id, u.createdAt]));
       const now = Date.now();
-      const updatedUpsells = data.upsells.map(u => ({
-        ...u,
-        createdAt: (u.createdAt && u.createdAt > 0) ? u.createdAt : now
-      }));
+      
+      const updatedUpsells = data.upsells.map(u => {
+        const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
+        return {
+          ...u,
+          upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
+          createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now
+        };
+      });
 
       setDocumentNonBlocking(settingsDocRef, { upsells: updatedUpsells }, { merge: true });
       toast({
         title: 'Configurações de UPSELL Salvas!',
-        description: 'Suas automações de upsell foram configuradas. Apenas clientes cadastrados a partir de agora receberão os envios.',
+        description: 'Suas automações de upsell foram configuradas e salvas com sucesso.',
       });
     }
   };

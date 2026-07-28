@@ -99,11 +99,15 @@ export function UpsellMessageHandler() {
                     if (!clientCreatedMs) continue;
 
                     for (const upsell of activeUpsells) {
-                        const upsellCreatedMs = upsell.createdAt || 0;
-                        // Skip any client created BEFORE the upsell rule was created/activated
-                        if (upsellCreatedMs > 0 && clientCreatedMs < upsellCreatedMs) continue;
+                        const upsellCreatedMs = Number(upsell.createdAt) || 0;
+                        // Skip historical clients created more than 10 minutes before the upsell rule was created
+                        if (upsellCreatedMs > 0) {
+                            const cutoffMs = upsellCreatedMs - (10 * 60 * 1000);
+                            if (clientCreatedMs < cutoffMs) continue;
+                        }
 
-                        const delayMs = (upsell.upsellDelayMinutes || 0) * 60 * 1000;
+                        const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
+                        const delayMs = delayMinutes * 60 * 1000;
                         
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !client.sentUpsellIds?.includes(upsell.id)) {
                             tasks.push({ client, upsell });
