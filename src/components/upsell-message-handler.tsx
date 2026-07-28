@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, doc, runTransaction, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds
@@ -123,17 +123,15 @@ export function UpsellMessageHandler() {
                     const logRef = collection(firestore, 'users', user.uid, 'logs');
 
                     try {
-                        let shouldSend = false;
-                        await runTransaction(firestore, async (transaction) => {
-                            const clientDoc = await transaction.get(clientDocRef);
-                            if (!clientDoc.exists()) throw new Error("deleted");
-                            const sentIds = clientDoc.data().sentUpsellIds || [];
-                            if (sentIds.includes(upsell.id)) throw new Error("already sent");
-                            transaction.update(clientDocRef, { sentUpsellIds: arrayUnion(upsell.id) });
-                            shouldSend = true;
-                        });
+                        const currentSentIds = client.sentUpsellIds || [];
+                        if (currentSentIds.includes(upsell.id)) return;
 
-                        if (!shouldSend) return;
+                        const updatedSentIds = Array.from(new Set([...currentSentIds, upsell.id]));
+
+                        // Mark as sent in Firestore so it's not processed twice
+                        await updateDoc(clientDocRef, { sentUpsellIds: updatedSentIds }).catch(() => {
+                            setDocumentNonBlocking(clientDocRef, { sentUpsellIds: updatedSentIds }, { merge: true });
+                        });
 
                         addDocumentNonBlocking(logRef, {
                             userId: user.uid,
@@ -167,6 +165,8 @@ export function UpsellMessageHandler() {
                             }),
                         });
 
+                        const resData = await response.json().catch(() => ({}));
+
                         if (response.ok) {
                             addDocumentNonBlocking(logRef, {
                                 userId: user.uid,
@@ -177,8 +177,9 @@ export function UpsellMessageHandler() {
                                 delayApplied: currentDelay / 1000,
                                 timestamp: serverTimestamp(),
                             });
-                            toast({ title: "Upsell OK", description: `Enviado para ${client.name}.` });
+                            toast({ title: "Upsell enviado!", description: `Mensagem entregue para ${client.name}.` });
                         } else {
+                            console.error("Falha ao enviar upsell:", resData);
                             addDocumentNonBlocking(logRef, {
                                 userId: user.uid,
                                 type: 'Upsell',
@@ -187,6 +188,7 @@ export function UpsellMessageHandler() {
                                 status: 'Erro',
                                 delayApplied: currentDelay / 1000,
                                 timestamp: serverTimestamp(),
+                                details: resData?.error || resData?.details || 'Erro no envio da API',
                             });
                         }
 
