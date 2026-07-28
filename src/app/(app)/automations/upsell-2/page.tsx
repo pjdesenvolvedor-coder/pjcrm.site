@@ -24,10 +24,86 @@ import type { Settings, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
-import { Copy, Plus, Trash2, Rocket, Sparkles, CheckCircle2, Zap, Clock, ShieldCheck, HelpCircle, Link as LinkIcon, Image as ImageIcon, MessageSquare, MousePointerClick } from 'lucide-react';
+import { Copy, Plus, Trash2, Rocket, Sparkles, CheckCircle2, Zap, Clock, ShieldCheck, HelpCircle, Link as LinkIcon, Image as ImageIcon, MessageSquare, MousePointerClick, Upload } from 'lucide-react';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (val: string) => void }) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      alert('A imagem é muito grande. Escolha um arquivo de até 8MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        onChange(base64);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <Input
+          placeholder="https://exemplo.com/imagem.jpg ou selecione do seu dispositivo"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="text-xs font-mono flex-1"
+        />
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          className="gap-1.5 text-xs shrink-0 border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Escolher Foto do Dispositivo
+        </Button>
+      </div>
+
+      {value && value.trim() ? (
+        <div className="relative group w-fit rounded-xl border overflow-hidden bg-background shadow-sm p-1.5">
+          <img
+            src={value}
+            alt="Preview da Mídia"
+            className="h-28 w-auto object-cover rounded-lg max-w-full"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => onChange('')}
+            className="mt-1.5 gap-1 text-[11px] h-7 w-full"
+          >
+            <Trash2 className="h-3 w-3" />
+            Remover Imagem
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const upsellButtonSchema = z.object({
   id: z.string(),
@@ -490,10 +566,10 @@ export default function Upsell2Page() {
                               <FormItem>
                                 <FormLabel className="text-xs font-semibold flex items-center gap-1.5">
                                   <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
-                                  URL da Imagem da Mensagem (Opcional)
+                                  Imagem da Mensagem (URL ou do Seu Dispositivo)
                                 </FormLabel>
                                 <FormControl>
-                                  <Input placeholder="https://exemplo.com/imagem.jpg" className="text-xs font-mono" {...field} />
+                                  <ImageUploaderInput value={field.value} onChange={field.onChange} />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
