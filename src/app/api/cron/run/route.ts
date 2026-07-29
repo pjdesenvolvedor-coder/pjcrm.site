@@ -84,7 +84,7 @@ export async function GET(request: Request) {
 
         // Limite por execucao para não dar timeout em servidor basico (Hobby)
         // Por usuário, processaremos no maximo 2 de cada tipo por minuto.
-        const QUEUE_LIMIT = 2;
+        const QUEUE_LIMIT = 20;
 
         for (const userDoc of usersSnapshot.docs) {
             const userId = userDoc.id;
@@ -158,7 +158,7 @@ export async function GET(request: Request) {
                 let upsellsDone = 0;
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
-                    const clientCreatedMs = getTimestampMs(client.createdAt) || now.getTime();
+                    const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
                     const STRICT_CUTOFF_MS = 1770008540000; // 28/07/2026 00:42:20
 
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
