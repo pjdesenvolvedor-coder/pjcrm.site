@@ -990,6 +990,57 @@ export default function CustomersPage() {
     setSortConfig({ key, direction });
   };
 
+function matchesPhone(clientPhone: string, searchInput: string): boolean {
+  if (!clientPhone || !searchInput) return false;
+  const rawSearchLower = searchInput.trim().toLowerCase();
+  if (!rawSearchLower) return false;
+
+  if (clientPhone.toLowerCase().includes(rawSearchLower)) return true;
+
+  const searchDigits = searchInput.replace(/\D/g, '');
+  if (!searchDigits) return false;
+
+  const phoneDigits = clientPhone.replace(/\D/g, '');
+  if (!phoneDigits) return false;
+
+  if (phoneDigits.includes(searchDigits) || searchDigits.includes(phoneDigits)) return true;
+
+  const getPhoneVariants = (digits: string): string[] => {
+    const variants = new Set<string>([digits]);
+    
+    let local = digits;
+    if (digits.startsWith('55') && digits.length >= 12) {
+      local = digits.slice(2);
+      variants.add(local);
+    }
+    
+    if (local.length === 11 && local[2] === '9') {
+      const without9 = local.slice(0, 2) + local.slice(3);
+      variants.add(without9);
+      variants.add('55' + without9);
+    } else if (local.length === 10) {
+      const with9 = local.slice(0, 2) + '9' + local.slice(2);
+      variants.add(with9);
+      variants.add('55' + with9);
+    }
+
+    return Array.from(variants);
+  };
+
+  const clientVariants = getPhoneVariants(phoneDigits);
+  const searchVariants = getPhoneVariants(searchDigits);
+
+  for (const cV of clientVariants) {
+    for (const sV of searchVariants) {
+      if (cV.includes(sV) || sV.includes(cV)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
   const filteredClients = useMemo(() => {
     if (!clients) return [];
     const now = new Date();
@@ -999,10 +1050,11 @@ export default function CustomersPage() {
             const isOverdue = c.dueDate && c.dueDate.toDate() < now;
             if (!isOverdue) return false;
         }
+        if (!searchTerm.trim()) return true;
         const search = searchTerm.toLowerCase();
         const emailsStr = Array.isArray(c.email) ? c.email.join(' ') : (c.email || '');
         return c.name.toLowerCase().includes(search) || 
-               c.phone.includes(search) || 
+               matchesPhone(c.phone, searchTerm) || 
                emailsStr.toLowerCase().includes(search);
     });
     if (sortConfig) {
