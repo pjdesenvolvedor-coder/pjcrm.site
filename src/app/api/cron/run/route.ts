@@ -147,6 +147,8 @@ export async function GET(request: Request) {
             */
 
             /* --- 2. PROCESSAR UPSELL (MENSAGEM PURA) --- */
+            const STRICT_CUTOFF_MS = 1785303960000; // 29/07/2026 02:46:00
+
             let activeUpsells: UpsellConfig[] = [];
             if (settings?.upsells && settings.upsells.length > 0) {
                 activeUpsells = settings.upsells.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
@@ -161,6 +163,11 @@ export async function GET(request: Request) {
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
                     const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
+
+                    // TRAVA DE SEGURANÇA ABSOLUTA: Ignora clientes antigos cadastrados antes de 29/07/2026 02:46:00
+                    if (clientCreatedMs < STRICT_CUTOFF_MS) {
+                        continue;
+                    }
 
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
                         const upsell = activeUpsells[uIdx];
@@ -248,6 +255,9 @@ export async function GET(request: Request) {
             // Remarketing de Cadastro
             for (const client of clients) {
                 if (rmkDone >= QUEUE_LIMIT) break;
+                const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
+                if (clientCreatedMs < STRICT_CUTOFF_MS) continue;
+
                 for (const config of activeSignupRemarketings) {
                     if (rmkDone >= QUEUE_LIMIT) break;
                     const startDate = client.createdAt?.toDate();
@@ -279,6 +289,9 @@ export async function GET(request: Request) {
             // Remarketing de Vencimento
             for (const client of overdueStatusClients) {
                 if (rmkDone >= QUEUE_LIMIT) break;
+                const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
+                if (clientCreatedMs < STRICT_CUTOFF_MS) continue;
+
                 for (const config of activeDueDateRemarketings) {
                     if (rmkDone >= QUEUE_LIMIT) break;
                     const startDate = client.dueDate?.toDate();
@@ -310,7 +323,12 @@ export async function GET(request: Request) {
             /* --- 4. PROCESSAR GRUPOS AGENDADOS --- */
             const scheduledSnap = await getDocs(collection(db, 'users', userId, 'scheduled_messages'));
             const scheduled = scheduledSnap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduledMessage));
-            const dueMessages = scheduled.filter(msg => msg.status === 'Scheduled' && msg.sendAt.toDate() <= now).slice(0, QUEUE_LIMIT);
+            const dueMessages = scheduled.filter(msg => {
+                if (msg.status !== 'Scheduled') return false;
+                const sendAtMs = msg.sendAt ? getTimestampMs(msg.sendAt) || 0 : 0;
+                if (sendAtMs < STRICT_CUTOFF_MS) return false; // TRAVA DE SEGURANÇA: Ignora mensagens agendadas antes do marco de 29/07/2026 02:46:00
+                return sendAtMs <= now.getTime();
+            }).slice(0, QUEUE_LIMIT);
 
             for (const msg of dueMessages) {
                 const messageDocRef = doc(db, 'users', userId, 'scheduled_messages', msg.id);
