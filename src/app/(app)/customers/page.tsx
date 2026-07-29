@@ -424,6 +424,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
             ...clientData, status: newStatus, needsSupport: false, createdAt: serverTimestamp(), upsellSent: false
         });
         toast({ title: "Cliente adicionado!" });
+        fetch('/api/cron/run').catch(() => {});
 
         const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
         const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
