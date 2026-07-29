@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import type { Settings } from '@/lib/types';
@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Plus, Trash2, ImageIcon, Terminal, CheckCircle2, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
+import { Send, Plus, Trash2, ImageIcon, Terminal, CheckCircle2, AlertTriangle, RefreshCw, Upload, Key } from 'lucide-react';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface TestButton {
@@ -21,7 +21,7 @@ interface TestButton {
 }
 
 export default function TestButtonsPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, user, firebaseApp } = useFirebase();
   const { toast } = useToast();
 
   const settingsDocRef = useMemoFirebase(() => {
@@ -29,35 +29,12 @@ export default function TestButtonsPage() {
     return doc(firestore, 'users', user.uid, 'settings', 'config');
   }, [firestore, user]);
 
+  const { data: settings } = useDoc<Settings>(settingsDocRef);
+
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const { firebaseApp } = useFirebase();
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ variant: 'destructive', title: 'Arquivo Grande', description: 'Escolha uma foto de até 10MB.' });
-      return;
-    }
-
-    try {
-      setIsUploadingImage(true);
-      const storage = getStorage(firebaseApp);
-      const fileRef = storageRef(storage, `test-images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
-      await uploadBytes(fileRef, file);
-      const downloadUrl = await getDownloadURL(fileRef);
-      setImageUrl(downloadUrl);
-      toast({ title: 'Foto Carregada com Sucesso! 📸', description: 'A foto do seu computador foi enviada ao Firebase e o link foi preenchido.' });
-    } catch (err) {
-      console.error('Erro ao enviar foto para Firebase Storage:', err);
-      toast({ variant: 'destructive', title: 'Erro ao Enviar Foto', description: 'Não foi possível salvar a imagem no servidor.' });
-    } finally {
-      setIsUploadingImage(false);
-    }
-  };
-
+  const [customToken, setCustomToken] = useState('');
   const [phone, setPhone] = useState('');
   const [imageUrl, setImageUrl] = useState('https://i.imgur.com/l8StCRM.jpeg');
   const [messageText, setMessageText] = useState(
@@ -76,6 +53,48 @@ export default function TestButtonsPage() {
     responsePayload?: any;
     error?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (settings) {
+      const activeTok = settings.webhookToken || settings.billingWebhookToken || '';
+      if (activeTok && !customToken) {
+        setCustomToken(activeTok);
+      }
+    }
+  }, [settings, customToken]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ variant: 'destructive', title: 'Arquivo Grande', description: 'Escolha uma foto de até 10MB.' });
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      const storage = getStorage(firebaseApp);
+      const fileRef = storageRef(storage, `test-images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+      await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(fileRef);
+      setImageUrl(downloadUrl);
+      toast({ title: 'Foto Carregada! 📸', description: 'A imagem do computador foi enviada e o link preenchido.' });
+    } catch (err) {
+      console.error('Erro ao enviar foto para Firebase Storage, convertendo em Data URI fallback:', err);
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const base64 = evt.target?.result as string;
+        if (base64) {
+          setImageUrl(base64);
+          toast({ title: 'Foto Convertida! 📸', description: 'Imagem convertida em formato direto para envio.' });
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const handleAddButton = () => {
     if (buttons.length >= 3) {
@@ -103,9 +122,9 @@ export default function TestButtonsPage() {
       return;
     }
 
-    const upsellToken = settings?.webhookToken || settings?.billingWebhookToken;
+    const upsellToken = customToken.trim() || settings?.webhookToken || settings?.billingWebhookToken;
     if (!upsellToken) {
-      toast({ variant: 'destructive', title: 'Token Não Configurado', description: 'Configure o seu Token da UAZAPI em Configurações para disparar.' });
+      toast({ variant: 'destructive', title: 'Token Não Configurado', description: 'Informe o seu Token da UAZAPI para disparar o teste.' });
       return;
     }
 
@@ -154,7 +173,7 @@ export default function TestButtonsPage() {
       });
 
       if (res.ok) {
-        toast({ title: 'Envio Concluído! 🚀', description: 'Verifique a resposta da API UAZAPI no console abaixo.' });
+        toast({ title: 'Envio Concluído! 🚀', description: 'Verifique a resposta da API UAZAPI no console ao lado.' });
       } else {
         toast({ variant: 'destructive', title: `Erro na API (${res.status})`, description: 'A UAZAPI retornou erro ao tentar enviar o menu.' });
       }
@@ -193,6 +212,20 @@ export default function TestButtonsPage() {
             </CardHeader>
 
             <CardContent className="p-4 md:p-6 space-y-5">
+              {/* Token UAZAPI */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Key className="h-3.5 w-3.5 text-amber-500" />
+                  Token de Autenticação UAZAPI *
+                </Label>
+                <Input
+                  placeholder="Seu Token UAZAPI (ex: f1469865-6a78-4b3d-b578-...)"
+                  value={customToken}
+                  onChange={(e) => setCustomToken(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
               {/* Número de Destino */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
@@ -209,24 +242,44 @@ export default function TestButtonsPage() {
                 </p>
               </div>
 
-              {/* Link da Imagem */}
+              {/* Link ou Upload da Imagem */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
-                  2. Link da Imagem do Card (URL do Imgur ou Web)
+                  2. Imagem do Card (URL ou Selecionar do Computador)
                 </Label>
-                <Input
-                  placeholder="https://i.imgur.com/exemplo.jpeg"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="font-mono text-xs"
-                />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <Input
+                    placeholder="https://i.imgur.com/exemplo.jpeg ou selecione no botão ->"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    className="font-mono text-xs flex-1"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploadingImage}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="gap-1.5 text-xs shrink-0 border-emerald-500/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {isUploadingImage ? 'Enviando Foto...' : 'Escolher Foto do Computador 📁'}
+                  </Button>
+                </div>
                 {imageUrl && imageUrl.trim() ? (
                   <div className="mt-2 p-1.5 border rounded-xl bg-background w-fit">
                     <img
                       src={imageUrl}
-                      alt="Preview"
-                      className="h-28 w-auto object-cover rounded-lg"
+                      alt="Preview da Mídia"
+                      className="h-32 w-auto object-cover rounded-lg max-w-full"
                       onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
                     />
                   </div>
@@ -361,7 +414,7 @@ export default function TestButtonsPage() {
                   <Terminal className="h-8 w-8 opacity-40" />
                   <p className="text-xs">Nenhum teste disparado ainda.</p>
                   <p className="text-[11px] opacity-70">
-                    Preencha o formulário e clique em "Disparar Mensagem de Teste" para ver os detalhes técnicos.
+                    Preencha o número do WhatsApp e clique em "Disparar Mensagem de Teste" para ver os detalhes técnicos.
                   </p>
                 </div>
               ) : null}
