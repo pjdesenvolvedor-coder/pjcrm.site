@@ -118,7 +118,6 @@ export type Settings = {
   upsellDelayMinutes?: number;
   upsellMessage?: string;
   upsells?: UpsellConfig[];
-  upsells2?: UpsellConfig[];
   isSupportAutomationActive?: boolean;
   supportStartedMessage?: string;
   supportFinishedMessage?: string;

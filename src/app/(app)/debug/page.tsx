@@ -130,10 +130,9 @@ export default function DebugPage() {
     }).slice(0, 100);
   }, [rawLogs]);
 
-  // Active upsells 2.0
   const activeUpsells = useMemo(() => {
-    if (settings?.upsells2 && settings.upsells2.length > 0) {
-      return settings.upsells2.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage));
+    if (settings?.upsells && settings.upsells.length > 0) {
+      return settings.upsells.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage));
     }
     return [];
   }, [settings]);
