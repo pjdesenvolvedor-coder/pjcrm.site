@@ -250,7 +250,8 @@ export async function GET(request: Request) {
                                         payloadMenu.footerText = formatMessageWithClient(upsell.footerText, client).trim();
                                     }
 
-                                    await fetch('https://pjcontas.uazapi.com/send/menu', {
+                                    console.log('cron/run: sending menu payload:', JSON.stringify({ ...payloadMenu, imageButton: payloadMenu.imageButton ? `${payloadMenu.imageButton.slice(0, 50)}...` : undefined }));
+                                    const uazRes = await fetch('https://pjcontas.uazapi.com/send/menu', {
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -258,9 +259,12 @@ export async function GET(request: Request) {
                                             'apikey': upsellToken,
                                         },
                                         body: JSON.stringify(payloadMenu),
-                                    }).catch(console.error);
+                                    });
+                                    const uazResText = await uazRes.text();
+                                    console.log('cron/run: UAZAPI menu status:', uazRes.status, 'body:', uazResText);
                                 } else {
-                                    await fetch('https://pjcontas.uazapi.com/send/text', {
+                                    console.log('cron/run: sending text payload:', formattedMessage);
+                                    const uazRes = await fetch('https://pjcontas.uazapi.com/send/text', {
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -271,7 +275,9 @@ export async function GET(request: Request) {
                                             number: formatPhoneWith55(client.phone),
                                             text: formattedMessage,
                                         }),
-                                    }).catch(console.error);
+                                    });
+                                    const uazResText = await uazRes.text();
+                                    console.log('cron/run: UAZAPI text status:', uazRes.status, 'body:', uazResText);
                                 }
                             }
                         }
