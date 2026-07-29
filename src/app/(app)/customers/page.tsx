@@ -442,18 +442,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
                 .replace(/{valor}/g, trimmedAmountPaid || '0,00').replace(/{status}/g, newStatus);
 
-            // Envia os dados do cliente para o webhook n8n em segundo plano (sem await) para evitar delay
-            fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nome: trimmedName,
-                    numero: trimmedPhone,
-                    token: settings.webhookToken
-                })
-            }).catch(error => {
-                console.error("Falha ao enviar webhook n8n:", error);
-            });
+
 
             fetch('/api/send-message', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },

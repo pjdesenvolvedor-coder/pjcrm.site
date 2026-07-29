@@ -284,20 +284,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
                 .replace(/{valor}/g, clientData.amountPaid || '0,00')
                 .replace(/{status}/g, clientData.status);
 
-            try {
-                // Envia os dados para a automação principal (n8n webhook)
-                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nome: clientData.name,
-                        numero: clientData.phone,
-                        token: settings.webhookToken
-                    })
-                });
-            } catch (error) {
-                console.error("Falha ao enviar webhook n8n no backend:", error);
-            }
+
 
             try {
                 // Envia a mensagem de entrega de credenciais diretamente para a API UAZAPI
