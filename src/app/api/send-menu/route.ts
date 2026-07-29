@@ -34,6 +34,10 @@ export async function POST(request: Request) {
       const cleanImg = imageButton.trim();
       if (cleanImg.startsWith('http://') || cleanImg.startsWith('https://')) {
         payload.imageButton = cleanImg;
+        payload.image = cleanImg;
+        payload.imageUrl = cleanImg;
+        payload.mediaUrl = cleanImg;
+        payload.media = cleanImg;
       } else {
         console.warn('send-menu: Ignored non-HTTP imageButton payload (e.g. data URI) to prevent UAZAPI API 400 error.');
       }
