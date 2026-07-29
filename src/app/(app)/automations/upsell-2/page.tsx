@@ -53,8 +53,15 @@ function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (va
       const downloadUrl = await getDownloadURL(fileRef);
       onChange(downloadUrl);
     } catch (err) {
-      console.error("Erro ao subir arquivo para o Firebase Storage:", err);
-      alert('Erro ao enviar foto do PC. Tente novamente.');
+      console.error("Erro ao subir arquivo para o Firebase Storage, convertendo em Data URI fallback:", err);
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const base64 = evt.target?.result as string;
+        if (base64) {
+          onChange(base64);
+        }
+      };
+      reader.readAsDataURL(file);
     } finally {
       setIsUploading(false);
     }
