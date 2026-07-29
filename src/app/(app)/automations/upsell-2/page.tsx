@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import React, { useEffect, useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -24,11 +24,10 @@ import type { Settings, UpsellConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
-import { Copy, Plus, Trash2, Rocket, Sparkles, CheckCircle2, Zap, Clock, ShieldCheck, HelpCircle, Link as LinkIcon, Image as ImageIcon, MessageSquare, MousePointerClick, Upload } from 'lucide-react';
+import { Copy, Plus, Trash2, Rocket, Sparkles, CheckCircle2, Clock, HelpCircle, Image as ImageIcon, MousePointerClick, Upload, Send, Terminal, Key } from 'lucide-react';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (val: string) => void }) {
@@ -53,7 +52,7 @@ function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (va
       const downloadUrl = await getDownloadURL(fileRef);
       onChange(downloadUrl);
     } catch (err) {
-      console.error("Erro ao subir arquivo para o Firebase Storage, convertendo em Data URI fallback:", err);
+      console.error("Erro ao subir arquivo para o Firebase Storage, usando Data URI fallback:", err);
       const reader = new FileReader();
       reader.onload = (evt) => {
         const base64 = evt.target?.result as string;
@@ -71,7 +70,7 @@ function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (va
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <Input
-          placeholder="Cole a URL ou selecione uma foto do seu computador"
+          placeholder="Cole a URL da foto ou selecione no seu computador"
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           className="text-xs font-mono flex-1"
@@ -133,7 +132,7 @@ const upsellItemSchema = z.object({
   isActive: z.boolean(),
   upsellDelayMinutes: z.coerce.number().min(0, 'O tempo deve ser no mínimo 0 minutos.'),
   upsellMessage: z.string().min(1, 'A mensagem de upsell é obrigatória.'),
-  messageType: z.enum(['message', 'button']).default('message'),
+  messageType: z.string().default('button'),
   imageButton: z.string().optional(),
   footerText: z.string().optional(),
   buttons: z.array(upsellButtonSchema).optional(),
@@ -160,23 +159,23 @@ function ButtonsArrayField({ nestIndex, control }: { nestIndex: number; control:
             <MousePointerClick className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             Botões Interativos com Link (HREF)
           </Label>
-          <p className="text-xs text-muted-foreground">Adicione ao menos 1 botão com o texto e o link de destino.</p>
+          <p className="text-xs text-muted-foreground">Adicione os botões clicáveis que serão exibidos abaixo da mensagem.</p>
         </div>
         <Button
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => append({ id: crypto.randomUUID(), label: 'Comprar Agora', url: 'https://' })}
+          onClick={() => append({ id: crypto.randomUUID(), label: 'Comprar Agora 🚀', url: 'https://www.contaspj.shop/' })}
           className="gap-1.5 text-xs border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
         >
           <Plus className="h-3.5 w-3.5" />
-          Adicionar Outro Botão
+          Adicionar Botão
         </Button>
       </div>
 
       {fields.length === 0 && (
         <div className="p-4 rounded-xl border border-dashed text-center text-xs text-muted-foreground bg-muted/20">
-          Nenhum botão adicionado. Clique no botão acima para incluir um botão com link.
+          Nenhum botão adicionado. Clique no botão acima para incluir um botão de link.
         </div>
       )}
 
@@ -200,17 +199,14 @@ function ButtonsArrayField({ nestIndex, control }: { nestIndex: number; control:
             </div>
 
             <div className="flex-1 w-full space-y-1">
-              <Label className="text-xs font-semibold">Link (HREF / URL)</Label>
+              <Label className="text-xs font-semibold">Link de Destino (HREF)</Label>
               <FormField
                 control={control}
                 name={`upsells2.${nestIndex}.buttons.${btnIndex}.url`}
                 render={({ field }) => (
                   <FormItem className="m-0">
                     <FormControl>
-                      <div className="flex items-center gap-1.5">
-                        <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <Input placeholder="https://seusite.com/oferta" className="text-xs font-mono" {...field} />
-                      </div>
+                      <Input placeholder="https://..." className="text-xs font-mono" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -247,6 +243,12 @@ export default function Upsell2Page() {
 
   const { data: settings, isLoading } = useDoc<Settings>(settingsDocRef);
 
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [testRuleData, setTestRuleData] = useState<any>(null);
+  const [testPhone, setTestPhone] = useState('');
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testApiResult, setTestApiResult] = useState<any>(null);
+
   const form = useForm<UpsellFormData>({
     resolver: zodResolver(upsellFormSchema),
     defaultValues: {
@@ -262,18 +264,26 @@ export default function Upsell2Page() {
   useEffect(() => {
     if (settings) {
       if (settings.upsells2 && settings.upsells2.length > 0) {
-        form.reset({ upsells2: settings.upsells2 });
+        form.reset({
+          upsells2: settings.upsells2.map((u) => ({
+            ...u,
+            messageType: 'button',
+            buttons: Array.isArray(u.buttons) && u.buttons.length > 0
+              ? u.buttons
+              : [{ id: crypto.randomUUID(), label: 'Comprar Agora 🚀', url: 'https://www.contaspj.shop/' }],
+          })),
+        });
       } else {
         form.reset({
           upsells2: [{
             id: crypto.randomUUID(),
             isActive: false,
             upsellDelayMinutes: 5,
-            upsellMessage: 'Olá {cliente}! Temos uma oferta especial exclusiva para a sua assinatura {assinatura}. Clique no link para aproveitar!',
-            messageType: 'message',
-            imageButton: '',
-            footerText: '',
-            buttons: [{ id: crypto.randomUUID(), label: 'Comprar Agora 🚀', url: 'https://' }],
+            upsellMessage: '🚀 ASSINATURAS PREMIUM COM ENTREGA AUTOMÁTICA!\n\n✅ Entrega imediata após a compra\n🛡️ Suporte por 30 dias\n🔒 Contas seguras e testadas\n🎬 Netflix, Disney+, HBO Max, Prime Video, Globoplay, Telecine e muito mais!',
+            messageType: 'button',
+            imageButton: 'https://i.imgur.com/l8StCRM.jpeg',
+            footerText: '⚡ Entrega Automática • 🛡️ Suporte 30 Dias • 🔒 Compra 100% Segura',
+            buttons: [{ id: crypto.randomUUID(), label: 'Comprar Agora - ENTREGA AUTOMÁTICA', url: 'https://www.contaspj.shop/' }],
             createdAt: Date.now(),
           }],
         });
@@ -281,157 +291,164 @@ export default function Upsell2Page() {
     }
   }, [settings, form]);
 
+  const copyVariableToClipboard = (variableName: string) => {
+    navigator.clipboard.writeText(variableName);
+    toast({
+      title: 'Copiado! 📋',
+      description: `Variável ${variableName} copiada para a área de transferência.`,
+    });
+  };
+
+  const openTestRuleModal = (ruleIndex: number) => {
+    const currentRule = form.getValues(`upsells2.${ruleIndex}`);
+    setTestRuleData(currentRule);
+    setTestApiResult(null);
+    setTestDialogOpen(true);
+  };
+
+  const handleExecuteRuleTest = async () => {
+    if (!testPhone || !testPhone.trim()) {
+      toast({ variant: 'destructive', title: 'Número Obrigatório', description: 'Informe o número do WhatsApp com DDD.' });
+      return;
+    }
+
+    const token = settings?.webhookToken || settings?.billingWebhookToken;
+    if (!token) {
+      toast({ variant: 'destructive', title: 'Token Faltando', description: 'Configure seu Token UAZAPI nas configurações.' });
+      return;
+    }
+
+    setIsSendingTest(true);
+    setTestApiResult(null);
+
+    const choices = (testRuleData?.buttons || []).map((b: any) => {
+      const label = b.label.trim() || 'Acessar';
+      let url = b.url.trim();
+      if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+      }
+      return url ? `${label}|${url}` : label;
+    });
+
+    const payload = {
+      phoneNumber: testPhone.trim(),
+      type: 'button',
+      text: testRuleData?.upsellMessage || '',
+      choices: choices.length > 0 ? choices : ['Comprar Agora|https://www.contaspj.shop/'],
+      imageButton: testRuleData?.imageButton?.trim() || undefined,
+      footerText: testRuleData?.footerText?.trim() || undefined,
+      token: token,
+    };
+
+    try {
+      const res = await fetch('/api/send-menu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const textRes = await res.text();
+      let jsonRes: any;
+      try {
+        jsonRes = JSON.parse(textRes);
+      } catch {
+        jsonRes = { rawResponse: textRes };
+      }
+
+      setTestApiResult({ status: res.status, ok: res.ok, sentPayload: payload, responsePayload: jsonRes });
+
+      if (res.ok) {
+        toast({ title: 'Mensagem de Teste Disparada! 🚀', description: 'Verifique seu WhatsApp e o console do modal.' });
+      } else {
+        toast({ variant: 'destructive', title: `Erro ${res.status}`, description: 'Falha no disparo do menu.' });
+      }
+    } catch (err: any) {
+      setTestApiResult({ status: 500, ok: false, sentPayload: payload, error: err.message });
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
   const onSubmit = async (data: UpsellFormData) => {
     if (settingsDocRef) {
       const existingUpsellsMap = new Map((settings?.upsells2 || []).map(u => [u.id, u.createdAt]));
       const now = Date.now();
 
-      const updatedUpsells = await Promise.all(
-        data.upsells2.map(async (u) => {
-          const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
-          const hasButtons = Array.isArray(u.buttons) && u.buttons.length > 0;
-          const hasMediaOrFooter = Boolean((u.imageButton && u.imageButton.trim()) || (u.footerText && u.footerText.trim()));
-          const finalMessageType = (u.messageType === 'button' || hasButtons || hasMediaOrFooter) ? 'button' : 'message';
-
-          let cleanImage = (u.imageButton || '').trim();
-          if (cleanImage.startsWith('data:image/')) {
-            try {
-              const res = await fetch(cleanImage);
-              const blob = await res.blob();
-              const storage = getStorage(firebaseApp);
-              const fileRef = storageRef(storage, `upsell-2-images/${Date.now()}_auto.png`);
-              await uploadBytes(fileRef, blob);
-              cleanImage = await getDownloadURL(fileRef);
-            } catch (err) {
-              console.error('Failed to convert base64 image to storage URL:', err);
-            }
-          }
-
-          return {
-            ...u,
-            id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
-            upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
-            messageType: finalMessageType,
-            imageButton: cleanImage,
-            createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
-          };
-        })
-      );
+      const updatedUpsells = data.upsells2.map((u) => {
+        const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
+        return {
+          ...u,
+          id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
+          upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
+          messageType: 'button',
+          imageButton: (u.imageButton || '').trim(),
+          footerText: (u.footerText || '').trim(),
+          buttons: (u.buttons || []).map(b => ({
+            id: b.id || crypto.randomUUID(),
+            label: b.label.trim(),
+            url: b.url.trim(),
+          })),
+          createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
+        };
+      });
 
       setDocumentNonBlocking(settingsDocRef, { upsells2: updatedUpsells }, { merge: true });
       toast({
         title: 'Funil Upsell 2.0 Salvo com Sucesso! 🚀',
-        description: 'Imagens convertidas e regras ativas para novos cadastros.',
+        description: 'Regras ativas e prontas para disparar no WhatsApp com Foto, Texto e Botões.',
       });
     }
   };
 
-  const copyVariableToClipboard = (variable: string) => {
-    navigator.clipboard.writeText(variable);
-    toast({
-      title: 'Variável Copiada!',
-      description: `A variável ${variable} foi copiada para a área de transferência.`,
-    });
-  };
-
-  const handleAddUpsell = () => {
-    append({
-      id: crypto.randomUUID(),
-      isActive: false,
-      upsellDelayMinutes: 5,
-      upsellMessage: '',
-      messageType: 'message',
-      imageButton: '',
-      footerText: '',
-      buttons: [{ id: crypto.randomUUID(), label: 'Comprar Agora 🚀', url: 'https://' }],
-      createdAt: Date.now(),
-    });
-  };
-
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full">
-        <PageHeader
-          title="Funil Upsell 2.0 🚀"
-          description="Nova engine de automação de Upsell com envio direto via API UAZAPI."
-        />
-        <main className="flex-1 overflow-auto p-4 md:p-6">
-          <Card className="border-emerald-500/20">
-            <CardContent className="pt-6 space-y-6">
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-32 w-full" />
-            </CardContent>
-          </Card>
-        </main>
+      <div className="space-y-6">
+        <PageHeader title="Funil Upsell 2.0 🚀" description="Carregando configurações do funil..." />
+        <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full space-y-6">
       <PageHeader
         title="Funil Upsell 2.0 🚀"
-        description="Engine de disparo direto na API UAZAPI com suporte a mensagens de texto e botões interativos."
-      >
-        <Button size="sm" onClick={handleAddUpsell} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow-md shadow-emerald-500/10">
-          <Plus className="h-4 w-4" />
-          Adicionar Nova Regra 2.0
-        </Button>
-      </PageHeader>
+        description="Configure mensagens com Foto, Rodapé e Botões Interativos com Link (HREF) disparadas automaticamente em horários programados pós-cadastro."
+      />
 
-      <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-        {/* Banner Hero Explicativo & Status */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-emerald-500/30 p-6 shadow-xl text-white">
-          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-            <Rocket className="h-48 w-48 text-emerald-400" />
-          </div>
-          
-          <div className="relative z-10 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-mono text-xs px-2.5 py-1 flex items-center gap-1.5">
-                <Zap className="h-3.5 w-3.5 text-emerald-400" /> API UAZAPI Direta
-              </Badge>
-              <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 font-mono text-xs px-2.5 py-1 flex items-center gap-1.5">
-                <MousePointerClick className="h-3.5 w-3.5 text-cyan-400" /> Suporte a Botões Interativos
-              </Badge>
-              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 font-mono text-xs px-2.5 py-1 flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-blue-400" /> Regra Ativa Pós-Criação
-              </Badge>
-            </div>
-
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                Como Funciona o Funil Upsell 2.0 🚀
-              </h2>
-              <p className="text-slate-300 text-sm mt-1 max-w-2xl leading-relaxed">
-                Configure mensagens em formato apenas texto ou em formato <strong>interativo com botões e imagem</strong>. O CRM dispara a requisição na API da UAZAPI assim que o tempo configurado expirar.
+      <main className="flex-1 overflow-auto p-1 space-y-6">
+        {/* Banner Informativo */}
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 text-white shadow-xl border border-emerald-500/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm uppercase tracking-wider">
+                <Rocket className="h-4 w-4" /> Motor de Disparo UAZAPI Unificado
+              </div>
+              <h2 className="text-xl font-extrabold tracking-tight">Funil de Vendas Interativo e Automatizado</h2>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                Cada regra configurada dispara o Card Completo com Imagem, Texto, Rodapé e Botões Clicáveis para o cliente respeitando rigorosamente os minutos pós-cadastro.
               </p>
             </div>
 
-            {/* Step-by-step indicator */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">1</div>
-                <div>
-                  <p className="text-xs font-semibold text-white">Novo Cliente Adicionado</p>
-                  <p className="text-[11px] text-slate-400">Gravado no CRM com data atual</p>
-                </div>
-              </div>
-              <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold text-sm">2</div>
-                <div>
-                  <p className="text-xs font-semibold text-white">Contagem do Delay</p>
-                  <p className="text-[11px] text-slate-400">Aguardando X minutos</p>
-                </div>
-              </div>
-              <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-sm">3</div>
-                <div>
-                  <p className="text-xs font-semibold text-white">Disparo UAZAPI (/send/menu)</p>
-                  <p className="text-[11px] text-slate-400">Mensagem ou botões interativos</p>
-                </div>
-              </div>
-            </div>
+            <Button
+              type="button"
+              onClick={() => {
+                append({
+                  id: crypto.randomUUID(),
+                  isActive: true,
+                  upsellDelayMinutes: 10,
+                  upsellMessage: '🚀 ASSINATURAS PREMIUM COM ENTREGA AUTOMÁTICA!\n\n✅ Entrega imediata após a compra\n🛡️ Suporte por 30 dias',
+                  messageType: 'button',
+                  imageButton: 'https://i.imgur.com/l8StCRM.jpeg',
+                  footerText: '⚡ Entrega Automática • 🛡️ Suporte 30 Dias',
+                  buttons: [{ id: crypto.randomUUID(), label: 'Comprar Agora - ENTREGA AUTOMÁTICA', url: 'https://www.contaspj.shop/' }],
+                  createdAt: Date.now(),
+                });
+              }}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-10 px-4 rounded-xl shadow-lg shrink-0"
+            >
+              <Plus className="h-4 w-4" /> Adicionar Nova Regra de Upsell
+            </Button>
           </div>
         </div>
 
@@ -442,7 +459,6 @@ export default function Upsell2Page() {
               {fields.map((field, index) => {
                 const isActive = form.watch(`upsells2.${index}.isActive`);
                 const delay = form.watch(`upsells2.${index}.upsellDelayMinutes`);
-                const messageType = form.watch(`upsells2.${index}.messageType`) || 'message';
 
                 return (
                   <Card key={field.id} className={`transition-all duration-200 overflow-hidden ${
@@ -475,24 +491,36 @@ export default function Upsell2Page() {
                             </CardTitle>
                             <CardDescription className="text-xs mt-0.5">
                               {isActive 
-                                ? `Envia após ${delay} min do cadastro para novos clientes`
-                                : `Ative o interruptor para programar o envio desta mensagem`}
+                                ? `Envia após ${delay} min do cadastro do cliente`
+                                : `Ative o interruptor para programar esta mensagem`}
                             </CardDescription>
                           </div>
                         </div>
 
-                        {fields.length > 1 && (
+                        <div className="flex items-center gap-2">
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => remove(index)}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 text-xs"
+                            onClick={() => openTestRuleModal(index)}
+                            className="gap-1.5 text-xs border-amber-500/40 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-semibold"
                           >
-                            <Trash2 className="h-4 w-4" />
-                            Remover Regra
+                            <Send className="h-3.5 w-3.5" />
+                            Testar Envio Desta Regra 🚀
                           </Button>
-                        )}
+
+                          {fields.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => remove(index)}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 text-xs"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
 
@@ -528,8 +556,8 @@ export default function Upsell2Page() {
                         <div className="flex items-center gap-3">
                           <Clock className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                           <div>
-                            <Label className="font-semibold text-sm">Tempo de Espera Pós-Cadastro</Label>
-                            <p className="text-xs text-muted-foreground">Quanto tempo aguardar após o cliente ser inserido no CRM</p>
+                            <Label className="font-semibold text-sm">1. Tempo de Espera Pós-Cadastro</Label>
+                            <p className="text-xs text-muted-foreground">Quanto tempo aguardar após o cliente ser cadastrado</p>
                           </div>
                         </div>
 
@@ -550,89 +578,41 @@ export default function Upsell2Page() {
                         />
                       </div>
 
-                      {/* Seleção do Tipo de Mensagem: Apenas Texto VS Botão Interativo */}
-                      <FormField
-                        control={form.control}
-                        name={`upsells2.${index}.messageType`}
-                        render={({ field }) => (
-                          <FormItem className="space-y-3">
-                            <FormLabel className="font-semibold text-sm">Formato de Envio da Mensagem</FormLabel>
-                            <FormControl>
-                              <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value || 'message'}
-                                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-                              >
-                                <div>
-                                  <RadioGroupItem value="message" id={`type-msg-${index}`} className="peer sr-only" />
-                                  <Label
-                                    htmlFor={`type-msg-${index}`}
-                                    className="flex items-center gap-3 rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-emerald-500 [&:has([data-state=checked])]:border-emerald-500 cursor-pointer transition-all"
-                                  >
-                                    <MessageSquare className="h-5 w-5 text-emerald-600 shrink-0" />
-                                    <div>
-                                      <p className="font-bold text-sm">Mensagem Apenas Texto</p>
-                                      <p className="text-xs text-muted-foreground">Texto formatado padrão via WhatsApp</p>
-                                    </div>
-                                  </Label>
-                                </div>
+                      {/* Imagem e Rodapé */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-muted/10">
+                        <FormField
+                          control={form.control}
+                          name={`upsells2.${index}.imageButton`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-bold flex items-center gap-1.5">
+                                <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
+                                2. Imagem do Card (URL ou Arquivo do PC)
+                              </FormLabel>
+                              <FormControl>
+                                <ImageUploaderInput value={field.value} onChange={field.onChange} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                                <div>
-                                  <RadioGroupItem value="button" id={`type-btn-${index}`} className="peer sr-only" />
-                                  <Label
-                                    htmlFor={`type-btn-${index}`}
-                                    className="flex items-center gap-3 rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-emerald-500 [&:has([data-state=checked])]:border-emerald-500 cursor-pointer transition-all"
-                                  >
-                                    <MousePointerClick className="h-5 w-5 text-teal-600 shrink-0" />
-                                    <div>
-                                      <p className="font-bold text-sm">Mensagem Interativa com Botões 🚀</p>
-                                      <p className="text-xs text-muted-foreground">Botões clicáveis com links (HREF) e Imagem</p>
-                                    </div>
-                                  </Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-
-                      {/* Se for com botões: Imagem opcional */}
-                      {messageType === 'button' && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl border bg-muted/10">
-                          <FormField
-                            control={form.control}
-                            name={`upsells2.${index}.imageButton`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-xs font-semibold flex items-center gap-1.5">
-                                  <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
-                                  Imagem da Mensagem (URL do Imgur ou Web)
-                                </FormLabel>
-                                <FormControl>
-                                  <ImageUploaderInput value={field.value} onChange={field.onChange} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`upsells2.${index}.footerText`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-xs font-semibold flex items-center gap-1.5">
-                                  Texto de Rodapé (Opcional)
-                                </FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Ex: Oferta por tempo limitado" className="text-xs" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      )}
+                        <FormField
+                          control={form.control}
+                          name={`upsells2.${index}.footerText`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-bold flex items-center gap-1.5">
+                                3. Texto do Rodapé (Opcional)
+                              </FormLabel>
+                              <FormControl>
+                                <Input placeholder="Ex: Oferta por tempo limitado" className="text-xs" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
 
                       {/* Campo do Texto da Mensagem */}
                       <FormField
@@ -641,11 +621,11 @@ export default function Upsell2Page() {
                         render={({ field }) => (
                           <FormItem>
                             <div className="flex items-center justify-between mb-1.5">
-                              <FormLabel className="font-semibold text-sm">
-                                {messageType === 'button' ? 'Texto Principal da Mensagem (Acima dos Botões)' : 'Mensagem de Upsell 2.0'}
+                              <FormLabel className="font-bold text-sm">
+                                4. Texto Principal da Mensagem (Acima dos Botões)
                               </FormLabel>
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <HelpCircle className="h-3.5 w-3.5" /> Padrão de Envio JSON Ativo
+                                <HelpCircle className="h-3.5 w-3.5" /> UAZAPI Card Format
                               </span>
                             </div>
                             <FormControl>
@@ -660,12 +640,10 @@ export default function Upsell2Page() {
                         )}
                       />
 
-                      {/* Se for formato de botões: Renderiza o sub-formulário de botões */}
-                      {messageType === 'button' && (
-                        <ButtonsArrayField nestIndex={index} control={form.control} />
-                      )}
+                      {/* Sub-formulário de Botões Interativos */}
+                      <ButtonsArrayField nestIndex={index} control={form.control} />
 
-                      {/* Variáveis Dinâmicas para Copiar */}
+                      {/* Variáveis Dinâmicas */}
                       <div className="space-y-2.5 pt-4 border-t">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -711,7 +689,7 @@ export default function Upsell2Page() {
             <div className="sticky bottom-4 z-20 bg-background/80 backdrop-blur-md p-4 rounded-2xl border shadow-2xl flex items-center justify-between gap-4">
               <div className="hidden sm:block">
                 <p className="text-xs font-semibold text-foreground">Pronto para salvar?</p>
-                <p className="text-[11px] text-muted-foreground">Novos cadastros receberão as mensagens programadas via API UAZAPI.</p>
+                <p className="text-[11px] text-muted-foreground">Regras ativas serão disparadas automaticamente via UAZAPI.</p>
               </div>
 
               <Button type="submit" size="lg" className="w-full sm:w-auto gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-8 shadow-lg shadow-emerald-500/20 text-base">
@@ -722,6 +700,74 @@ export default function Upsell2Page() {
           </form>
         </Form>
       </main>
+
+      {/* DIALOG DE TESTE RÁPIDO DE REGRA */}
+      <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
+        <DialogContent className="max-w-2xl bg-slate-950 text-slate-100 border-slate-800">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2 text-emerald-400">
+              <Send className="h-4 w-4" />
+              Testar Envio da Regra no WhatsApp
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">
+              Dispara a mensagem configurada nesta regra exatamente como o cliente receberá.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-emerald-400">Número do WhatsApp para Teste *</Label>
+              <Input
+                placeholder="Ex: 5511999999999 ou 8799999999"
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                className="bg-slate-900 border-slate-700 font-mono text-sm text-white"
+              />
+            </div>
+
+            {testRuleData && (
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                <p className="font-bold text-slate-300">Resumo da Mensagem:</p>
+                <p className="text-slate-400 line-clamp-3">{testRuleData.upsellMessage}</p>
+                {testRuleData.imageButton && (
+                  <p className="text-[11px] text-emerald-400 font-mono truncate">Foto: {testRuleData.imageButton}</p>
+                )}
+                <p className="text-[11px] text-slate-400">
+                  Botões: {(testRuleData.buttons || []).map((b: any) => b.label).join(' | ')}
+                </p>
+              </div>
+            )}
+
+            {testApiResult && (
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+                  <span>Console UAZAPI:</span>
+                  <Badge variant={testApiResult.ok ? 'default' : 'destructive'} className="text-[10px]">
+                    HTTP {testApiResult.status}
+                  </Badge>
+                </div>
+                <pre className="p-3 rounded-lg bg-black border border-slate-800 text-[11px] font-mono text-emerald-400 max-h-48 overflow-auto">
+                  {JSON.stringify(testApiResult.responsePayload || testApiResult.error, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setTestDialogOpen(false)} className="border-slate-700 text-slate-300">
+              Fechar
+            </Button>
+            <Button
+              onClick={handleExecuteRuleTest}
+              disabled={isSendingTest}
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2"
+            >
+              {isSendingTest ? 'Disparando...' : 'Enviar Teste Agora 🚀'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
