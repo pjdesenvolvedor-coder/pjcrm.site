@@ -235,7 +235,8 @@ export default function Upsell2Page() {
         data.upsells2.map(async (u) => {
           const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
           const hasButtons = Array.isArray(u.buttons) && u.buttons.length > 0;
-          const finalMessageType = (u.messageType === 'button' || hasButtons) ? 'button' : 'message';
+          const hasMediaOrFooter = Boolean((u.imageButton && u.imageButton.trim()) || (u.footerText && u.footerText.trim()));
+          const finalMessageType = (u.messageType === 'button' || hasButtons || hasMediaOrFooter) ? 'button' : 'message';
 
           let cleanImage = (u.imageButton || '').trim();
           if (cleanImage.startsWith('data:image/')) {

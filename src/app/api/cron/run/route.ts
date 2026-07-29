@@ -201,15 +201,27 @@ export async function GET(request: Request) {
                                 upsellsDone++;
                                 let formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
-                                if (upsell.messageType === 'button' || (upsell.buttons && upsell.buttons.length > 0)) {
-                                    const choices = (upsell.buttons || []).map(b => {
-                                        const label = formatMessageWithClient(b.label, client).trim();
+                                const hasInteractiveContent = Boolean(
+                                    upsell.messageType === 'button' ||
+                                    (upsell.buttons && upsell.buttons.length > 0) ||
+                                    (upsell.imageButton && upsell.imageButton.trim()) ||
+                                    (upsell.footerText && upsell.footerText.trim())
+                                );
+
+                                if (hasInteractiveContent) {
+                                    let choices = (upsell.buttons || []).map(b => {
+                                        const label = formatMessageWithClient(b.label, client).trim() || 'Acessar';
                                         let cleanUrl = (b.url || '').trim();
                                         if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
                                             cleanUrl = `https://${cleanUrl}`;
                                         }
                                         return cleanUrl ? `${label}|${cleanUrl}` : `${label}`;
-                                    });
+                                    }).filter(Boolean);
+
+                                    if (choices.length === 0) {
+                                        choices = ['Comprar Agora|https://www.contaspj.shop/'];
+                                    }
+
                                     await fetch(`${originUrl}/api/send-menu`, {
                                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({
@@ -217,7 +229,7 @@ export async function GET(request: Request) {
                                             type: 'button',
                                             text: formattedMessage,
                                             choices: choices,
-                                            imageButton: upsell.imageButton,
+                                            imageButton: upsell.imageButton ? upsell.imageButton.trim() : undefined,
                                             footerText: upsell.footerText ? formatMessageWithClient(upsell.footerText, client) : undefined,
                                             token: upsellToken
                                         }),
