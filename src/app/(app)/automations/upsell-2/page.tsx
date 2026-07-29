@@ -32,67 +32,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (val: string) => void }) {
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = React.useState(false);
-  const { firebaseApp } = useFirebase();
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 8 * 1024 * 1024) {
-      alert('A imagem é muito grande. Escolha um arquivo de até 8MB.');
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-      const storage = getStorage(firebaseApp);
-      const fileRef = storageRef(storage, `upsell-2-images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
-      await uploadBytes(fileRef, file);
-      const downloadUrl = await getDownloadURL(fileRef);
-      onChange(downloadUrl);
-    } catch (err) {
-      console.error("Erro ao carregar foto no Firebase Storage, usando fallback:", err);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        if (base64) onChange(base64);
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <Input
-          placeholder="https://exemplo.com/imagem.jpg ou selecione do seu dispositivo"
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-          className="text-xs font-mono flex-1"
-        />
-        <input
-          type="file"
-          accept="image/*"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isUploading}
-          onClick={() => fileInputRef.current?.click()}
-          className="gap-1.5 text-xs shrink-0 border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          {isUploading ? 'Enviando foto...' : 'Escolher Foto do Dispositivo'}
-        </Button>
-      </div>
+      <Input
+        placeholder="https://i.imgur.com/exemplo.jpg (Cole o link direto da imagem)"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="text-xs font-mono w-full"
+      />
 
       {value && value.trim() ? (
         <div className="relative group w-fit rounded-xl border overflow-hidden bg-background shadow-sm p-1.5">
@@ -603,7 +550,7 @@ export default function Upsell2Page() {
                               <FormItem>
                                 <FormLabel className="text-xs font-semibold flex items-center gap-1.5">
                                   <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
-                                  Imagem da Mensagem (URL ou do Seu Dispositivo)
+                                  Imagem da Mensagem (URL do Imgur ou Web)
                                 </FormLabel>
                                 <FormControl>
                                   <ImageUploaderInput value={field.value} onChange={field.onChange} />
