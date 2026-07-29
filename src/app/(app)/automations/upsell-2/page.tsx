@@ -703,7 +703,7 @@ export default function Upsell2Page() {
 
       {/* DIALOG DE TESTE RÁPIDO DE REGRA */}
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
-        <DialogContent className="max-w-2xl bg-slate-950 text-slate-100 border-slate-800">
+        <DialogContent className="max-w-xl w-[95vw] max-h-[85vh] overflow-y-auto bg-slate-950 text-slate-100 border-slate-800">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-emerald-400">
               <Send className="h-4 w-4" />
@@ -714,11 +714,11 @@ export default function Upsell2Page() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-hidden">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-emerald-400">Número do WhatsApp para Teste *</Label>
               <Input
-                placeholder="Ex: 5511999999999 ou 8799999999"
+                placeholder="Ex: 5511999999999 ou 8791791807"
                 value={testPhone}
                 onChange={(e) => setTestPhone(e.target.value)}
                 className="bg-slate-900 border-slate-700 font-mono text-sm text-white"
@@ -726,34 +726,41 @@ export default function Upsell2Page() {
             </div>
 
             {testRuleData && (
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2 max-w-full overflow-hidden">
                 <p className="font-bold text-slate-300">Resumo da Mensagem:</p>
-                <p className="text-slate-400 line-clamp-3">{testRuleData.upsellMessage}</p>
+                <p className="text-slate-400 line-clamp-3 break-words">{testRuleData.upsellMessage}</p>
                 {testRuleData.imageButton && (
-                  <p className="text-[11px] text-emerald-400 font-mono truncate">Foto: {testRuleData.imageButton}</p>
+                  <div className="flex items-center gap-2 max-w-full overflow-hidden">
+                    <span className="text-[11px] font-bold text-emerald-400 shrink-0">Foto:</span>
+                    {testRuleData.imageButton.startsWith('data:image/') ? (
+                      <span className="text-[11px] text-emerald-400 font-mono italic shrink-0">[Imagem Base64 do Computador Carregada]</span>
+                    ) : (
+                      <span className="text-[11px] text-emerald-400 font-mono truncate max-w-xs">{testRuleData.imageButton}</span>
+                    )}
+                  </div>
                 )}
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-400 truncate">
                   Botões: {(testRuleData.buttons || []).map((b: any) => b.label).join(' | ')}
                 </p>
               </div>
             )}
 
             {testApiResult && (
-              <div className="space-y-2">
+              <div className="space-y-2 max-w-full overflow-hidden">
                 <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
                   <span>Console UAZAPI:</span>
                   <Badge variant={testApiResult.ok ? 'default' : 'destructive'} className="text-[10px]">
                     HTTP {testApiResult.status}
                   </Badge>
                 </div>
-                <pre className="p-3 rounded-lg bg-black border border-slate-800 text-[11px] font-mono text-emerald-400 max-h-48 overflow-auto">
+                <pre className="p-3 rounded-lg bg-black border border-slate-800 text-[11px] font-mono text-emerald-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">
                   {JSON.stringify(testApiResult.responsePayload || testApiResult.error, null, 2)}
                 </pre>
               </div>
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-800">
             <Button variant="outline" size="sm" onClick={() => setTestDialogOpen(false)} className="border-slate-700 text-slate-300">
               Fechar
             </Button>
@@ -761,7 +768,7 @@ export default function Upsell2Page() {
               onClick={handleExecuteRuleTest}
               disabled={isSendingTest}
               size="sm"
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2 shadow-lg"
             >
               {isSendingTest ? 'Disparando...' : 'Enviar Teste Agora 🚀'}
             </Button>
