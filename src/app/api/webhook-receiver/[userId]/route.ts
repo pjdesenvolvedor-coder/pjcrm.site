@@ -69,6 +69,27 @@ function broadcast(userId: string, data: string) {
   }
 }
 
+function extractPhoneString(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string' || typeof val === 'number') {
+    return String(val).replace(/\D/g, '');
+  }
+  if (typeof val === 'object') {
+    const ddd = val.ddd || val.area_code || val.code || val.ddi || '';
+    const num = val.number || val.phone || val.numero || val.mobile || val.phone_number || '';
+    const combined = `${ddd}${num}`;
+    const cleaned = combined.replace(/\D/g, '');
+    if (cleaned) return cleaned;
+    for (const subVal of Object.values(val)) {
+      if (typeof subVal === 'string' || typeof subVal === 'number') {
+        const c = String(subVal).replace(/\D/g, '');
+        if (c.length >= 8) return c;
+      }
+    }
+  }
+  return '';
+}
+
 function extractWebhookData(body: unknown) {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, any>;
@@ -106,13 +127,14 @@ function extractWebhookData(body: unknown) {
   };
 
   const name = getVal(['nome', 'name', 'cliente', 'customer_name', 'buyer_name', 'first_name']);
-  const phone = getVal(['telefone', 'phone', 'whatsapp', 'celular', 'buyer_phone', 'mobile', 'phone_number']);
+  const rawPhone = getVal(['telefone', 'phone', 'whatsapp', 'celular', 'buyer_phone', 'mobile', 'phone_number', 'full_phone', 'contact_phone', 'customer_phone', 'number', 'numero']);
+  const phone = extractPhoneString(rawPhone);
 
   if (!phone) return null;
 
   return {
     name: name ? String(name).trim() : 'Cliente via Webhook',
-    phone: String(phone).replace(/\D/g, ''),
+    phone: phone,
     product: getVal(['produto', 'product', 'item', 'product_name', 'nome_produto']) || 'Produto Webhook',
     value: getVal(['valor', 'value', 'price', 'amount', 'valor_pago']) || '0,00',
     email: getVal(['email', 'emailConta', 'email_conta', 'buyer_email', 'customer_email']),
