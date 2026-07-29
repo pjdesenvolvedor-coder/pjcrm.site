@@ -861,6 +861,7 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
             subscription: subscription.trim() || null,
             amountPaid: amount,
             dueDate: Timestamp.fromDate(newDueDate),
+            createdAt: serverTimestamp(),
             sentUpsellIds: [],
             sentRemarketingIds: [],
             agentId: user.uid,
