@@ -146,9 +146,11 @@ export async function GET(request: Request) {
             }
             */
 
-            /* --- 2. PROCESSAR UPSELL --- */
+            /* --- 2. PROCESSAR UPSELL (MENSAGEM PURA) --- */
             let activeUpsells: UpsellConfig[] = [];
-            if (settings?.upsells2 && settings.upsells2.length > 0) {
+            if (settings?.upsells && settings.upsells.length > 0) {
+                activeUpsells = settings.upsells.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
+            } else if (settings?.upsells2 && settings.upsells2.length > 0) {
                 activeUpsells = settings.upsells2.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
             }
 
@@ -159,7 +161,6 @@ export async function GET(request: Request) {
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
                     const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
-                    const STRICT_CUTOFF_MS = 1770008540000; // 28/07/2026 00:42:20
 
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
                         const upsell = activeUpsells[uIdx];
@@ -172,13 +173,15 @@ export async function GET(request: Request) {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        const clientSentList = Array.isArray(client.sentUpsell2Ids) 
-                            ? client.sentUpsell2Ids 
-                            : (typeof client.sentUpsell2Ids === 'string' ? [client.sentUpsell2Ids] : []);
+                        const rawSent1 = client.sentUpsellIds;
+                        const rawSent2 = client.sentUpsell2Ids;
+                        const clientSentList1 = Array.isArray(rawSent1) ? rawSent1 : (typeof rawSent1 === 'string' ? [rawSent1] : []);
+                        const clientSentList2 = Array.isArray(rawSent2) ? rawSent2 : (typeof rawSent2 === 'string' ? [rawSent2] : []);
+                        const combinedSent = [...clientSentList1, ...clientSentList2];
 
                         const alreadySent = Boolean(
-                            (upsell.id && clientSentList.includes(upsell.id)) ||
-                            clientSentList.includes(ruleId)
+                            (upsell.id && combinedSent.includes(upsell.id)) ||
+                            combinedSent.includes(ruleId)
                         );
 
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySent) {
@@ -192,93 +195,37 @@ export async function GET(request: Request) {
                                     const cData = cSnap.data();
                                     if (cData?.status === 'Inativo' || cData?.status === 'Vencido') throw new Error('Inactive');
                                     
-                                    const rawSent = cData?.sentUpsell2Ids;
-                                    const sentList = Array.isArray(rawSent) 
-                                        ? rawSent 
-                                        : (typeof rawSent === 'string' ? [rawSent] : []);
+                                    const cSent1 = Array.isArray(cData?.sentUpsellIds) ? cData.sentUpsellIds : [];
+                                    const cSent2 = Array.isArray(cData?.sentUpsell2Ids) ? cData.sentUpsell2Ids : [];
+                                    const cCombined = [...cSent1, ...cSent2];
 
-                                    if (sentList.includes(ruleId) || (upsell.id && sentList.includes(upsell.id))) throw new Error('Sent');
+                                    if (cCombined.includes(ruleId) || (upsell.id && cCombined.includes(upsell.id))) throw new Error('Sent');
                                     
-                                    const updatedList = Array.from(new Set([...sentList, ruleId, upsell.id].filter(Boolean))) as string[];
-                                    txn.update(clientDocRef, { sentUpsell2Ids: updatedList });
+                                    const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
+                                    txn.update(clientDocRef, { sentUpsellIds: updatedList });
                                     processed = true;
                                 });
                             } catch (e) {}
 
                             if (processed) {
                                 upsellsDone++;
-                                let formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
+                                const formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
-                                const hasInteractiveContent = Boolean(
-                                    upsell.messageType === 'button' ||
-                                    (upsell.buttons && upsell.buttons.length > 0) ||
-                                    (upsell.imageButton && upsell.imageButton.trim()) ||
-                                    (upsell.footerText && upsell.footerText.trim())
-                                );
-
-                                if (hasInteractiveContent) {
-                                    let choices = (upsell.buttons || []).map(b => {
-                                        const label = formatMessageWithClient(b.label, client).trim() || 'Acessar';
-                                        let cleanUrl = (b.url || '').trim();
-                                        if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-                                            cleanUrl = `https://${cleanUrl}`;
-                                        }
-                                        return cleanUrl ? `${label}|${cleanUrl}` : `${label}`;
-                                    }).filter(Boolean);
-
-                                    if (choices.length === 0) {
-                                        choices = ['Comprar Agora|https://www.contaspj.shop/'];
-                                    }
-
-                                    const payloadMenu: any = {
+                                console.log(`cron/run: sending text upsell ruleId ${ruleId} to ${client.phone}:`, formattedMessage.slice(0, 50));
+                                const uazRes = await fetch('https://pjcontas.uazapi.com/send/text', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'token': upsellToken,
+                                        'apikey': upsellToken,
+                                    },
+                                    body: JSON.stringify({
                                         number: formatPhoneWith55(client.phone),
-                                        type: 'button',
                                         text: formattedMessage,
-                                        choices: choices,
-                                    };
-
-                                    if (upsell.imageButton && typeof upsell.imageButton === 'string' && upsell.imageButton.trim()) {
-                                        const cleanImg = upsell.imageButton.trim();
-                                        payloadMenu.imageButton = cleanImg;
-                                        payloadMenu.image = cleanImg;
-                                        payloadMenu.imageUrl = cleanImg;
-                                        payloadMenu.mediaUrl = cleanImg;
-                                        payloadMenu.media = cleanImg;
-                                    }
-
-                                    if (upsell.footerText && typeof upsell.footerText === 'string' && upsell.footerText.trim()) {
-                                        payloadMenu.footerText = formatMessageWithClient(upsell.footerText, client).trim();
-                                    }
-
-                                    console.log('cron/run: sending menu payload:', JSON.stringify({ ...payloadMenu, imageButton: payloadMenu.imageButton ? `${payloadMenu.imageButton.slice(0, 50)}...` : undefined }));
-                                    const uazRes = await fetch('https://pjcontas.uazapi.com/send/menu', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'token': upsellToken,
-                                            'apikey': upsellToken,
-                                        },
-                                        body: JSON.stringify(payloadMenu),
-                                    });
-                                    const uazResText = await uazRes.text();
-                                    console.log('cron/run: UAZAPI menu status:', uazRes.status, 'body:', uazResText);
-                                } else {
-                                    console.log('cron/run: sending text payload:', formattedMessage);
-                                    const uazRes = await fetch('https://pjcontas.uazapi.com/send/text', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'token': upsellToken,
-                                            'apikey': upsellToken,
-                                        },
-                                        body: JSON.stringify({
-                                            number: formatPhoneWith55(client.phone),
-                                            text: formattedMessage,
-                                        }),
-                                    });
-                                    const uazResText = await uazRes.text();
-                                    console.log('cron/run: UAZAPI text status:', uazRes.status, 'body:', uazResText);
-                                }
+                                    }),
+                                });
+                                const uazResText = await uazRes.text();
+                                console.log('cron/run: UAZAPI text status:', uazRes.status, 'body:', uazResText);
                             }
                         }
                     }

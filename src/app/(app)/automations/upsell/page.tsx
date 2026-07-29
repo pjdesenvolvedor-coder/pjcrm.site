@@ -1,21 +1,21 @@
-
 'use client';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { doc } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { Settings, UpsellConfig } from '@/lib/types';
+import type { Settings } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Rocket, Plus, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Rocket, Plus, Trash2, Send, RefreshCw } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -41,6 +41,11 @@ export default function UpsellPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
   const { toast } = useToast();
+
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [testRuleData, setTestRuleData] = useState<any>(null);
+  const [testPhone, setTestPhone] = useState('8791791807');
+  const [isSendingTest, setIsSendingTest] = useState(false);
 
   const settingsDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -69,14 +74,14 @@ export default function UpsellPage() {
         form.reset({
           upsells: [{
             id: 'legacy-1',
-            isActive: settings.isUpsellActive ?? false,
+            isActive: settings.isUpsellActive ?? true,
             upsellDelayMinutes: settings.upsellDelayMinutes ?? 5,
             upsellMessage: settings.upsellMessage ?? '',
-            createdAt: 0,
+            createdAt: Date.now(),
           }]
         });
       } else if (fields.length === 0) {
-          form.reset({ upsells: [{ id: crypto.randomUUID(), isActive: false, upsellDelayMinutes: 5, upsellMessage: '', createdAt: Date.now() }] });
+        form.reset({ upsells: [{ id: crypto.randomUUID(), isActive: true, upsellDelayMinutes: 5, upsellMessage: '', createdAt: Date.now() }] });
       }
     }
   }, [settings, form]);
@@ -90,6 +95,7 @@ export default function UpsellPage() {
         const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
         return {
           ...u,
+          id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
           upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
           createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now
         };
@@ -97,8 +103,8 @@ export default function UpsellPage() {
 
       setDocumentNonBlocking(settingsDocRef, { upsells: updatedUpsells }, { merge: true });
       toast({
-        title: 'Configurações de UPSELL Salvas!',
-        description: 'Suas automações de upsell foram configuradas e salvas com sucesso.',
+        title: 'Configurações de UPSELL Salvas! 🚀',
+        description: 'Suas regras de upsell foram gravadas e o robô de envio disparará nos horários configurados.',
       });
     }
   };
@@ -108,17 +114,102 @@ export default function UpsellPage() {
     toast({
         title: 'Variável Copiada!',
         description: `A variável ${variable} foi copiada para a área de transferência.`,
-    })
-  }
+    });
+  };
 
   const handleAddUpsell = () => {
     append({
       id: crypto.randomUUID(),
-      isActive: false,
+      isActive: true,
       upsellDelayMinutes: 5,
       upsellMessage: '',
       createdAt: Date.now(),
     });
+  };
+
+  const handleOpenTestModal = (ruleIndex: number) => {
+    const currentUpsells = form.getValues('upsells');
+    const rule = currentUpsells[ruleIndex];
+    if (!rule || !rule.upsellMessage?.trim()) {
+      toast({
+        title: 'Mensagem vazia!',
+        description: 'Escreva uma mensagem antes de testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestRuleData(rule);
+    setTestDialogOpen(true);
+  };
+
+  const handleExecuteRuleTest = async () => {
+    const token = settings?.webhookToken || settings?.billingWebhookToken;
+    if (!token) {
+      toast({
+        title: 'Token não configurado!',
+        description: 'Configure seu Token UAZAPI em Configurações > Tokens antes de testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!testPhone.trim()) {
+      toast({
+        title: 'Telefone inválido',
+        description: 'Preencha o número para envio de teste.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSendingTest(true);
+    let msg = testRuleData?.upsellMessage || '';
+    msg = msg
+      .replace(/{cliente}/g, 'Cliente Teste')
+      .replace(/{telefone}/g, testPhone.trim())
+      .replace(/{email}/g, 'cliente@email.com')
+      .replace(/{senha}/g, '123456')
+      .replace(/{tela}/g, 'Perfil 1')
+      .replace(/{assinatura}/g, 'Netflix Ultra HD')
+      .replace(/{vencimento}/g, '30/12/2026')
+      .replace(/{valor}/g, '35,00')
+      .replace(/{status}/g, 'Ativo');
+
+    try {
+      const res = await fetch('/api/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: testPhone.trim(),
+          message: msg,
+          token: token,
+        }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success) {
+        toast({
+          title: 'Teste enviado com sucesso! 🚀',
+          description: `Mensagem disparada para ${testPhone.trim()}`,
+        });
+        setTestDialogOpen(false);
+      } else {
+        toast({
+          title: 'Erro ao enviar teste',
+          description: json.error || json.details || 'Falha ao comunicar com UAZAPI',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Erro no servidor',
+        description: err.message || String(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingTest(false);
+    }
   };
 
   if (isLoading) {
@@ -126,7 +217,7 @@ export default function UpsellPage() {
       <div className="flex flex-col h-full">
         <PageHeader
           title="Automação de UPSELL"
-          description="Aumente seu ticket médio oferecendo novos produtos logo após o cadastro."
+          description="Aumente seu ticket médio oferecendo novos produtos após o cadastro do cliente."
         />
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <Card>
@@ -143,59 +234,50 @@ export default function UpsellPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Automação de UPSELL"
-        description="Aumente seu ticket médio oferecendo novos produtos logo após o cadastro."
+        title="Automação de UPSELL 🚀"
+        description="Configure sequências de mensagens automáticas com temporizador para aumentar seu faturamento."
       >
-        <Button size="sm" onClick={handleAddUpsell} className="gap-2">
+        <Button size="sm" onClick={handleAddUpsell} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
             <Plus className="h-4 w-4" />
             Adicionar Mais Upsell
         </Button>
       </PageHeader>
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
-        {/* Read-Only Informative Banner */}
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400">
-              <Rocket className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-                Modo Somente Leitura (Funil Upsell 1.0)
-                <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">Desativado</Badge>
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Esta tela serve apenas para você visualizar e copiar as mensagens antigas. Nenhuma lógica do Upsell 1.0 está em execução.
-              </p>
-            </div>
-          </div>
-          <Button size="sm" className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={() => window.location.href = '/automations/upsell-2'}>
-            <Rocket className="h-4 w-4" />
-            Ir para Funil Upsell 2.0 🚀
-          </Button>
-        </div>
-
         <Form {...form}>
-          <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-6">
                 {fields.map((field, index) => (
-                    <Card key={field.id}>
+                    <Card key={field.id} className="border-border/60">
                         <CardContent className="pt-6 space-y-6">
                             <div className="flex justify-between items-center">
                                 <h3 className="font-semibold text-lg flex items-center gap-2">
-                                    <Rocket className="h-5 w-5 text-primary" />
-                                    Upsell #{index + 1}
+                                    <Rocket className="h-5 w-5 text-emerald-500" />
+                                    Regra de Upsell #{index + 1}
                                 </h3>
-                                {fields.length > 1 && (
-                                    <Button 
-                                        type="button" 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        onClick={() => remove(index)}
-                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleOpenTestModal(index)}
+                                      className="gap-2 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                      <Send className="h-3.5 w-3.5" />
+                                      Testar Esta Regra 🚀
                                     </Button>
-                                )}
+
+                                    {fields.length > 1 && (
+                                        <Button 
+                                            type="button" 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => remove(index)}
+                                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
 
                             <FormField
@@ -205,15 +287,15 @@ export default function UpsellPage() {
                                     <FormItem>
                                     <div className="flex items-center space-x-4 rounded-md border p-4">
                                         <div className="flex-1 space-y-1">
-                                        <FormLabel className="text-base">Ativar este UPSELL</FormLabel>
+                                        <FormLabel className="text-base">Ativar esta Regra</FormLabel>
                                         <p className="text-sm text-muted-foreground">
-                                            Habilite para enviar esta mensagem automática.
+                                            Habilite para disparar esta mensagem no tempo programado.
                                         </p>
                                         </div>
                                         <FormControl>
                                         <Switch
                                             checked={field.value}
-                                            disabled={true}
+                                            onCheckedChange={field.onChange}
                                         />
                                         </FormControl>
                                     </div>
@@ -221,21 +303,21 @@ export default function UpsellPage() {
                                 )}
                             />
 
-                            <div className="flex items-center gap-2">
-                                <Label>Enviar após</Label>
+                            <div className="flex items-center gap-2 bg-muted/30 p-3 rounded-lg border">
+                                <Label className="text-sm font-medium">Enviar exatamente após</Label>
                                 <FormField
                                     control={form.control}
                                     name={`upsells.${index}.upsellDelayMinutes`}
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormControl>
-                                                <Input type="number" className="w-20" disabled={true} {...field} />
+                                                <Input type="number" className="w-24 text-center font-bold" min={0} {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
                                     )}
                                 />
-                                <Label>minutos do cadastro.</Label>
+                                <Label className="text-sm font-medium">minutos do cadastro do cliente.</Label>
                             </div>
 
                             <FormField
@@ -243,12 +325,11 @@ export default function UpsellPage() {
                                 name={`upsells.${index}.upsellMessage`}
                                 render={({ field }) => (
                                     <FormItem>
-                                    <FormLabel>Mensagem de UPSELL (Modo Leitura)</FormLabel>
+                                    <FormLabel className="font-semibold">Mensagem de UPSELL</FormLabel>
                                     <FormControl>
                                         <Textarea
-                                        placeholder="Olá {cliente}, vi que você acabou de entrar! Tenho uma oferta especial..."
-                                        className="min-h-32 bg-muted/20"
-                                        readOnly={true}
+                                        placeholder="Olá {cliente}, vi que você acabou de entrar! Tenho uma oferta especial para você..."
+                                        className="min-h-32 font-mono text-sm"
                                         {...field}
                                         />
                                     </FormControl>
@@ -256,11 +337,6 @@ export default function UpsellPage() {
                                     </FormItem>
                                 )}
                             />
-                            {field.createdAt && (
-                                <p className="text-[10px] text-muted-foreground">
-                                    Criado em: {new Date(field.createdAt).toLocaleString()} (Clientes antigos serão ignorados)
-                                </p>
-                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -270,13 +346,13 @@ export default function UpsellPage() {
                 <div className="space-y-4">
                     <Card>
                         <CardContent className="pt-6">
-                            <Label className="text-sm">Variáveis disponíveis para todas as mensagens:</Label>
-                            <div className="flex flex-wrap gap-2 mt-2">
+                            <Label className="text-sm font-semibold">Variáveis disponíveis para personalização:</Label>
+                            <div className="flex flex-wrap gap-2 mt-3">
                                 {availableVariables.map(variable => (
                                     <Badge 
                                         key={variable} 
                                         variant="outline" 
-                                        className="cursor-pointer hover:bg-accent"
+                                        className="cursor-pointer hover:bg-emerald-500/10 hover:border-emerald-500 text-xs py-1"
                                         onClick={() => copyVariableToClipboard(variable)}
                                     >
                                         {variable}
@@ -286,14 +362,81 @@ export default function UpsellPage() {
                         </CardContent>
                     </Card>
                     
-                    <Button type="submit" disabled={form.formState.isSubmitting} className="w-full md:w-auto">
-                        Salvar Todas as Configurações de UPSELL
+                    <Button type="submit" disabled={form.formState.isSubmitting} className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold">
+                        <Rocket className="h-4 w-4" />
+                        Salvar Todas as Regras de UPSELL 🚀
                     </Button>
                 </div>
             )}
           </form>
         </Form>
       </main>
+
+      {/* MODAL DE TESTE RÁPIDO */}
+      <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <Rocket className="h-5 w-5" />
+              Testar Envio Desta Regra
+            </DialogTitle>
+            <DialogDescription>
+              Informe o WhatsApp para receber a mensagem de teste imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="space-y-2">
+              <Label htmlFor="test-phone">Número de WhatsApp (com DDD)</Label>
+              <Input
+                id="test-phone"
+                placeholder="Ex: 8791791807"
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+              />
+            </div>
+
+            <div className="bg-muted p-3 rounded-md space-y-1.5 text-xs">
+              <span className="font-semibold text-foreground">Prévia da Mensagem:</span>
+              <p className="whitespace-pre-wrap font-mono text-muted-foreground">
+                {(testRuleData?.upsellMessage || '')
+                  .replace(/{cliente}/g, 'Cliente Teste')
+                  .replace(/{telefone}/g, testPhone.trim())
+                  .replace(/{email}/g, 'cliente@email.com')
+                  .replace(/{senha}/g, '123456')
+                  .replace(/{tela}/g, 'Perfil 1')
+                  .replace(/{assinatura}/g, 'Netflix Ultra HD')
+                  .replace(/{vencimento}/g, '30/12/2026')
+                  .replace(/{valor}/g, '35,00')
+                  .replace(/{status}/g, 'Ativo')}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setTestDialogOpen(false)} disabled={isSendingTest}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleExecuteRuleTest}
+              disabled={isSendingTest}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold"
+            >
+              {isSendingTest ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Enviando Teste...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Enviar Teste Agora 🚀
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
