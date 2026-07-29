@@ -32,21 +32,69 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function ImageUploaderInput({ value, onChange }: { value?: string; onChange: (val: string) => void }) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = React.useState(false);
+  const { firebaseApp } = useFirebase();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('A imagem é muito grande. Escolha um arquivo de até 10MB.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const storage = getStorage(firebaseApp);
+      const fileRef = storageRef(storage, `upsell-2-images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+      await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(fileRef);
+      onChange(downloadUrl);
+    } catch (err) {
+      console.error("Erro ao subir arquivo para o Firebase Storage:", err);
+      alert('Erro ao enviar foto do PC. Tente novamente.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <Input
-        placeholder="https://i.imgur.com/exemplo.jpg (Cole o link direto da imagem)"
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        className="text-xs font-mono w-full"
-      />
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <Input
+          placeholder="Cole a URL ou selecione uma foto do seu computador"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="text-xs font-mono flex-1"
+        />
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isUploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="gap-1.5 text-xs shrink-0 border-emerald-500/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-semibold"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          {isUploading ? 'Enviando Foto...' : 'Escolher Foto do Computador 📁'}
+        </Button>
+      </div>
 
       {value && value.trim() ? (
         <div className="relative group w-fit rounded-xl border overflow-hidden bg-background shadow-sm p-1.5">
           <img
             src={value}
             alt="Preview da Mídia"
-            className="h-28 w-auto object-cover rounded-lg max-w-full"
+            className="h-32 w-auto object-cover rounded-lg max-w-full"
             onError={(e) => {
               (e.target as HTMLElement).style.display = 'none';
             }}

@@ -11,7 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Plus, Trash2, ImageIcon, Terminal, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Send, Plus, Trash2, ImageIcon, Terminal, CheckCircle2, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface TestButton {
   id: string;
@@ -28,7 +29,34 @@ export default function TestButtonsPage() {
     return doc(firestore, 'users', user.uid, 'settings', 'config');
   }, [firestore, user]);
 
-  const { data: settings } = useDoc<Settings>(settingsDocRef);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const { firebaseApp } = useFirebase();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ variant: 'destructive', title: 'Arquivo Grande', description: 'Escolha uma foto de até 10MB.' });
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      const storage = getStorage(firebaseApp);
+      const fileRef = storageRef(storage, `test-images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+      await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(fileRef);
+      setImageUrl(downloadUrl);
+      toast({ title: 'Foto Carregada com Sucesso! 📸', description: 'A foto do seu computador foi enviada ao Firebase e o link foi preenchido.' });
+    } catch (err) {
+      console.error('Erro ao enviar foto para Firebase Storage:', err);
+      toast({ variant: 'destructive', title: 'Erro ao Enviar Foto', description: 'Não foi possível salvar a imagem no servidor.' });
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const [phone, setPhone] = useState('');
   const [imageUrl, setImageUrl] = useState('https://i.imgur.com/l8StCRM.jpeg');
