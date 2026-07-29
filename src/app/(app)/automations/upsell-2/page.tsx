@@ -279,28 +279,46 @@ export default function Upsell2Page() {
     }
   }, [settings, form]);
 
-  const onSubmit = (data: UpsellFormData) => {
+  const onSubmit = async (data: UpsellFormData) => {
     if (settingsDocRef) {
       const existingUpsellsMap = new Map((settings?.upsells2 || []).map(u => [u.id, u.createdAt]));
       const now = Date.now();
-      const updatedUpsells = data.upsells2.map(u => {
-        const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
-        const hasButtons = Array.isArray(u.buttons) && u.buttons.length > 0;
-        const finalMessageType = (u.messageType === 'button' || hasButtons) ? 'button' : 'message';
 
-        return {
-          ...u,
-          id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
-          upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
-          messageType: finalMessageType,
-          createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
-        };
-      });
+      const updatedUpsells = await Promise.all(
+        data.upsells2.map(async (u) => {
+          const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
+          const hasButtons = Array.isArray(u.buttons) && u.buttons.length > 0;
+          const finalMessageType = (u.messageType === 'button' || hasButtons) ? 'button' : 'message';
+
+          let cleanImage = (u.imageButton || '').trim();
+          if (cleanImage.startsWith('data:image/')) {
+            try {
+              const res = await fetch(cleanImage);
+              const blob = await res.blob();
+              const storage = getStorage(firebaseApp);
+              const fileRef = storageRef(storage, `upsell-2-images/${Date.now()}_auto.png`);
+              await uploadBytes(fileRef, blob);
+              cleanImage = await getDownloadURL(fileRef);
+            } catch (err) {
+              console.error('Failed to convert base64 image to storage URL:', err);
+            }
+          }
+
+          return {
+            ...u,
+            id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
+            upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
+            messageType: finalMessageType,
+            imageButton: cleanImage,
+            createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now,
+          };
+        })
+      );
 
       setDocumentNonBlocking(settingsDocRef, { upsells2: updatedUpsells }, { merge: true });
       toast({
         title: 'Funil Upsell 2.0 Salvo com Sucesso! 🚀',
-        description: 'Suas regras de automação foram salvas e estão ativas para novos cadastros.',
+        description: 'Imagens convertidas e regras ativas para novos cadastros.',
       });
     }
   };
