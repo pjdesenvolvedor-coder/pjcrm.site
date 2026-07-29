@@ -361,9 +361,9 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
   const onSubmit = async (values: z.infer<typeof clientSchema>) => {
     if (!effectiveUserId || !user) return;
     
-    // Trim all strings in values safely
+    // Trim all strings in values safely and sanitize phone number to digits only (e.g. 93 8400-7250 -> 9384007250)
     const trimmedName = values.name.trim();
-    const trimmedPhone = values.phone.trim();
+    const trimmedPhone = values.phone.replace(/\D/g, '');
     const trimmedPassword = values.password ? values.password.trim() : '';
     const trimmedScreen = values.screen ? values.screen.trim() : '';
     const trimmedPinScreen = values.pinScreen ? values.pinScreen.trim() : '';
@@ -424,8 +424,28 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
             ...clientData, status: newStatus, needsSupport: false, createdAt: serverTimestamp(), upsellSent: false
         });
         toast({ title: "Cliente adicionado!" });
+
+        // 1. Dispara a função do botão "Enviar Webhook" primeiro ao adicionar o cliente
+        if (settings?.webhookToken) {
+            try {
+                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome: trimmedName,
+                        numero: trimmedPhone,
+                        token: settings.webhookToken
+                    })
+                });
+            } catch (e) {
+                console.error("Falha ao enviar webhook ao adicionar cliente:", e);
+            }
+        }
+
+        // 2. Dispara a fila do cron
         fetch('/api/cron/run').catch(() => {});
 
+        // 3. Em seguida envia a mensagem de entrega de credenciais/acesso
         const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
         const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
             ? getCustomDeliveryMessage(settings?.customDeliveryMessages, trimmedSubscription, settings?.deliveryMessage)
@@ -442,9 +462,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
                 .replace(/{valor}/g, trimmedAmountPaid || '0,00').replace(/{status}/g, newStatus);
 
-
-
-            fetch('/api/send-message', {
+            await fetch('/api/send-message', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: formattedMessage, phoneNumber: trimmedPhone, token: settings.webhookToken }),
             }).catch(console.error);
@@ -1106,7 +1124,7 @@ export default function CustomersPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                   nome: client.name,
-                  numero: client.phone,
+                  numero: client.phone.replace(/\D/g, ''),
                   token: settings.webhookToken
               })
           });
