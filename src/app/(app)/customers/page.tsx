@@ -425,7 +425,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         });
         toast({ title: "Cliente adicionado!" });
 
-        // 1. Dispara a função do botão "Enviar Webhook" primeiro ao adicionar o cliente
+        // 1. PRIMEIRO: Dispara o Webhook para Salvar o Contato e aguarda a conclusão
         if (settings?.webhookToken) {
             try {
                 await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
@@ -437,6 +437,8 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                         token: settings.webhookToken
                     })
                 });
+                // Pausa de 1.5 segundos para garantir que o contato foi salvo antes do envio da mensagem
+                await new Promise(r => setTimeout(r, 1500));
             } catch (e) {
                 console.error("Falha ao enviar webhook ao adicionar cliente:", e);
             }
