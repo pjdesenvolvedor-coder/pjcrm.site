@@ -152,8 +152,6 @@ export async function GET(request: Request) {
             let activeUpsells: UpsellConfig[] = [];
             if (settings?.upsells && settings.upsells.length > 0) {
                 activeUpsells = settings.upsells.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
-            } else if (settings?.upsells2 && settings.upsells2.length > 0) {
-                activeUpsells = settings.upsells2.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
             }
 
             const upsellToken = settings.webhookToken || settings.billingWebhookToken;
