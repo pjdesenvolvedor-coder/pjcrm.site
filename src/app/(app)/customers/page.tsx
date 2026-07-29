@@ -8,7 +8,7 @@ import { add, format } from 'date-fns';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, Timestamp, doc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, Timestamp, doc, query, orderBy, serverTimestamp, addDoc } from 'firebase/firestore';
 
 import { PageHeader } from '@/components/page-header';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -420,7 +420,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         toast({ title: "Cliente atualizado!" });
     } else {
         const newStatus = (dueDateTimestamp && dueDateTimestamp.toDate() <= new Date()) ? 'Vencido' : 'Ativo';
-        await addDocumentNonBlocking(collection(firestore, 'users', effectiveUserId, 'clients'), { 
+        await addDoc(collection(firestore, 'users', effectiveUserId, 'clients'), { 
             ...clientData, status: newStatus, needsSupport: false, createdAt: serverTimestamp(), upsellSent: false
         });
         toast({ title: "Cliente adicionado!" });
