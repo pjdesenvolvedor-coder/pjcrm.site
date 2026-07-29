@@ -26,6 +26,16 @@ function addServerLog(userId: string, type: string, clientName: string, target: 
     // We will await logs sequentially to be safe.
 }
 
+function formatPhoneWith55(phone: string): string {
+    if (!phone) return '';
+    let digits = phone.replace(/\D/g, '');
+    if (!digits) return '';
+    if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
+        digits = '55' + digits;
+    }
+    return digits;
+}
+
 function getTimestampMs(val: any): number | null {
     if (!val) return null;
     if (typeof val === 'number') return val;
@@ -154,8 +164,6 @@ export async function GET(request: Request) {
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
                         const upsell = activeUpsells[uIdx];
                         if (upsellsDone >= QUEUE_LIMIT) break;
-                        const upsellCreatedMs = Number(upsell.createdAt) || STRICT_CUTOFF_MS;
-                        if (clientCreatedMs < upsellCreatedMs) continue;
                         
                         const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
                             ? upsell.id.trim()
@@ -222,22 +230,47 @@ export async function GET(request: Request) {
                                         choices = ['Comprar Agora|https://www.contaspj.shop/'];
                                     }
 
-                                    await fetch(`${originUrl}/api/send-menu`, {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            phoneNumber: client.phone,
-                                            type: 'button',
-                                            text: formattedMessage,
-                                            choices: choices,
-                                            imageButton: upsell.imageButton ? upsell.imageButton.trim() : undefined,
-                                            footerText: upsell.footerText ? formatMessageWithClient(upsell.footerText, client) : undefined,
-                                            token: upsellToken
-                                        }),
+                                    const payloadMenu: any = {
+                                        number: formatPhoneWith55(client.phone),
+                                        type: 'button',
+                                        text: formattedMessage,
+                                        choices: choices,
+                                    };
+
+                                    if (upsell.imageButton && typeof upsell.imageButton === 'string' && upsell.imageButton.trim()) {
+                                        const cleanImg = upsell.imageButton.trim();
+                                        payloadMenu.imageButton = cleanImg;
+                                        payloadMenu.image = cleanImg;
+                                        payloadMenu.imageUrl = cleanImg;
+                                        payloadMenu.mediaUrl = cleanImg;
+                                        payloadMenu.media = cleanImg;
+                                    }
+
+                                    if (upsell.footerText && typeof upsell.footerText === 'string' && upsell.footerText.trim()) {
+                                        payloadMenu.footerText = formatMessageWithClient(upsell.footerText, client).trim();
+                                    }
+
+                                    await fetch('https://pjcontas.uazapi.com/send/menu', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'token': upsellToken,
+                                            'apikey': upsellToken,
+                                        },
+                                        body: JSON.stringify(payloadMenu),
                                     }).catch(console.error);
                                 } else {
-                                    await fetch(`${originUrl}/api/send-message`, {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ message: formattedMessage, phoneNumber: client.phone, token: upsellToken }),
+                                    await fetch('https://pjcontas.uazapi.com/send/text', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'token': upsellToken,
+                                            'apikey': upsellToken,
+                                        },
+                                        body: JSON.stringify({
+                                            number: formatPhoneWith55(client.phone),
+                                            text: formattedMessage,
+                                        }),
                                     }).catch(console.error);
                                 }
                             }
