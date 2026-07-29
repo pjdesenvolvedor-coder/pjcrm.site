@@ -653,7 +653,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="px-3 py-1 mt-4 text-[10px] font-bold tracking-wider text-muted-foreground uppercase opacity-70">Operacional</div>
               {permissions.automations && (
                 <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/automations')}>
+                      <Collapsible defaultOpen={pathname.startsWith('/automations')}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Automações">
                               <div className="flex items-center gap-2"><Wand2 className="h-4 w-4" /><span className="text-[13px] font-medium">Automações</span></div>
@@ -666,6 +666,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell">Funil Upsell (1.0)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell-2'}><Link href="/automations/upsell-2" className="text-emerald-600 dark:text-emerald-400 font-semibold">Funil Upsell 2.0 🚀</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/test-buttons'}><Link href="/automations/test-buttons" className="text-amber-600 dark:text-amber-400 font-bold">🧪 Teste Botões</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-credentials'}><Link href="/automations/delivery-credentials">Envio Acesso (Dados)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-link'}><Link href="/automations/delivery-link">Envio Acesso (Link)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Msg Suporte</Link></SidebarMenuSubButton></SidebarMenuSubItem>
