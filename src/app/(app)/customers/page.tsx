@@ -1041,6 +1041,59 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
   return false;
 }
 
+function extractClientEmails(c: any): string {
+  if (!c) return '';
+  const emailParts: string[] = [];
+
+  const processVal = (val: any) => {
+    if (!val) return;
+    if (typeof val === 'string') {
+      emailParts.push(val.toLowerCase().trim());
+    } else if (typeof val === 'object') {
+      if (val.value && typeof val.value === 'string') {
+        emailParts.push(val.value.toLowerCase().trim());
+      } else {
+        for (const k of Object.keys(val)) {
+          if (typeof val[k] === 'string' && val[k].includes('@')) {
+            emailParts.push(val[k].toLowerCase().trim());
+          }
+        }
+      }
+    }
+  };
+
+  if (Array.isArray(c.email)) {
+    c.email.forEach(processVal);
+  } else if (c.email) {
+    processVal(c.email);
+  }
+
+  if (Array.isArray(c.emails)) {
+    c.emails.forEach(processVal);
+  } else if (c.emails) {
+    processVal(c.emails);
+  }
+
+  return emailParts.join(' ');
+}
+
+function formatClientEmailDisplay(emailVal: any): string {
+  if (!emailVal) return '-';
+  if (typeof emailVal === 'string') return emailVal;
+  if (Array.isArray(emailVal)) {
+    const extracted = emailVal.map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && item.value) return String(item.value);
+      return '';
+    }).filter(Boolean);
+    return extracted.length > 0 ? extracted.join(', ') : '-';
+  }
+  if (typeof emailVal === 'object' && emailVal.value) {
+    return String(emailVal.value);
+  }
+  return '-';
+}
+
   const filteredClients = useMemo(() => {
     if (!clients) return [];
     const now = new Date();
@@ -1051,11 +1104,17 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
             if (!isOverdue) return false;
         }
         if (!searchTerm.trim()) return true;
-        const search = searchTerm.toLowerCase();
-        const emailsStr = Array.isArray(c.email) ? c.email.join(' ') : (c.email || '');
-        return c.name.toLowerCase().includes(search) || 
-               matchesPhone(c.phone, searchTerm) || 
-               emailsStr.toLowerCase().includes(search);
+        const search = searchTerm.trim().toLowerCase();
+        const emailsStr = extractClientEmails(c);
+        const nameStr = (c.name || '').toLowerCase();
+        const subStr = (c.subscription || '').toLowerCase();
+        const notesStr = (c.notes || '').toLowerCase();
+
+        return nameStr.includes(search) || 
+               matchesPhone(c.phone || '', searchTerm) || 
+               emailsStr.includes(search) ||
+               subStr.includes(search) ||
+               notesStr.includes(search);
     });
     if (sortConfig) {
         items.sort((a: any, b: any) => {
@@ -1412,7 +1471,7 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
                   return (
                 <TableRow key={client.id} className={cn(client.needsSupport && "bg-primary/5")}>
                     <TableCell><div className='flex items-center gap-2'>{client.needsSupport && <LifeBuoy className="h-4 w-4 text-primary" />}{client.name}</div></TableCell>
-                    <TableCell><div className="text-xs text-muted-foreground max-w-[180px] truncate">{Array.isArray(client.email) ? client.email[0] : client.email}</div></TableCell>
+                    <TableCell><div className="text-xs text-muted-foreground max-w-[180px] truncate">{formatClientEmailDisplay(client.email)}</div></TableCell>
                     <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
                     <TableCell><Badge variant={displayStatus === 'Ativo' ? 'default' : 'destructive'} className={cn(displayStatus === 'Ativo' && 'bg-green-500/20 text-green-700')}>{displayStatus}</Badge></TableCell>
                     <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
