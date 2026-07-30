@@ -992,18 +992,22 @@ export default function CustomersPage() {
 
 function matchesPhone(clientPhone: string, searchInput: string): boolean {
   if (!clientPhone || !searchInput) return false;
+  
+  // Se a busca contiver letras ou '@', trata-se de busca de nome ou e-mail, não telefone
+  if (/[a-zA-Z@]/.test(searchInput)) return false;
+
   const rawSearchLower = searchInput.trim().toLowerCase();
   if (!rawSearchLower) return false;
 
   if (clientPhone.toLowerCase().includes(rawSearchLower)) return true;
 
   const searchDigits = searchInput.replace(/\D/g, '');
-  if (!searchDigits) return false;
+  if (searchDigits.length < 3) return false; // Exige pelo menos 3 dígitos para evitar falso positivo
 
   const phoneDigits = clientPhone.replace(/\D/g, '');
   if (!phoneDigits) return false;
 
-  if (phoneDigits.includes(searchDigits) || searchDigits.includes(phoneDigits)) return true;
+  if (phoneDigits.includes(searchDigits)) return true;
 
   const getPhoneVariants = (digits: string): string[] => {
     const variants = new Set<string>([digits]);
@@ -1032,7 +1036,7 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
 
   for (const cV of clientVariants) {
     for (const sV of searchVariants) {
-      if (cV.includes(sV) || sV.includes(cV)) {
+      if (cV.includes(sV)) {
         return true;
       }
     }
