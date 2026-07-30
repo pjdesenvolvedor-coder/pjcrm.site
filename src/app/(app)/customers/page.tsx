@@ -851,8 +851,7 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
         const clientDocRef = doc(firestore, 'users', effectiveUserId, 'clients', client.id);
         
         const monthsToAdd = parseInt(period, 10) || 1;
-        const baseDate = (client.dueDate && (client.dueDate as any).toDate() > new Date()) ? (client.dueDate as any).toDate() : new Date();
-        const newDueDate = add(baseDate, { months: monthsToAdd });
+        const newDueDate = add(new Date(), { months: monthsToAdd });
         
         setDocumentNonBlocking(clientDocRef, {
             status: 'Ativo',
