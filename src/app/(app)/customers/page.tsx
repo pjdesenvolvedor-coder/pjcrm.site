@@ -424,51 +424,56 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
             ...clientData, status: newStatus, needsSupport: false, createdAt: serverTimestamp(), upsellSent: false
         });
         toast({ title: "Cliente adicionado!" });
+        onFinished();
 
-        // 1. PRIMEIRO: Dispara o Webhook para Salvar o Contato e aguarda a conclusão
-        if (settings?.webhookToken) {
-            try {
-                await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nome: trimmedName,
-                        numero: trimmedPhone,
-                        token: settings.webhookToken
-                    })
-                });
-                // Pausa de 1.5 segundos para garantir que o contato foi salvo antes do envio da mensagem
-                await new Promise(r => setTimeout(r, 1500));
-            } catch (e) {
-                console.error("Falha ao enviar webhook ao adicionar cliente:", e);
+        // Executa a sequência em segundo plano de forma assíncrona para não travar o modal do usuário
+        (async () => {
+            // 1. PRIMEIRO: Dispara o Webhook para Salvar o Contato e aguarda a conclusão
+            if (settings?.webhookToken) {
+                try {
+                    await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            nome: trimmedName,
+                            numero: trimmedPhone,
+                            token: settings.webhookToken
+                        })
+                    });
+                    // Pausa de 1.5 segundos para garantir que o contato foi salvo antes do envio da mensagem
+                    await new Promise(r => setTimeout(r, 1500));
+                } catch (e) {
+                    console.error("Falha ao enviar webhook ao adicionar cliente:", e);
+                }
             }
-        }
 
-        // 2. Dispara a fila do cron
-        fetch('/api/cron/run').catch(() => {});
+            // 2. Dispara a fila do cron
+            fetch('/api/cron/run').catch(() => {});
 
-        // 3. Em seguida envia a mensagem de entrega de credenciais/acesso
-        const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
-        const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
-            ? getCustomDeliveryMessage(settings?.customDeliveryMessages, trimmedSubscription, settings?.deliveryMessage)
-            : getCustomDeliveryMessage(settings?.customDeliveryLinkMessages, trimmedSubscription, settings?.deliveryLinkMessage);
+            // 3. Em seguida envia a mensagem de entrega de credenciais/acesso
+            const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
+            const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
+                ? getCustomDeliveryMessage(settings?.customDeliveryMessages, trimmedSubscription, settings?.deliveryMessage)
+                : getCustomDeliveryMessage(settings?.customDeliveryLinkMessages, trimmedSubscription, settings?.deliveryLinkMessage);
 
-        if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
-            let formattedMessage = deliveryMessageTemplate
-                .replace(/{cliente}/g, trimmedName).replace(/{telefone}/g, trimmedPhone)
-                .replace(/{email}/g, emailList.join(', '))
-                .replace(/{senha}/g, trimmedPassword || 'N/A').replace(/{tela}/g, trimmedScreen || 'N/A')
-                .replace(/{pin_tela}/g, trimmedPinScreen || 'N/A')
-                .replace(/{link}/g, trimmedAccessLink || 'N/A')
-                .replace(/{assinatura}/g, trimmedSubscription)
-                .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
-                .replace(/{valor}/g, trimmedAmountPaid || '0,00').replace(/{status}/g, newStatus);
+            if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
+                let formattedMessage = deliveryMessageTemplate
+                    .replace(/{cliente}/g, trimmedName).replace(/{telefone}/g, trimmedPhone)
+                    .replace(/{email}/g, emailList.join(', '))
+                    .replace(/{senha}/g, trimmedPassword || 'N/A').replace(/{tela}/g, trimmedScreen || 'N/A')
+                    .replace(/{pin_tela}/g, trimmedPinScreen || 'N/A')
+                    .replace(/{link}/g, trimmedAccessLink || 'N/A')
+                    .replace(/{assinatura}/g, trimmedSubscription)
+                    .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
+                    .replace(/{valor}/g, trimmedAmountPaid || '0,00').replace(/{status}/g, newStatus);
 
-            await fetch('/api/send-message', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: formattedMessage, phoneNumber: trimmedPhone, token: settings.webhookToken }),
-            }).catch(console.error);
-        }
+                await fetch('/api/send-message', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: formattedMessage, phoneNumber: trimmedPhone, token: settings.webhookToken }),
+                }).catch(console.error);
+            }
+        })();
+        return;
     }
     onFinished();
   };

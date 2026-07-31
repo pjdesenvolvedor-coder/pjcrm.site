@@ -170,6 +170,12 @@ export async function GET(request: Request) {
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
                         const upsell = activeUpsells[uIdx];
                         if (upsellsDone >= QUEUE_LIMIT) break;
+
+                        // TRAVA DE SEGURANÇA POR REGRA: Se a regra de upsell foi criada DEPOIS do cadastro do cliente, o cliente é ignorado
+                        const ruleCreatedAt = Number(upsell.createdAt) || 0;
+                        if (ruleCreatedAt > 0 && clientCreatedMs < ruleCreatedAt) {
+                            continue;
+                        }
                         
                         const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
                             ? upsell.id.trim()
