@@ -168,6 +168,21 @@ export async function GET(request: Request) {
 
             if (activeUpsells.length > 0 && upsellToken) {
                 let upsellsDone = 0;
+
+                // Mapeamento inicial em memória de todos os telefones e regras já enviadas
+                const phoneSentRulesMap = new Map<string, Set<string>>();
+                for (const c of clients) {
+                    const cleanP = formatPhoneWith55(c.phone);
+                    if (!cleanP) continue;
+                    if (!phoneSentRulesMap.has(cleanP)) {
+                        phoneSentRulesMap.set(cleanP, new Set<string>());
+                    }
+                    const setForPhone = phoneSentRulesMap.get(cleanP)!;
+                    const r1 = Array.isArray(c.sentUpsellIds) ? c.sentUpsellIds : (typeof c.sentUpsellIds === 'string' ? [c.sentUpsellIds] : []);
+                    const r2 = Array.isArray(c.sentUpsell2Ids) ? c.sentUpsell2Ids : (typeof c.sentUpsell2Ids === 'string' ? [c.sentUpsell2Ids] : []);
+                    [...r1, ...r2].forEach(id => { if (id) setForPhone.add(id); });
+                }
+
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
                     const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
@@ -176,6 +191,11 @@ export async function GET(request: Request) {
                     if (clientCreatedMs < STRICT_CUTOFF_MS) {
                         continue;
                     }
+
+                    const cleanPhone = formatPhoneWith55(client.phone);
+                    if (!cleanPhone) continue;
+
+                    const sentForThisPhone = phoneSentRulesMap.get(cleanPhone) || new Set<string>();
 
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
                         const upsell = activeUpsells[uIdx];
@@ -194,46 +214,60 @@ export async function GET(request: Request) {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        const rawSent1 = client.sentUpsellIds;
-                        const rawSent2 = client.sentUpsell2Ids;
-                        const clientSentList1 = Array.isArray(rawSent1) ? rawSent1 : (typeof rawSent1 === 'string' ? [rawSent1] : []);
-                        const clientSentList2 = Array.isArray(rawSent2) ? rawSent2 : (typeof rawSent2 === 'string' ? [rawSent2] : []);
-                        const combinedSent = [...clientSentList1, ...clientSentList2];
-
-                        const alreadySent = Boolean(
-                            (upsell.id && combinedSent.includes(upsell.id)) ||
-                            combinedSent.includes(ruleId)
+                        // TRAVA ABSOLUTA POR NUMERO DE TELEFONE: Se este número de telefone (em qualquer documento/produto) já recebeu a regra, PULA!
+                        const alreadySentToPhone = Boolean(
+                            sentForThisPhone.has(ruleId) ||
+                            (upsell.id && sentForThisPhone.has(upsell.id))
                         );
 
-                        if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySent) {
+                        if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySentToPhone) {
                             let processed = false;
-                            const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
                             
+                            // Documentos do mesmo usuário que possuem o MESMO número de telefone
+                            const matchingSamePhoneDocs = clients.filter(c => formatPhoneWith55(c.phone) === cleanPhone);
+
                             try {
                                 await runTransaction(db, async (txn) => {
-                                    const cSnap = await txn.get(clientDocRef);
-                                    if (!cSnap.exists()) throw new Error('Deleted');
-                                    const cData = cSnap.data();
-                                    if (cData?.status === 'Inativo' || cData?.status === 'Vencido') throw new Error('Inactive');
-                                    
-                                    const cSent1 = Array.isArray(cData?.sentUpsellIds) ? cData.sentUpsellIds : [];
-                                    const cSent2 = Array.isArray(cData?.sentUpsell2Ids) ? cData.sentUpsell2Ids : [];
-                                    const cCombined = [...cSent1, ...cSent2];
+                                    // 1. Verifica se qualquer um dos documentos desse número já recebeu a regra
+                                    for (const sameDoc of matchingSamePhoneDocs) {
+                                        const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
+                                        const cSnap = await txn.get(docRef);
+                                        if (cSnap.exists()) {
+                                            const cData = cSnap.data();
+                                            const cSent1 = Array.isArray(cData?.sentUpsellIds) ? cData.sentUpsellIds : [];
+                                            const cSent2 = Array.isArray(cData?.sentUpsell2Ids) ? cData.sentUpsell2Ids : [];
+                                            const cCombined = [...cSent1, ...cSent2];
+                                            if (cCombined.includes(ruleId) || (upsell.id && cCombined.includes(upsell.id))) {
+                                                throw new Error('AlreadySentToPhone');
+                                            }
+                                        }
+                                    }
 
-                                    if (cCombined.includes(ruleId) || (upsell.id && cCombined.includes(upsell.id))) throw new Error('Sent');
-                                    
-                                    const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
-                                    txn.update(clientDocRef, { sentUpsellIds: updatedList });
-                                    client.sentUpsellIds = updatedList;
+                                    // 2. Atualiza TODOS os documentos desse número de telefone para marcar como enviado
+                                    for (const sameDoc of matchingSamePhoneDocs) {
+                                        const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
+                                        const cSnap = await txn.get(docRef);
+                                        if (cSnap.exists()) {
+                                            const cSent1 = Array.isArray(cSnap.data()?.sentUpsellIds) ? cSnap.data()!.sentUpsellIds : [];
+                                            const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
+                                            txn.update(docRef, { sentUpsellIds: updatedList });
+                                        }
+                                    }
+
                                     processed = true;
                                 });
                             } catch (e) {}
 
                             if (processed) {
+                                // Atualiza o conjunto em memória para este telefone
+                                sentForThisPhone.add(ruleId);
+                                if (upsell.id) sentForThisPhone.add(upsell.id);
+                                phoneSentRulesMap.set(cleanPhone, sentForThisPhone);
+
                                 upsellsDone++;
                                 const formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
 
-                                console.log(`cron/run: sending text upsell ruleId ${ruleId} to ${client.phone}:`, formattedMessage.slice(0, 50));
+                                console.log(`cron/run: sending text upsell ruleId ${ruleId} to ${cleanPhone}:`, formattedMessage.slice(0, 50));
                                 const uazRes = await fetch('https://pjcontas.uazapi.com/send/text', {
                                     method: 'POST',
                                     headers: {
@@ -242,7 +276,7 @@ export async function GET(request: Request) {
                                         'apikey': upsellToken,
                                     },
                                     body: JSON.stringify({
-                                        number: formatPhoneWith55(client.phone),
+                                        number: cleanPhone,
                                         text: formattedMessage,
                                     }),
                                 });
