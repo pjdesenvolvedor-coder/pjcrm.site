@@ -10,6 +10,7 @@ export const maxDuration = 300; // 5 min timeout max limit (depending on vercel 
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const userLocks = new Map<string, number>();
 
 // Helper for delayed logging
 function addServerLog(userId: string, type: string, clientName: string, target: string, status: string, delayApplied: number) {
@@ -88,6 +89,15 @@ export async function GET(request: Request) {
 
         for (const userDoc of usersSnapshot.docs) {
             const userId = userDoc.id;
+
+            // TRAVA ANTI-DUPLICAÇÃO ENTRE PCS/ABAS: Evita execuções simultâneas para o mesmo usuário dentro de 10 segundos
+            const nowMs = Date.now();
+            const lastUserRun = userLocks.get(userId) || 0;
+            if (nowMs - lastUserRun < 10000) {
+                continue;
+            }
+            userLocks.set(userId, nowMs);
+
             const userProfile = userDoc.data() as UserProfile;
 
             // Se expiirou assinatura do admin, pula
@@ -214,6 +224,7 @@ export async function GET(request: Request) {
                                     
                                     const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
                                     txn.update(clientDocRef, { sentUpsellIds: updatedList });
+                                    client.sentUpsellIds = updatedList;
                                     processed = true;
                                 });
                             } catch (e) {}
