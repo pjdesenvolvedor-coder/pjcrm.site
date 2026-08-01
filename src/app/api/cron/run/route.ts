@@ -27,14 +27,28 @@ function addServerLog(userId: string, type: string, clientName: string, target: 
     // We will await logs sequentially to be safe.
 }
 
-function formatPhoneWith55(phone: string): string {
+function getCanonicalPhone(phone: string): string {
     if (!phone) return '';
-    let digits = phone.replace(/\D/g, '');
+    const digits = phone.replace(/\D/g, '');
     if (!digits) return '';
-    if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
-        digits = '55' + digits;
+    let local = (digits.startsWith('55') && digits.length >= 12) ? digits.slice(2) : digits;
+    if (local.length === 11 && local[2] === '9') {
+        local = local.slice(0, 2) + local.slice(3);
+    }
+    if (local.length === 10) {
+        return '55' + local;
     }
     return digits;
+}
+
+function formatPhoneWith55(phone: string): string {
+    return getCanonicalPhone(phone);
+}
+
+function getMessageSignature(msg: string): string {
+    if (!msg) return '';
+    const clean = msg.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 40);
+    return `sig_${clean}`;
 }
 
 function getTimestampMs(val: any): number | null {
@@ -168,11 +182,12 @@ export async function GET(request: Request) {
 
             if (activeUpsells.length > 0 && upsellToken) {
                 let upsellsDone = 0;
+                const processedPhonesInThisBatch = new Set<string>();
 
-                // Mapeamento inicial em memória de todos os telefones e regras já enviadas
+                // Mapeamento inicial em memória de todos os telefones canônicos e regras já enviadas
                 const phoneSentRulesMap = new Map<string, Set<string>>();
                 for (const c of clients) {
-                    const cleanP = formatPhoneWith55(c.phone);
+                    const cleanP = getCanonicalPhone(c.phone);
                     if (!cleanP) continue;
                     if (!phoneSentRulesMap.has(cleanP)) {
                         phoneSentRulesMap.set(cleanP, new Set<string>());
@@ -185,15 +200,22 @@ export async function GET(request: Request) {
 
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
+
+                    const cleanPhone = getCanonicalPhone(client.phone);
+                    if (!cleanPhone) continue;
+
+                    // TRAVA ULTRA ABSOLUTA POR LOTE: Se este NÚMERO DE TELEFONE já foi avaliado nesta execução, pula qualquer outro cadastro/produto do mesmo cliente!
+                    if (processedPhonesInThisBatch.has(cleanPhone)) {
+                        continue;
+                    }
+                    processedPhonesInThisBatch.add(cleanPhone);
+
                     const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
 
                     // TRAVA DE SEGURANÇA ABSOLUTA: Ignora clientes antigos cadastrados antes de 29/07/2026 02:46:00
                     if (clientCreatedMs < STRICT_CUTOFF_MS) {
                         continue;
                     }
-
-                    const cleanPhone = formatPhoneWith55(client.phone);
-                    if (!cleanPhone) continue;
 
                     const sentForThisPhone = phoneSentRulesMap.get(cleanPhone) || new Set<string>();
 
@@ -211,24 +233,26 @@ export async function GET(request: Request) {
                             ? upsell.id.trim()
                             : `rule_${upsell.createdAt || uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`;
 
+                        const msgSig = getMessageSignature(upsell.upsellMessage);
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        // TRAVA ABSOLUTA POR NUMERO DE TELEFONE: Se este número de telefone (em qualquer documento/produto) já recebeu a regra, PULA!
+                        // TRAVA ABSOLUTA POR NUMERO DE TELEFONE & ASSINATURA: Se este número de telefone (em qualquer documento/produto) já recebeu a regra/conteúdo, PULA!
                         const alreadySentToPhone = Boolean(
                             sentForThisPhone.has(ruleId) ||
-                            (upsell.id && sentForThisPhone.has(upsell.id))
+                            (upsell.id && sentForThisPhone.has(upsell.id)) ||
+                            (msgSig && sentForThisPhone.has(msgSig))
                         );
 
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySentToPhone) {
                             let processed = false;
                             
-                            // Documentos do mesmo usuário que possuem o MESMO número de telefone
-                            const matchingSamePhoneDocs = clients.filter(c => formatPhoneWith55(c.phone) === cleanPhone);
+                            // Documentos do mesmo usuário que possuem o MESMO número de telefone canônico
+                            const matchingSamePhoneDocs = clients.filter(c => getCanonicalPhone(c.phone) === cleanPhone);
 
                             try {
                                 await runTransaction(db, async (txn) => {
-                                    // 1. Verifica se qualquer um dos documentos desse número já recebeu a regra
+                                    // 1. Verifica se qualquer um dos documentos desse número já recebeu a regra ou a assinatura
                                     for (const sameDoc of matchingSamePhoneDocs) {
                                         const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
                                         const cSnap = await txn.get(docRef);
@@ -237,7 +261,11 @@ export async function GET(request: Request) {
                                             const cSent1 = Array.isArray(cData?.sentUpsellIds) ? cData.sentUpsellIds : [];
                                             const cSent2 = Array.isArray(cData?.sentUpsell2Ids) ? cData.sentUpsell2Ids : [];
                                             const cCombined = [...cSent1, ...cSent2];
-                                            if (cCombined.includes(ruleId) || (upsell.id && cCombined.includes(upsell.id))) {
+                                            if (
+                                                cCombined.includes(ruleId) || 
+                                                (upsell.id && cCombined.includes(upsell.id)) ||
+                                                (msgSig && cCombined.includes(msgSig))
+                                            ) {
                                                 throw new Error('AlreadySentToPhone');
                                             }
                                         }
@@ -249,7 +277,7 @@ export async function GET(request: Request) {
                                         const cSnap = await txn.get(docRef);
                                         if (cSnap.exists()) {
                                             const cSent1 = Array.isArray(cSnap.data()?.sentUpsellIds) ? cSnap.data()!.sentUpsellIds : [];
-                                            const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
+                                            const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id, msgSig].filter(Boolean))) as string[];
                                             txn.update(docRef, { sentUpsellIds: updatedList });
                                         }
                                     }
@@ -262,6 +290,7 @@ export async function GET(request: Request) {
                                 // Atualiza o conjunto em memória para este telefone
                                 sentForThisPhone.add(ruleId);
                                 if (upsell.id) sentForThisPhone.add(upsell.id);
+                                if (msgSig) sentForThisPhone.add(msgSig);
                                 phoneSentRulesMap.set(cleanPhone, sentForThisPhone);
 
                                 upsellsDone++;
