@@ -237,19 +237,11 @@ export async function GET(request: Request) {
                     for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
                         const upsell = activeUpsells[uIdx];
                         if (upsellsDone >= QUEUE_LIMIT) break;
-
-                        // TRAVA DE SEGURANÇA POR REGRA: Se a regra de upsell foi criada DEPOIS do cadastro do cliente, o cliente é ignorado
-                        const ruleCreatedAt = Number(upsell.createdAt) || 0;
-                        if (ruleCreatedAt > 0 && clientCreatedMs < ruleCreatedAt) {
-                            continue;
-                        }
                         
                         const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
                             ? upsell.id.trim()
-                            : ((upsell as any).ruleId || `rule_${upsell.createdAt || uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`);
+                            : ((upsell as any).ruleId || `rule_${uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`);
 
-                        const msgSig = getMessageSignature(upsell.upsellMessage);
-                        const indexTag = `rule_idx_${uIdx}`;
                         const batchRuleKey = `${cleanPhone}_${ruleId}`;
 
                         // TRAVA POR LOTE NO MESMO RUN: Se esta regra já foi processada para este telefone neste lote, pula
@@ -260,12 +252,10 @@ export async function GET(request: Request) {
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        // TRAVA ABSOLUTA POR NUMERO DE TELEFONE, ID, ASSINATURA E ÍNDICE:
+                        // TRAVA ABSOLUTA POR ID DA REGRA E TELEFONE:
                         const alreadySentToPhone = Boolean(
                             sentForThisPhone.has(ruleId) ||
-                            (upsell.id && sentForThisPhone.has(upsell.id)) ||
-                            (msgSig && sentForThisPhone.has(msgSig)) ||
-                            sentForThisPhone.has(indexTag)
+                            (upsell.id && sentForThisPhone.has(upsell.id))
                         );
 
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySentToPhone) {
@@ -290,9 +280,7 @@ export async function GET(request: Request) {
                                             const cCombined = [...cSent1, ...cSent2];
                                             if (
                                                 cCombined.includes(ruleId) || 
-                                                (upsell.id && cCombined.includes(upsell.id)) ||
-                                                (msgSig && cCombined.includes(msgSig)) ||
-                                                cCombined.includes(indexTag)
+                                                (upsell.id && cCombined.includes(upsell.id))
                                             ) {
                                                 throw new Error('AlreadySentToPhone');
                                             }
@@ -303,7 +291,7 @@ export async function GET(request: Request) {
                                     // 2. ESCRITAS APÓS TODAS AS LEITURAS CONCLUÍDAS
                                     for (const item of docSnapshots) {
                                         const cSent1 = Array.isArray(item.cData?.sentUpsellIds) ? item.cData.sentUpsellIds : [];
-                                        const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id, msgSig, indexTag].filter(Boolean))) as string[];
+                                        const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
                                         txn.update(item.docRef, { sentUpsellIds: updatedList });
                                     }
 
@@ -317,8 +305,6 @@ export async function GET(request: Request) {
                                 // Atualiza o conjunto em memória para este telefone
                                 sentForThisPhone.add(ruleId);
                                 if (upsell.id) sentForThisPhone.add(upsell.id);
-                                if (msgSig) sentForThisPhone.add(msgSig);
-                                sentForThisPhone.add(indexTag);
                                 phoneSentRulesMap.set(cleanPhone, sentForThisPhone);
 
                                 upsellsDone++;
