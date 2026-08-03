@@ -191,140 +191,127 @@ export async function GET(request: Request) {
             }
             */
 
-            /* --- 2. PROCESSAR UPSELL (MENSAGEM PURA) --- */
-            const STRICT_CUTOFF_MS = 1785303960000; // 29/07/2026 02:46:00
+            /* --- 2. PROCESSAR UPSELL ---
+             * Lógica:
+             * - Para cada cliente ativo cadastrado APÓS a regra ser criada
+             * - Para cada regra de upsell ativa configurada
+             * - Se o tempo decorrido desde o cadastro do cliente >= delay configurado
+             * - E a regra ainda não foi enviada para este número de telefone
+             * → Marcar como enviado (transação atômica) e enviar mensagem
+             * Zero duplicatas. Cada ruleId é enviado 1x por número canônico.
+             */
+            const STRICT_CUTOFF_MS = 1785303960000; // 29/07/2026 02:46:00 — clientes antes disso são ignorados
 
-            let activeUpsells: UpsellConfig[] = [];
-            if (settings?.upsells && settings.upsells.length > 0) {
-                activeUpsells = settings.upsells.filter(u => Boolean(u.isActive) && Boolean(u.upsellMessage && u.upsellMessage.trim()));
-            }
+            const activeUpsells: UpsellConfig[] = (settings?.upsells || []).filter(
+                (u) => Boolean(u.isActive) && Boolean(u.upsellMessage?.trim())
+            );
 
             const upsellToken = settings.webhookToken || settings.billingWebhookToken;
 
             if (activeUpsells.length > 0 && upsellToken) {
                 let upsellsDone = 0;
-                const processedPhonesInThisBatch = new Set<string>();
 
-                // Mapeamento inicial em memória de todos os telefones canônicos e regras já enviadas
+                // Mapa em memória: telefone canônico → conjunto de ruleIds já enviados
                 const phoneSentRulesMap = new Map<string, Set<string>>();
                 for (const c of clients) {
-                    const cleanP = getCanonicalPhone(c.phone);
-                    if (!cleanP) continue;
-                    if (!phoneSentRulesMap.has(cleanP)) {
-                        phoneSentRulesMap.set(cleanP, new Set<string>());
-                    }
-                    const setForPhone = phoneSentRulesMap.get(cleanP)!;
-                    const r1 = Array.isArray(c.sentUpsellIds) ? c.sentUpsellIds : (typeof c.sentUpsellIds === 'string' ? [c.sentUpsellIds] : []);
-                    const r2 = Array.isArray(c.sentUpsell2Ids) ? c.sentUpsell2Ids : (typeof c.sentUpsell2Ids === 'string' ? [c.sentUpsell2Ids] : []);
-                    [...r1, ...r2].forEach(id => { if (id) setForPhone.add(id); });
+                    const cp = getCanonicalPhone(c.phone);
+                    if (!cp) continue;
+                    if (!phoneSentRulesMap.has(cp)) phoneSentRulesMap.set(cp, new Set<string>());
+                    const s = phoneSentRulesMap.get(cp)!;
+                    const ids1 = Array.isArray(c.sentUpsellIds) ? c.sentUpsellIds as string[] : [];
+                    const ids2 = Array.isArray(c.sentUpsell2Ids) ? c.sentUpsell2Ids as string[] : [];
+                    [...ids1, ...ids2].forEach((id) => { if (id) s.add(id); });
                 }
 
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
 
-                    const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
-
-                    // TRAVA DE SEGURANÇA ABSOLUTA: Ignora clientes antigos cadastrados antes de 29/07/2026 02:46:00
-                    if (clientCreatedMs < STRICT_CUTOFF_MS) {
-                        continue;
-                    }
+                    const clientCreatedMs = getTimestampMs(client.createdAt) || 0;
+                    if (clientCreatedMs < STRICT_CUTOFF_MS) continue; // Ignora clientes antigos
 
                     const cleanPhone = getCanonicalPhone(client.phone);
                     if (!cleanPhone) continue;
 
-                    const sentForThisPhone = phoneSentRulesMap.get(cleanPhone) || new Set<string>();
+                    // Todos os documentos do mesmo telefone (para marcar sentUpsellIds em todos)
+                    const samePhoneDocs = clients.filter((c) => getCanonicalPhone(c.phone) === cleanPhone);
 
-                    for (let uIdx = 0; uIdx < activeUpsells.length; uIdx++) {
-                        const upsell = activeUpsells[uIdx];
+                    for (const upsell of activeUpsells) {
                         if (upsellsDone >= QUEUE_LIMIT) break;
-                        
-                        const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
+
+                        // ID permanente da regra (gerado na UI e nunca alterado)
+                        const ruleId: string = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
                             ? upsell.id.trim()
-                            : ((upsell as any).ruleId || `rule_${uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`);
+                            : `rule_${(upsell.upsellMessage || '').slice(0, 20).replace(/\s+/g, '_')}`;
 
-                        const batchRuleKey = `${cleanPhone}_${ruleId}`;
+                        // Se a regra foi criada DEPOIS do cliente → cliente não elegível
+                        const ruleCreatedMs = Number(upsell.createdAt) || 0;
+                        if (ruleCreatedMs > 0 && clientCreatedMs < ruleCreatedMs) continue;
 
-                        // TRAVA POR LOTE NO MESMO RUN: Se esta regra já foi processada para este telefone neste lote, pula
-                        if (processedPhonesInThisBatch.has(batchRuleKey)) {
-                            continue;
+                        // Verifica se ainda não está na hora de enviar
+                        const delayMs = (Number(upsell.upsellDelayMinutes) || 0) * 60 * 1000;
+                        if ((now.getTime() - clientCreatedMs) < delayMs) continue;
+
+                        // Já foi enviado para este telefone?
+                        const sentForPhone = phoneSentRulesMap.get(cleanPhone) || new Set<string>();
+                        if (sentForPhone.has(ruleId)) continue;
+
+                        // ── Transação atômica: todas as leituras antes de todas as escritas ──
+                        let sent = false;
+                        try {
+                            await runTransaction(db, async (txn) => {
+                                const snapshots: Array<{ ref: any; existingIds: string[] }> = [];
+
+                                // FASE 1: apenas leituras
+                                for (const pd of samePhoneDocs) {
+                                    const ref = doc(db, 'users', userId, 'clients', pd.id);
+                                    const snap = await txn.get(ref);
+                                    if (!snap.exists()) continue;
+                                    const d = snap.data();
+                                    const sent1 = Array.isArray(d?.sentUpsellIds) ? d.sentUpsellIds as string[] : [];
+                                    const sent2 = Array.isArray(d?.sentUpsell2Ids) ? d.sentUpsell2Ids as string[] : [];
+                                    if ([...sent1, ...sent2].includes(ruleId)) {
+                                        throw new Error('AlreadySent');
+                                    }
+                                    snapshots.push({ ref, existingIds: sent1 });
+                                }
+
+                                // FASE 2: apenas escritas (somente após todas as leituras)
+                                for (const item of snapshots) {
+                                    const updated = Array.from(new Set([...item.existingIds, ruleId]));
+                                    txn.update(item.ref, { sentUpsellIds: updated });
+                                }
+
+                                sent = true;
+                            });
+                        } catch (e: any) {
+                            if (e?.message !== 'AlreadySent') {
+                                console.error(`[cron/upsell] Falha na transação: userId=${userId} phone=${cleanPhone} ruleId=${ruleId}:`, e?.message);
+                            }
                         }
+                        // ──────────────────────────────────────────────────────────────────
 
-                        const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
-                        const delayMs = delayMinutes * 60 * 1000;
+                        if (sent) {
+                            // Atualiza mapa em memória para evitar re-envio neste mesmo batch
+                            sentForPhone.add(ruleId);
+                            phoneSentRulesMap.set(cleanPhone, sentForPhone);
+                            upsellsDone++;
 
-                        // TRAVA ABSOLUTA POR ID DA REGRA E TELEFONE:
-                        const alreadySentToPhone = Boolean(
-                            sentForThisPhone.has(ruleId) ||
-                            (upsell.id && sentForThisPhone.has(upsell.id))
-                        );
-
-                        if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySentToPhone) {
-                            processedPhonesInThisBatch.add(batchRuleKey);
-                            let processed = false;
-                            
-                            // Documentos do mesmo usuário que possuem o MESMO número de telefone canônico
-                            const matchingSamePhoneDocs = clients.filter(c => getCanonicalPhone(c.phone) === cleanPhone);
+                            const msg = formatMessageWithClient(upsell.upsellMessage, client);
+                            console.log(`[cron/upsell] Enviando ruleId=${ruleId} → ${cleanPhone}: ${msg.slice(0, 60)}`);
 
                             try {
-                                await runTransaction(db, async (txn) => {
-                                    const docSnapshots: Array<{ docRef: any; cData: any }> = [];
-
-                                    // 1. LEITURAS PRIMEIRO (Requisito obrigatório de transação do Firestore)
-                                    for (const sameDoc of matchingSamePhoneDocs) {
-                                        const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
-                                        const cSnap = await txn.get(docRef);
-                                        if (cSnap.exists()) {
-                                            const cData = cSnap.data();
-                                            const cSent1 = Array.isArray(cData?.sentUpsellIds) ? cData.sentUpsellIds : [];
-                                            const cSent2 = Array.isArray(cData?.sentUpsell2Ids) ? cData.sentUpsell2Ids : [];
-                                            const cCombined = [...cSent1, ...cSent2];
-                                            if (
-                                                cCombined.includes(ruleId) || 
-                                                (upsell.id && cCombined.includes(upsell.id))
-                                            ) {
-                                                throw new Error('AlreadySentToPhone');
-                                            }
-                                            docSnapshots.push({ docRef, cData });
-                                        }
-                                    }
-
-                                    // 2. ESCRITAS APÓS TODAS AS LEITURAS CONCLUÍDAS
-                                    for (const item of docSnapshots) {
-                                        const cSent1 = Array.isArray(item.cData?.sentUpsellIds) ? item.cData.sentUpsellIds : [];
-                                        const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id].filter(Boolean))) as string[];
-                                        txn.update(item.docRef, { sentUpsellIds: updatedList });
-                                    }
-
-                                    processed = true;
-                                });
-                            } catch (e: any) {
-                                console.error(`cron/run upsell transaction error for ${userId} (${cleanPhone}):`, e?.message || e);
-                            }
-
-                            if (processed) {
-                                // Atualiza o conjunto em memória para este telefone
-                                sentForThisPhone.add(ruleId);
-                                if (upsell.id) sentForThisPhone.add(upsell.id);
-                                phoneSentRulesMap.set(cleanPhone, sentForThisPhone);
-
-                                upsellsDone++;
-                                const formattedMessage = formatMessageWithClient(upsell.upsellMessage, client);
-
-                                console.log(`cron/run: sending text upsell ruleId ${ruleId} to ${cleanPhone}:`, formattedMessage.slice(0, 50));
-                                const uazRes = await fetch('https://pjcontas.uazapi.com/send/text', {
+                                const res = await fetch('https://pjcontas.uazapi.com/send/text', {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
                                         'token': upsellToken,
                                         'apikey': upsellToken,
                                     },
-                                    body: JSON.stringify({
-                                        number: cleanPhone,
-                                        text: formattedMessage,
-                                    }),
+                                    body: JSON.stringify({ number: cleanPhone, text: msg }),
                                 });
-                                const uazResText = await uazRes.text();
-                                console.log('cron/run: UAZAPI text status:', uazRes.status, 'body:', uazResText);
+                                console.log(`[cron/upsell] UAZAPI status: ${res.status}`);
+                            } catch (fetchErr: any) {
+                                console.error(`[cron/upsell] Erro ao enviar mensagem:`, fetchErr?.message);
                             }
                         }
                     }
