@@ -82,7 +82,9 @@ export type Client = {
   upsellSent?: boolean;
   sentUpsellIds?: string[];
   sentUpsell2Ids?: string[];
+  sentUpsellMenuIds?: string[];
   sentRemarketingIds?: string[];
+
   agentId?: string;
   agentName?: string;
   n8nExported?: boolean;
@@ -120,6 +122,8 @@ export type Settings = {
   upsellDelayMinutes?: number;
   upsellMessage?: string;
   upsells?: UpsellConfig[];
+  upsellMenus?: UpsellMenuConfig[];
+
   isSupportAutomationActive?: boolean;
   supportStartedMessage?: string;
   supportFinishedMessage?: string;
@@ -164,6 +168,24 @@ export type UpsellConfig = {
   buttons?: UpsellButtonConfig[];
   createdAt?: number;
 };
+
+export type UpsellMenuButton = {
+  id: string;
+  label: string;   // texto do botão, ex: "Comprar Agora"
+  action: string;  // URL, "call:+55...", "copy:código" ou texto simples de resposta
+};
+
+export type UpsellMenuConfig = {
+  id: string;
+  isActive: boolean;
+  upsellDelayMinutes: number;
+  createdAt?: number;
+  text: string;          // mensagem principal (suporta {cliente}, {telefone}, etc.)
+  footerText?: string;   // rodapé opcional
+  imageUrl?: string;     // imagem opcional
+  buttons: UpsellMenuButton[]; // ao menos 1 botão obrigatório
+};
+
 
 export type Subscription = {
   id: string;

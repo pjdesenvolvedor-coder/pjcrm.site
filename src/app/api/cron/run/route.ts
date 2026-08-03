@@ -3,7 +3,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, runTransaction, Timestamp, arrayUnion } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { format, addDays } from 'date-fns';
-import type { Client, Settings, UserProfile, ScheduledMessage, UpsellConfig } from '@/lib/types';
+import type { Client, Settings, UserProfile, ScheduledMessage, UpsellConfig, UpsellMenuConfig } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -245,6 +245,120 @@ export async function GET(request: Request) {
                                 }
                             } else {
                                 console.log(`[upsell] Batch dedup: clientId=${client.id} phone=${cleanPhone} ruleId=${ruleId} - marcado, sem reenvio`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* --- 2b. PROCESSAR UPSELL COM MENU ---
+             * Mesma logica do upsell normal, mas chama /send/menu com botoes interativos.
+             * Dedup via sentUpsellMenuIds por documento.
+             */
+            const activeUpsellMenus: UpsellMenuConfig[] = (settings?.upsellMenus || []).filter(
+                (u) => Boolean(u.isActive) && Boolean(u.text?.trim()) && Array.isArray(u.buttons) && u.buttons.length > 0
+            );
+
+            if (activeUpsellMenus.length > 0 && upsellToken) {
+                let menuDone = 0;
+                const sentMenuInThisBatch = new Map<string, Set<string>>();
+
+                for (const client of activeClients) {
+                    if (menuDone >= QUEUE_LIMIT) break;
+
+                    const clientCreatedMs = getTimestampMs(client.createdAt) || 0;
+                    if (!clientCreatedMs) continue;
+
+                    const cleanPhone = getCanonicalPhone(client.phone);
+                    if (!cleanPhone) continue;
+
+                    const docMenuSentIds = new Set<string>(
+                        Array.isArray(client.sentUpsellMenuIds) ? client.sentUpsellMenuIds as string[] : []
+                    );
+
+                    const clientDocRef = doc(db, 'users', userId, 'clients', client.id);
+
+                    for (const upsellMenu of activeUpsellMenus) {
+                        if (menuDone >= QUEUE_LIMIT) break;
+
+                        const ruleId: string = (upsellMenu.id && typeof upsellMenu.id === 'string' && upsellMenu.id.trim())
+                            ? upsellMenu.id.trim()
+                            : `menu_${(upsellMenu.text || '').slice(0, 20).replace(/\s+/g, '_')}`;
+
+                        // Regra criada depois do cliente -> nao elegivel
+                        const ruleCreatedMs = Number(upsellMenu.createdAt) || 0;
+                        if (ruleCreatedMs > 0 && clientCreatedMs < ruleCreatedMs) continue;
+
+                        // Tempo de espera nao passou ainda
+                        const delayMs = (Number(upsellMenu.upsellDelayMinutes) || 0) * 60 * 1000;
+                        if ((now.getTime() - clientCreatedMs) < delayMs) continue;
+
+                        // Este documento ja recebeu este menu?
+                        if (docMenuSentIds.has(ruleId)) continue;
+
+                        // Ja enviou para este telefone neste run?
+                        const alreadySentMenuInBatch = sentMenuInThisBatch.get(cleanPhone)?.has(ruleId) ?? false;
+
+                        // Transacao atomica: marca apenas este documento
+                        let markedMenu = false;
+                        try {
+                            await runTransaction(db, async (txn) => {
+                                const snap = await txn.get(clientDocRef);
+                                if (!snap.exists()) throw new Error('DocNotFound');
+                                const d = snap.data();
+                                const existing = Array.isArray(d?.sentUpsellMenuIds) ? d.sentUpsellMenuIds as string[] : [];
+                                if (existing.includes(ruleId)) throw new Error('AlreadySent');
+                                txn.update(clientDocRef, { sentUpsellMenuIds: Array.from(new Set([...existing, ruleId])) });
+                                markedMenu = true;
+                            });
+                        } catch (e: any) {
+                            if (e?.message !== 'AlreadySent' && e?.message !== 'DocNotFound') {
+                                console.error(`[upsell-menu] Transacao falhou: clientId=${client.id} ruleId=${ruleId}:`, e?.message);
+                            }
+                        }
+
+                        if (markedMenu) {
+                            docMenuSentIds.add(ruleId);
+
+                            if (!alreadySentMenuInBatch) {
+                                if (!sentMenuInThisBatch.has(cleanPhone)) sentMenuInThisBatch.set(cleanPhone, new Set());
+                                sentMenuInThisBatch.get(cleanPhone)!.add(ruleId);
+                                menuDone++;
+
+                                // Montar choices (botoes) para /send/menu
+                                const choices = upsellMenu.buttons.map((btn) => {
+                                    // Formato: "label|action" ou so "label" para resposta simples
+                                    const action = (btn.action || '').trim();
+                                    const label = (btn.label || '').trim();
+                                    if (!action) return label;
+                                    return `${label}|${action}`;
+                                });
+
+                                const menuText = formatMessageWithClient(upsellMenu.text, client);
+                                const menuFooter = upsellMenu.footerText ? formatMessageWithClient(upsellMenu.footerText, client) : undefined;
+
+                                const menuPayload: any = {
+                                    number: cleanPhone,
+                                    type: 'button',
+                                    text: menuText,
+                                    choices,
+                                };
+                                if (menuFooter) menuPayload.footerText = menuFooter;
+                                if (upsellMenu.imageUrl?.trim()) menuPayload.imageButton = upsellMenu.imageUrl.trim();
+
+                                console.log(`[upsell-menu] ENVIANDO ruleId=${ruleId} -> ${cleanPhone}`);
+                                try {
+                                    const res = await fetch('https://pjcontas.uazapi.com/send/menu', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', 'token': upsellToken, 'apikey': upsellToken },
+                                        body: JSON.stringify(menuPayload),
+                                    });
+                                    console.log(`[upsell-menu] UAZAPI status: ${res.status}`);
+                                } catch (fetchErr: any) {
+                                    console.error(`[upsell-menu] Erro ao enviar:`, fetchErr?.message);
+                                }
+                            } else {
+                                console.log(`[upsell-menu] Batch dedup: clientId=${client.id} phone=${cleanPhone} ruleId=${ruleId}`);
                             }
                         }
                     }
