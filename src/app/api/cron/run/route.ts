@@ -277,7 +277,9 @@ export async function GET(request: Request) {
 
                             try {
                                 await runTransaction(db, async (txn) => {
-                                    // 1. Verifica se qualquer um dos documentos desse número já recebeu a regra, a assinatura ou o índice
+                                    const docSnapshots: Array<{ docRef: any; cData: any }> = [];
+
+                                    // 1. LEITURAS PRIMEIRO (Requisito obrigatório de transação do Firestore)
                                     for (const sameDoc of matchingSamePhoneDocs) {
                                         const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
                                         const cSnap = await txn.get(docRef);
@@ -294,23 +296,22 @@ export async function GET(request: Request) {
                                             ) {
                                                 throw new Error('AlreadySentToPhone');
                                             }
+                                            docSnapshots.push({ docRef, cData });
                                         }
                                     }
 
-                                    // 2. Atualiza TODOS os documentos desse número de telefone para marcar como enviado
-                                    for (const sameDoc of matchingSamePhoneDocs) {
-                                        const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
-                                        const cSnap = await txn.get(docRef);
-                                        if (cSnap.exists()) {
-                                            const cSent1 = Array.isArray(cSnap.data()?.sentUpsellIds) ? cSnap.data()!.sentUpsellIds : [];
-                                            const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id, msgSig, indexTag].filter(Boolean))) as string[];
-                                            txn.update(docRef, { sentUpsellIds: updatedList });
-                                        }
+                                    // 2. ESCRITAS APÓS TODAS AS LEITURAS CONCLUÍDAS
+                                    for (const item of docSnapshots) {
+                                        const cSent1 = Array.isArray(item.cData?.sentUpsellIds) ? item.cData.sentUpsellIds : [];
+                                        const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id, msgSig, indexTag].filter(Boolean))) as string[];
+                                        txn.update(item.docRef, { sentUpsellIds: updatedList });
                                     }
 
                                     processed = true;
                                 });
-                            } catch (e) {}
+                            } catch (e: any) {
+                                console.error(`cron/run upsell transaction error for ${userId} (${cleanPhone}):`, e?.message || e);
+                            }
 
                             if (processed) {
                                 // Atualiza o conjunto em memória para este telefone
