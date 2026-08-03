@@ -104,10 +104,10 @@ export async function GET(request: Request) {
         for (const userDoc of usersSnapshot.docs) {
             const userId = userDoc.id;
 
-            // TRAVA ANTI-DUPLICAÇÃO ENTRE PCS/ABAS: Evita execuções simultâneas para o mesmo usuário dentro de 10 segundos
+            // TRAVA ANTI-DUPLICAÇÃO ENTRE PCS/ABAS: Evita execuções simultâneas em milissegundos (2 segundos)
             const nowMs = Date.now();
             const lastUserRun = userLocks.get(userId) || 0;
-            if (nowMs - lastUserRun < 10000) {
+            if (nowMs - lastUserRun < 2000) {
                 continue;
             }
             userLocks.set(userId, nowMs);
@@ -119,7 +119,7 @@ export async function GET(request: Request) {
                 await runTransaction(db, async (txn) => {
                     const lockSnap = await txn.get(cronLockRef);
                     const lastRunMs = lockSnap.exists() ? (lockSnap.data()?.lastRunMs || 0) : 0;
-                    if (nowMs - lastRunMs < 10000) {
+                    if (nowMs - lastRunMs < 2000) {
                         throw new Error('LockActive');
                     }
                     txn.set(cronLockRef, { lastRunMs: nowMs, updatedVia: 'cron' }, { merge: true });
