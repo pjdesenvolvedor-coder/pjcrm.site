@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Plus, Trash2, MessageSquare, Image, Clock, MousePointerClick } from 'lucide-react';
+import { Plus, Trash2, MessageSquare, Image, Clock, MousePointerClick, Upload, X } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -248,7 +248,7 @@ function UpsellMenuCard({ index, form, onRemove }: { index: number; form: any; o
           <Label>minuto(s) do cadastro</Label>
         </div>
 
-        {/* Imagem (opcional) */}
+        {/* Imagem (opcional) - Seleção do PC (Base64) ou URL */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Image className="h-4 w-4 text-muted-foreground" />
@@ -259,14 +259,63 @@ function UpsellMenuCard({ index, form, onRemove }: { index: number; form: any; o
             name={`upsellMenus.${index}.imageUrl`}
             render={({ field }) => (
               <FormItem>
-                <FormControl>
-                  <Input placeholder="https://exemplo.com/imagem.jpg" {...field} value={field.value ?? ''} />
-                </FormControl>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs font-medium bg-muted hover:bg-accent px-3 py-2 rounded-md border cursor-pointer shrink-0 transition-colors">
+                      <Upload className="h-3.5 w-3.5" />
+                      Escolher Imagem do PC
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              field.onChange(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    <span className="text-xs text-muted-foreground">ou cole a URL abaixo</span>
+                  </div>
+
+                  <FormControl>
+                    <Input
+                      placeholder="https://exemplo.com/imagem.jpg"
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+
+                  {field.value && (
+                    <div className="relative inline-block border rounded-md p-1 bg-muted/40 mt-1">
+                      <img
+                        src={field.value}
+                        alt="Prévia"
+                        className="h-28 max-w-xs object-cover rounded"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-5 w-5 rounded-full"
+                        onClick={() => field.onChange('')}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+
 
         {/* Mensagem principal */}
         <FormField
