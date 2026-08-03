@@ -200,8 +200,6 @@ export async function GET(request: Request) {
              * → Marcar como enviado (transação atômica) e enviar mensagem
              * Zero duplicatas. Cada ruleId é enviado 1x por número canônico.
              */
-            const STRICT_CUTOFF_MS = 1785303960000; // 29/07/2026 02:46:00 — clientes antes disso são ignorados
-
             const activeUpsells: UpsellConfig[] = (settings?.upsells || []).filter(
                 (u) => Boolean(u.isActive) && Boolean(u.upsellMessage?.trim())
             );
@@ -227,7 +225,7 @@ export async function GET(request: Request) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
 
                     const clientCreatedMs = getTimestampMs(client.createdAt) || 0;
-                    if (clientCreatedMs < STRICT_CUTOFF_MS) continue; // Ignora clientes antigos
+                    if (!clientCreatedMs) continue; // Ignora clientes sem data de cadastro
 
                     const cleanPhone = getCanonicalPhone(client.phone);
                     if (!cleanPhone) continue;
@@ -334,8 +332,7 @@ export async function GET(request: Request) {
             // Remarketing de Cadastro
             for (const client of clients) {
                 if (rmkDone >= QUEUE_LIMIT) break;
-                const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
-                if (clientCreatedMs < STRICT_CUTOFF_MS) continue;
+                if (!client.createdAt) continue;
 
                 for (const config of activeSignupRemarketings) {
                     if (rmkDone >= QUEUE_LIMIT) break;
@@ -368,8 +365,7 @@ export async function GET(request: Request) {
             // Remarketing de Vencimento
             for (const client of overdueStatusClients) {
                 if (rmkDone >= QUEUE_LIMIT) break;
-                const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
-                if (clientCreatedMs < STRICT_CUTOFF_MS) continue;
+                if (!client.createdAt) continue;
 
                 for (const config of activeDueDateRemarketings) {
                     if (rmkDone >= QUEUE_LIMIT) break;
@@ -405,8 +401,7 @@ export async function GET(request: Request) {
             const dueMessages = scheduled.filter(msg => {
                 if (msg.status !== 'Scheduled') return false;
                 const sendAtMs = msg.sendAt ? getTimestampMs(msg.sendAt) || 0 : 0;
-                if (sendAtMs < STRICT_CUTOFF_MS) return false; // TRAVA DE SEGURANÇA: Ignora mensagens agendadas antes do marco de 29/07/2026 02:46:00
-                return sendAtMs <= now.getTime();
+                return sendAtMs > 0 && sendAtMs <= now.getTime();
             }).slice(0, QUEUE_LIMIT);
 
             for (const msg of dueMessages) {
