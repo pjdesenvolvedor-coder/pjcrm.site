@@ -88,16 +88,20 @@ export default function UpsellPage() {
 
   const onSubmit = (data: UpsellFormData) => {
     if (settingsDocRef) {
-      const existingUpsellsMap = new Map((settings?.upsells || []).map(u => [u.id, u.createdAt]));
+      const existingUpsells = settings?.upsells || [];
       const now = Date.now();
       
-      const updatedUpsells = data.upsells.map(u => {
-        const existingTimestamp = existingUpsellsMap.get(u.id) || u.createdAt;
+      const updatedUpsells = data.upsells.map((u, index) => {
+        const existing = existingUpsells[index] || existingUpsells.find(ex => ex.id === u.id);
+        const permanentId = existing?.id || (u.id && typeof u.id === 'string' && u.id.trim() ? u.id.trim() : crypto.randomUUID());
+        const permanentCreatedAt = existing?.createdAt || u.createdAt || now;
+
         return {
           ...u,
-          id: (u.id && typeof u.id === 'string' && u.id.trim()) ? u.id.trim() : crypto.randomUUID(),
+          id: permanentId,
+          ruleId: permanentId,
           upsellDelayMinutes: Number(u.upsellDelayMinutes) || 0,
-          createdAt: (existingTimestamp && Number(existingTimestamp) > 0) ? Number(existingTimestamp) : now
+          createdAt: Number(permanentCreatedAt) || now
         };
       });
 

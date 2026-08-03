@@ -112,6 +112,27 @@ export async function GET(request: Request) {
             }
             userLocks.set(userId, nowMs);
 
+            // TRAVA GLOBAL DISTRIBUÍDA VIA FIRESTORE: Bloqueia chamadas concorrentes entre todos os servidores/navegadores
+            const cronLockRef = doc(db, 'users', userId, 'locks', 'cron_lock');
+            let isUserLockAcquired = false;
+            try {
+                await runTransaction(db, async (txn) => {
+                    const lockSnap = await txn.get(cronLockRef);
+                    const lastRunMs = lockSnap.exists() ? (lockSnap.data()?.lastRunMs || 0) : 0;
+                    if (nowMs - lastRunMs < 10000) {
+                        throw new Error('LockActive');
+                    }
+                    txn.set(cronLockRef, { lastRunMs: nowMs, updatedVia: 'cron' }, { merge: true });
+                    isUserLockAcquired = true;
+                });
+            } catch (e) {
+                isUserLockAcquired = false;
+            }
+
+            if (!isUserLockAcquired) {
+                continue;
+            }
+
             const userProfile = userDoc.data() as UserProfile;
 
             // Se expiirou assinatura do admin, pula
@@ -231,17 +252,19 @@ export async function GET(request: Request) {
                         
                         const ruleId = (upsell.id && typeof upsell.id === 'string' && upsell.id.trim())
                             ? upsell.id.trim()
-                            : `rule_${upsell.createdAt || uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`;
+                            : ((upsell as any).ruleId || `rule_${upsell.createdAt || uIdx}_${(upsell.upsellMessage || '').slice(0, 15).replace(/\s+/g, '_')}`);
 
                         const msgSig = getMessageSignature(upsell.upsellMessage);
+                        const indexTag = `rule_idx_${uIdx}`;
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
-                        // TRAVA ABSOLUTA POR NUMERO DE TELEFONE & ASSINATURA: Se este número de telefone (em qualquer documento/produto) já recebeu a regra/conteúdo, PULA!
+                        // TRAVA ABSOLUTA POR NUMERO DE TELEFONE, ID, ASSINATURA E ÍNDICE:
                         const alreadySentToPhone = Boolean(
                             sentForThisPhone.has(ruleId) ||
                             (upsell.id && sentForThisPhone.has(upsell.id)) ||
-                            (msgSig && sentForThisPhone.has(msgSig))
+                            (msgSig && sentForThisPhone.has(msgSig)) ||
+                            sentForThisPhone.has(indexTag)
                         );
 
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySentToPhone) {
@@ -252,7 +275,7 @@ export async function GET(request: Request) {
 
                             try {
                                 await runTransaction(db, async (txn) => {
-                                    // 1. Verifica se qualquer um dos documentos desse número já recebeu a regra ou a assinatura
+                                    // 1. Verifica se qualquer um dos documentos desse número já recebeu a regra, a assinatura ou o índice
                                     for (const sameDoc of matchingSamePhoneDocs) {
                                         const docRef = doc(db, 'users', userId, 'clients', sameDoc.id);
                                         const cSnap = await txn.get(docRef);
@@ -264,7 +287,8 @@ export async function GET(request: Request) {
                                             if (
                                                 cCombined.includes(ruleId) || 
                                                 (upsell.id && cCombined.includes(upsell.id)) ||
-                                                (msgSig && cCombined.includes(msgSig))
+                                                (msgSig && cCombined.includes(msgSig)) ||
+                                                cCombined.includes(indexTag)
                                             ) {
                                                 throw new Error('AlreadySentToPhone');
                                             }
@@ -277,7 +301,7 @@ export async function GET(request: Request) {
                                         const cSnap = await txn.get(docRef);
                                         if (cSnap.exists()) {
                                             const cSent1 = Array.isArray(cSnap.data()?.sentUpsellIds) ? cSnap.data()!.sentUpsellIds : [];
-                                            const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id, msgSig].filter(Boolean))) as string[];
+                                            const updatedList = Array.from(new Set([...cSent1, ruleId, upsell.id, msgSig, indexTag].filter(Boolean))) as string[];
                                             txn.update(docRef, { sentUpsellIds: updatedList });
                                         }
                                     }
@@ -291,6 +315,7 @@ export async function GET(request: Request) {
                                 sentForThisPhone.add(ruleId);
                                 if (upsell.id) sentForThisPhone.add(upsell.id);
                                 if (msgSig) sentForThisPhone.add(msgSig);
+                                sentForThisPhone.add(indexTag);
                                 phoneSentRulesMap.set(cleanPhone, sentForThisPhone);
 
                                 upsellsDone++;
