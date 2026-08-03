@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, runTransaction, Timestamp, arrayUnion } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
-import { format, differenceInDays, addDays } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import type { Client, Settings, UserProfile, ScheduledMessage, UpsellConfig } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,27 @@ function getTimestampMs(val: any): number | null {
         return isNaN(ms) ? null : ms;
     }
     return null;
+}
+
+// Calcula dias calendário em fuso Brasília (UTC-3)
+// 02/08 23:59 -> 03/08 00:01 = 1 dia (ignora hora, compara só a data)
+function calendarDaysBrasilia(now: Date, startDate: Date): number {
+    const offset = -3 * 60 * 60 * 1000; // UTC-3
+    const nowBr = new Date(now.getTime() + offset);
+    const startBr = new Date(startDate.getTime() + offset);
+    const nowDay = Date.UTC(nowBr.getUTCFullYear(), nowBr.getUTCMonth(), nowBr.getUTCDate());
+    const startDay = Date.UTC(startBr.getUTCFullYear(), startBr.getUTCMonth(), startBr.getUTCDate());
+    return Math.round((nowDay - startDay) / (1000 * 60 * 60 * 24));
+}
+
+// Verifica se o horário atual (Brasília) já passou do horário configurado
+// sendTime ex: "12:30" — se não configurado, envia sempre
+function isAfterSendTime(nowUtc: Date, sendTime: string | undefined): boolean {
+    if (!sendTime) return true;
+    const offset = -3 * 60 * 60 * 1000;
+    const nowBr = new Date(nowUtc.getTime() + offset);
+    const [h, m] = sendTime.split(':').map(Number);
+    return (nowBr.getUTCHours() * 60 + nowBr.getUTCMinutes()) >= (h * 60 + m);
 }
 
 function formatDateSafe(val: any): string {
@@ -241,6 +262,10 @@ export async function GET(request: Request) {
                 ? (settings.postDueDateRemarketings?.filter(r => r.isActive && r.message) || []) : [];
             let rmkDone = 0;
 
+            // Horários configurados para envio (Brasília)
+            const signupSendTime = settings.postSignupSendTime;    // ex: "12:30"
+            const dueDateSendTimeStr = settings.postDueDateSendTime; // ex: "09:00"
+
             for (const client of clients) {
                 if (rmkDone >= QUEUE_LIMIT) break;
                 if (!client.createdAt) continue;
@@ -248,8 +273,9 @@ export async function GET(request: Request) {
                     if (rmkDone >= QUEUE_LIMIT) break;
                     const startDate = client.createdAt?.toDate();
                     if (startDate && (!config.createdAt || client.createdAt!.toMillis() >= config.createdAt)) {
-                        const daysDiff = differenceInDays(now, startDate);
-                        if (daysDiff >= config.days && !client.sentRemarketingIds?.includes(config.id)) {
+                        const daysDiff = calendarDaysBrasilia(now, startDate);
+                        // Dias calendário atingidos E horário de envio configurado já passou
+                        if (daysDiff >= config.days && isAfterSendTime(now, signupSendTime) && !client.sentRemarketingIds?.includes(config.id)) {
                             const ref = doc(db, 'users', userId, 'clients', client.id);
                             let processed = false;
                             try {
@@ -279,8 +305,9 @@ export async function GET(request: Request) {
                     if (rmkDone >= QUEUE_LIMIT) break;
                     const startDate = client.dueDate?.toDate();
                     if (startDate && (!config.createdAt || client.createdAt!.toMillis() >= config.createdAt)) {
-                        const daysDiff = differenceInDays(now, startDate);
-                        if (daysDiff >= config.days && !client.sentRemarketingIds?.includes(config.id)) {
+                        const daysDiff = calendarDaysBrasilia(now, startDate);
+                        // Dias calendário atingidos E horário de envio configurado já passou
+                        if (daysDiff >= config.days && isAfterSendTime(now, dueDateSendTimeStr) && !client.sentRemarketingIds?.includes(config.id)) {
                             const ref = doc(db, 'users', userId, 'clients', client.id);
                             let processed = false;
                             try {

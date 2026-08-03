@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { AlarmClock, UserPlus, Plus, Trash2 } from 'lucide-react';
+import { AlarmClock, UserPlus, Plus, Trash2, Clock } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,6 +33,8 @@ const remarketingConfigSchema = z.object({
 const remarketingSchema = z.object({
   postSignupRemarketings: z.array(remarketingConfigSchema),
   postDueDateRemarketings: z.array(remarketingConfigSchema),
+  postSignupSendTime: z.string().optional(),
+  postDueDateSendTime: z.string().optional(),
 });
 
 type RemarketingFormData = z.infer<typeof remarketingSchema>;
@@ -56,6 +58,8 @@ export default function RemarketingPage() {
     defaultValues: {
       postSignupRemarketings: [],
       postDueDateRemarketings: [],
+      postSignupSendTime: '',
+      postDueDateSendTime: '',
     },
   });
 
@@ -99,6 +103,8 @@ export default function RemarketingPage() {
       form.reset({
         postSignupRemarketings: initialSignup,
         postDueDateRemarketings: initialDueDate,
+        postSignupSendTime: settings.postSignupSendTime || '',
+        postDueDateSendTime: settings.postDueDateSendTime || '',
       });
     }
   }, [settings, form]);
@@ -168,6 +174,35 @@ export default function RemarketingPage() {
                     <Plus className="h-4 w-4" /> Novo Fluxo
                   </Button>
                 </div>
+
+                {/* Horário de envio dos pós-cadastros */}
+                <Card className="border border-blue-500/30 bg-blue-500/5">
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-center gap-3">
+                      <Clock className="h-4 w-4 text-blue-400 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Horário de envio dos pós-cadastros</p>
+                        <p className="text-xs text-muted-foreground">Só envia após esse horário (Brasília). Deixe em branco para enviar a qualquer hora.</p>
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="postSignupSendTime"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                className="w-32 text-center"
+                                {...field}
+                                value={field.value ?? ''}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
 
                 <div className="space-y-4">
                   {signupFields.fields.map((field, index) => (
@@ -261,6 +296,35 @@ export default function RemarketingPage() {
                     <Plus className="h-4 w-4" /> Novo Fluxo
                   </Button>
                 </div>
+
+                {/* Horário de envio dos pós-vencimentos */}
+                <Card className="border border-orange-500/30 bg-orange-500/5">
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-center gap-3">
+                      <Clock className="h-4 w-4 text-orange-400 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Horário de envio dos pós-vencimentos</p>
+                        <p className="text-xs text-muted-foreground">Só envia após esse horário (Brasília). Deixe em branco para enviar a qualquer hora.</p>
+                      </div>
+                      <FormField
+                        control={form.control}
+                        name="postDueDateSendTime"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                className="w-32 text-center"
+                                {...field}
+                                value={field.value ?? ''}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
 
                 <div className="space-y-4">
                   {dueDateFields.fields.map((field, index) => (

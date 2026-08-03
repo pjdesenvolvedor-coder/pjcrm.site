@@ -114,6 +114,8 @@ export type Settings = {
   postSignupRemarketingMessage?: string;
   postSignupRemarketings?: RemarketingConfig[];
   postDueDateRemarketings?: RemarketingConfig[];
+  postSignupSendTime?: string;    // ex: "12:30" — horário Brasília para enviar pós-cadastros
+  postDueDateSendTime?: string;   // ex: "12:30" — horário Brasília para enviar pós-vencimentos
   isUpsellActive?: boolean;
   upsellDelayMinutes?: number;
   upsellMessage?: string;
@@ -135,6 +137,7 @@ export type Settings = {
   billingWebhookToken?: string;
   useSeparateBillingZap?: boolean;
 };
+
 
 export type RemarketingConfig = {
   id: string;
