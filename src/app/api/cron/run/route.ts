@@ -222,21 +222,15 @@ export async function GET(request: Request) {
                 for (const client of activeClients) {
                     if (upsellsDone >= QUEUE_LIMIT) break;
 
-                    const cleanPhone = getCanonicalPhone(client.phone);
-                    if (!cleanPhone) continue;
-
-                    // TRAVA ULTRA ABSOLUTA POR LOTE: Se este NÚMERO DE TELEFONE já foi avaliado nesta execução, pula qualquer outro cadastro/produto do mesmo cliente!
-                    if (processedPhonesInThisBatch.has(cleanPhone)) {
-                        continue;
-                    }
-                    processedPhonesInThisBatch.add(cleanPhone);
-
                     const clientCreatedMs = getTimestampMs(client.createdAt) || getTimestampMs((client as any).created_at) || 0;
 
                     // TRAVA DE SEGURANÇA ABSOLUTA: Ignora clientes antigos cadastrados antes de 29/07/2026 02:46:00
                     if (clientCreatedMs < STRICT_CUTOFF_MS) {
                         continue;
                     }
+
+                    const cleanPhone = getCanonicalPhone(client.phone);
+                    if (!cleanPhone) continue;
 
                     const sentForThisPhone = phoneSentRulesMap.get(cleanPhone) || new Set<string>();
 
@@ -256,6 +250,13 @@ export async function GET(request: Request) {
 
                         const msgSig = getMessageSignature(upsell.upsellMessage);
                         const indexTag = `rule_idx_${uIdx}`;
+                        const batchRuleKey = `${cleanPhone}_${ruleId}`;
+
+                        // TRAVA POR LOTE NO MESMO RUN: Se esta regra já foi processada para este telefone neste lote, pula
+                        if (processedPhonesInThisBatch.has(batchRuleKey)) {
+                            continue;
+                        }
+
                         const delayMinutes = Number(upsell.upsellDelayMinutes) || 0;
                         const delayMs = delayMinutes * 60 * 1000;
 
@@ -268,6 +269,7 @@ export async function GET(request: Request) {
                         );
 
                         if ((now.getTime() - clientCreatedMs) >= delayMs && !alreadySentToPhone) {
+                            processedPhonesInThisBatch.add(batchRuleKey);
                             let processed = false;
                             
                             // Documentos do mesmo usuário que possuem o MESMO número de telefone canônico
