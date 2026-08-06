@@ -18,8 +18,9 @@ interface TwoFactorLog {
   formattedPhone?: string;
   code?: string;
   message?: string;
-  status?: 'Enviado' | 'Erro';
+  status?: 'Enviado' | 'Recebido' | 'Erro';
   errorDetail?: string;
+  bodyRaw?: string;
   timestampMs?: number;
 }
 
@@ -43,27 +44,6 @@ export default function TwoFactorAppPage() {
     }
   }, []);
 
-  // Listen to Firestore 2FA logs in real-time
-  useEffect(() => {
-    if (!firestore) return;
-    setIsLoadingLogs(true);
-    const q = query(collection(firestore, 'two_factor_logs'), orderBy('timestampMs', 'desc'), limit(50));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedLogs: TwoFactorLog[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
-      setLogs(fetchedLogs);
-      setIsLoadingLogs(false);
-    }, (err) => {
-      console.error('Erro ao ouvir logs 2FA:', err);
-      // Fallback para fetch via API
-      fetchLogsFromApi();
-    });
-
-    return () => unsubscribe();
-  }, [firestore]);
-
   const fetchLogsFromApi = async () => {
     try {
       const res = await fetch('/api/2-fatores');
@@ -77,6 +57,36 @@ export default function TwoFactorAppPage() {
       setIsLoadingLogs(false);
     }
   };
+
+  // Listen to Firestore 2FA logs in real-time + 4s polling fallback
+  useEffect(() => {
+    if (!firestore) {
+      fetchLogsFromApi();
+      const interval = setInterval(fetchLogsFromApi, 4000);
+      return () => clearInterval(interval);
+    }
+
+    setIsLoadingLogs(true);
+    const q = query(collection(firestore, 'two_factor_logs'), orderBy('timestampMs', 'desc'), limit(50));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedLogs: TwoFactorLog[] = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      setLogs(fetchedLogs);
+      setIsLoadingLogs(false);
+    }, (err) => {
+      console.error('Erro ao ouvir logs 2FA via Firestore snapshot:', err);
+      fetchLogsFromApi();
+    });
+
+    const interval = setInterval(fetchLogsFromApi, 4000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [firestore]);
 
   const webhookUrl = `${origin}/api/2-fatores`;
 
@@ -116,9 +126,10 @@ export default function TwoFactorAppPage() {
       if (res.ok && json.success) {
         toast({
           title: 'Código 2FA Enviado! 🔒',
-          description: `Mensagem enviada com sucesso para ${json.phone}`,
+          description: `Mensagem enviada com sucesso para ${json.extractedPhone || testPhone}`,
         });
         setTestCode('');
+        fetchLogsFromApi();
       } else {
         toast({
           title: 'Erro ao enviar 2FA',
@@ -141,7 +152,7 @@ export default function TwoFactorAppPage() {
     <div className="flex flex-col h-full space-y-6 p-4 md:p-6 overflow-y-auto">
       <PageHeader
         title="2FA APP 🛡️"
-        description="Webhook automatizado para envio de códigos de acesso de 2 Fatores via Zap de Cobranças."
+        description="Webhook 100% flexível para envio de códigos de acesso de 2 Fatores via Zap de Cobranças."
       />
 
       {/* CARD 1: WEBHOOK URL & PAYLOAD */}
@@ -153,7 +164,7 @@ export default function TwoFactorAppPage() {
               Link do Webhook (POST)
             </CardTitle>
             <CardDescription>
-              Envie requisições HTTP POST para esta URL para disparar o código de verificação para o cliente via Zap de Cobranças.
+              Envie requisições HTTP POST para esta URL com qualquer formato. O sistema extrai o número e código automaticamente e dispara via Zap de Cobranças.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -171,7 +182,7 @@ export default function TwoFactorAppPage() {
 
             <div className="bg-muted/60 p-4 rounded-lg border space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-                <Code className="h-4 w-4" /> Exemplo de Payload JSON (POST)
+                <Code className="h-4 w-4" /> Exemplo de Payload Aceito (JSON / POST)
               </div>
               <pre className="text-xs font-mono bg-background p-3 rounded border overflow-x-auto text-emerald-600 dark:text-emerald-400">
 {`{
@@ -180,7 +191,7 @@ export default function TwoFactorAppPage() {
 }`}
               </pre>
               <p className="text-xs text-muted-foreground">
-                📌 <b>Nota:</b> O sistema formata o telefone automaticamente e envia sempre a mensagem padrão pelo <b>Zap de Cobranças</b>.
+                📌 <b>Aceita qualquer variação de chaves:</b> <code>Numero</code>, <code>numero</code>, <code>phone</code>, <code>number</code>, <code>Codigo</code>, <code>codigo</code>, <code>code</code>, etc.
               </p>
             </div>
           </CardContent>
@@ -238,10 +249,10 @@ export default function TwoFactorAppPage() {
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-primary" />
-              Últimas Requisições Recebidas (Logs)
+              Últimas Requisições Recebidas (Logs em Tempo Real)
             </CardTitle>
             <CardDescription>
-              Histórico das requisições POST recebidas no webhook de 2FA.
+              Todas as requisições recebidas pelo Webhook são registradas aqui.
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={fetchLogsFromApi} className="gap-2 text-xs">
@@ -251,7 +262,7 @@ export default function TwoFactorAppPage() {
         <CardContent>
           {isLoadingLogs ? (
             <div className="flex justify-center py-12 text-muted-foreground text-sm gap-2">
-              <RefreshCw className="h-4 w-4 animate-spin" /> Carregando logs...
+              <RefreshCw className="h-4 w-4 animate-spin" /> Carregando registros...
             </div>
           ) : logs.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed rounded-lg text-muted-foreground">
@@ -268,9 +279,10 @@ export default function TwoFactorAppPage() {
                   <TableRow>
                     <TableHead>Data / Hora</TableHead>
                     <TableHead>Telefone</TableHead>
-                    <TableHead>Código 2FA</TableHead>
+                    <TableHead>Código</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="min-w-[250px]">Mensagem Enviada</TableHead>
+                    <TableHead className="min-w-[200px]">Payload Recebido</TableHead>
+                    <TableHead className="min-w-[200px]">Mensagem Enviada</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -284,7 +296,9 @@ export default function TwoFactorAppPage() {
                           {dateStr}
                         </TableCell>
                         <TableCell className="font-medium text-sm">
-                          {log.formattedPhone || log.rawPhone || 'N/A'}
+                          {log.formattedPhone && log.formattedPhone !== 'N/A'
+                            ? log.formattedPhone
+                            : (log.rawPhone || 'N/A')}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="font-mono text-xs font-bold bg-muted">
@@ -296,11 +310,20 @@ export default function TwoFactorAppPage() {
                             <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white">
                               Enviado
                             </Badge>
+                          ) : log.status === 'Recebido' ? (
+                            <Badge variant="secondary" className="bg-blue-600 text-white">
+                              Recebido
+                            </Badge>
                           ) : (
                             <Badge variant="destructive">
                               Erro {log.errorDetail ? `(${log.errorDetail})` : ''}
                             </Badge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-muted-foreground max-w-xs truncate">
+                          <span title={log.bodyRaw || ''}>
+                            {log.bodyRaw || 'N/A'}
+                          </span>
                         </TableCell>
                         <TableCell className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
                           {log.message || 'N/A'}
