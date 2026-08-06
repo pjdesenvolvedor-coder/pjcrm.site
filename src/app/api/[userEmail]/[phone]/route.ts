@@ -110,7 +110,7 @@ export async function GET(
             }
         }
 
-        // Fallback: se não achou no campo email, verifica se o id da collection e-mail bate
+        // Fallback: se não achou no campo email, verifica se o id da collection bate
         if (!targetUserId) {
             for (const userDoc of usersSnapshot.docs) {
                 if (userDoc.id.trim().toLowerCase() === rawEmail) {
@@ -153,10 +153,12 @@ export async function GET(
             return false;
         });
 
+        const clientName = matchedClients.find((c) => c.name?.trim())?.name?.trim() || 'N/A';
         const activeClients = matchedClients.filter((c) => c.status === 'Ativo');
         const overdueClients = matchedClients.filter((c) => c.status !== 'Ativo');
 
-        let responseText = `Assinaturas Ativas: ${activeClients.length}\n`;
+        let responseText = `NomeCliente: ${clientName}\n`;
+        responseText += `Assinaturas Ativas: ${activeClients.length}\n`;
         responseText += `Assinaturas Vencidas: ${overdueClients.length}\n\n`;
 
         responseText += `Assinaturas Ativas{\n\n`;
@@ -181,6 +183,7 @@ export async function GET(
             return NextResponse.json({
                 userEmail: targetUserEmail || rawEmail,
                 userId: targetUserId || null,
+                clientName: clientName,
                 searchPhone: rawPhone,
                 canonicalPhone: searchCanonical,
                 activeCount: activeClients.length,
