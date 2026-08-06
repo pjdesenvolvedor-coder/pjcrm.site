@@ -81,14 +81,22 @@ export async function POST(request: Request) {
 
     const formattedPhone = formatPhoneWith55(String(rawPhone));
 
-    // Busca o Token do Zap de Cobranças nos usuários
+    // Busca o Token do Zap de Cobranças e o Modelo de Mensagem nos usuários
     let billingToken = '';
     let targetUserId = '';
+    let customTemplate = '';
 
     try {
         const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
         for (const uDoc of usersSnap.docs) {
             targetUserId = targetUserId || uDoc.id;
+
+            // Tenta carregar modelo de mensagem personalizado das configurações de 2FA
+            const settings2faSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
+            if (settings2faSnap.exists() && settings2faSnap.data()?.messageTemplate) {
+                customTemplate = settings2faSnap.data()?.messageTemplate;
+            }
+
             const configSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
             if (configSnap.exists()) {
                 const s = configSnap.data();
@@ -98,22 +106,28 @@ export async function POST(request: Request) {
                 if (resolvedToken) {
                     billingToken = resolvedToken;
                     targetUserId = uDoc.id;
-                    break;
+                    if (customTemplate) break;
                 }
             }
         }
     } catch (dbErr) {
-        console.error('Erro ao buscar token do Zap de Cobranças:', dbErr);
+        console.error('Erro ao buscar configurações no Firestore:', dbErr);
     }
+
+    // Modelo padrão se nenhum for configurado
+    const defaultTemplate = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: {codigo}`;
+    const templateToUse = customTemplate?.trim() || defaultTemplate;
+
+    // Substitui variáveis {codigo} e {numero}
+    const messageText = templateToUse
+        .replace(/{codigo}/gi, code || 'N/A')
+        .replace(/{numero}/gi, rawPhone || formattedPhone || 'N/A');
 
     let isSuccess = false;
     let uazapiStatus = 0;
     let errorDetail = '';
-    let messageText = '';
 
     if (formattedPhone && billingToken) {
-        messageText = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: ${code || 'N/A'}`;
-
         try {
             const uazapiRes = await fetch('https://pjcontas.uazapi.com/send/text', {
                 method: 'POST',
@@ -142,7 +156,7 @@ export async function POST(request: Request) {
         else if (!billingToken) errorDetail = 'Token do Zap de Cobranças não configurado';
     }
 
-    // Grava SEMPRE a requisição no Firestore, independente de sucesso ou falha
+    // Grava SEMPRE a requisição no Firestore
     const logData = {
         rawPhone: String(rawPhone || 'Não especificado'),
         formattedPhone: formattedPhone || 'N/A',
@@ -169,6 +183,7 @@ export async function POST(request: Request) {
         receivedPayload: combined,
         extractedPhone: formattedPhone,
         extractedCode: code,
+        messageText,
         messageSent: isSuccess,
         errorDetail: errorDetail || null,
     }, { status: 200 });

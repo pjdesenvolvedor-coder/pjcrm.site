@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { ShieldCheck, Copy, Send, RefreshCw, Check, Code, PhoneCall, KeyRound, AlertCircle } from 'lucide-react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { useFirebase } from '@/firebase';
+import { ShieldCheck, Copy, Send, RefreshCw, Check, Code, PhoneCall, KeyRound, AlertCircle, Save, MessageSquareText } from 'lucide-react';
+import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 
 interface TwoFactorLog {
   id: string;
@@ -24,14 +25,28 @@ interface TwoFactorLog {
   timestampMs?: number;
 }
 
+const DEFAULT_TEMPLATE = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: {codigo}`;
+
 export default function TwoFactorAppPage() {
-  const { firestore } = useFirebase();
+  const { firestore, effectiveUserId, user } = useFirebase();
   const { toast } = useToast();
+
+  const uid = effectiveUserId || user?.uid;
+
+  const settingsDocRef = useMemoFirebase(
+    () => (uid && firestore ? doc(firestore, 'users', uid, 'settings', '2fatores') : null),
+    [firestore, uid]
+  );
+  const { data: settingsData } = useDoc(settingsDocRef);
 
   const [origin, setOrigin] = useState('https://pjcrm.site');
   const [copied, setCopied] = useState(false);
   const [logs, setLogs] = useState<TwoFactorLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
+
+  // Template state
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
   // Manual test fields
   const [testPhone, setTestPhone] = useState('');
@@ -43,6 +58,50 @@ export default function TwoFactorAppPage() {
       setOrigin(window.location.origin);
     }
   }, []);
+
+  // Load saved template from Firestore
+  useEffect(() => {
+    if (settingsData && settingsData.messageTemplate) {
+      setTemplate(settingsData.messageTemplate);
+    }
+  }, [settingsData]);
+
+  const handleSaveTemplate = async () => {
+    if (!settingsDocRef) {
+      toast({
+        title: 'Usuário não autenticado',
+        description: 'Faça login para salvar as configurações.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    try {
+      await setDoc(settingsDocRef, { messageTemplate: template }, { merge: true });
+      toast({
+        title: 'Modelo Salvo! 💾',
+        description: 'A mensagem de 2FA foi personalizada e gravada com sucesso.',
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao salvar',
+        description: err.message || 'Falha ao salvar modelo de mensagem.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const insertVariable = (variable: string) => {
+    setTemplate((prev) => `${prev} ${variable}`);
+    navigator.clipboard.writeText(variable);
+    toast({
+      title: 'Variável Copiada! 📋',
+      description: `${variable} foi adicionada e copiada.`,
+    });
+  };
 
   const fetchLogsFromApi = async () => {
     try {
@@ -152,10 +211,63 @@ export default function TwoFactorAppPage() {
     <div className="flex flex-col h-full space-y-6 p-4 md:p-6 overflow-y-auto">
       <PageHeader
         title="2FA APP 🛡️"
-        description="Webhook 100% flexível para envio de códigos de acesso de 2 Fatores via Zap de Cobranças."
+        description="Webhook automatizado com modelo de mensagem personalizável via Zap de Cobranças."
       />
 
-      {/* CARD 1: WEBHOOK URL & PAYLOAD */}
+      {/* SEÇÃO DE CONFIGURAÇÃO DO MODELO DE MENSAGEM */}
+      <Card className="border-emerald-500/30 bg-emerald-500/5 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg text-emerald-600 dark:text-emerald-400">
+            <MessageSquareText className="h-5 w-5" />
+            Personalizar Mensagem de 2FA
+          </CardTitle>
+          <CardDescription>
+            Personalize o texto enviado ao cliente. Use as variáveis <code>{`{codigo}`}</code> e <code>{`{numero}`}</code> para inserir os dados recebidos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground">Variáveis disponíveis (clique para inserir):</span>
+              <Badge
+                variant="outline"
+                className="cursor-pointer font-mono hover:bg-emerald-500/10 hover:border-emerald-500 text-xs py-1"
+                onClick={() => insertVariable('{codigo}')}
+              >
+                {`{codigo}`}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="cursor-pointer font-mono hover:bg-emerald-500/10 hover:border-emerald-500 text-xs py-1"
+                onClick={() => insertVariable('{numero}')}
+              >
+                {`{numero}`}
+              </Badge>
+            </div>
+
+            <Textarea
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              placeholder="Digite sua mensagem de 2FA..."
+              className="min-h-28 font-mono text-sm"
+              rows={4}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSaveTemplate}
+              disabled={isSavingTemplate}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold"
+            >
+              {isSavingTemplate ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {isSavingTemplate ? 'Salvando...' : 'Salvar Modelo de Mensagem'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* CARD 1 & CARD 2: WEBHOOK URL & TESTE MANUAL */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-primary/20 shadow-sm">
           <CardHeader>
