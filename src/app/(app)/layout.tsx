@@ -764,10 +764,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/2-fatores'} tooltip="2-Fatores (SiteVendas)">
+                  <SidebarMenuButton asChild isActive={pathname === '/2-fatores'} tooltip="2FA APP">
                     <Link href="/2-fatores">
                       <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      <span className="flex-1 text-[13px] font-bold text-green-700 dark:text-green-400">2-Fatores (SiteVendas)</span>
+                      <span className="flex-1 text-[13px] font-bold text-green-700 dark:text-green-400">2FA APP</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
