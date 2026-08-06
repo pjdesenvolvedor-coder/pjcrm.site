@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { format } from 'date-fns';
 import type { Client } from '@/lib/types';
@@ -86,55 +86,82 @@ export async function GET(
     request: Request,
     props: { params: Promise<{ userEmail: string; phone: string }> }
 ) {
+    let rawEmail = '';
+    let rawPhone = '';
+
     try {
         const params = await props.params;
-        const rawEmail = decodeURIComponent(params.userEmail || '').trim().toLowerCase();
-        const rawPhone = decodeURIComponent(params.phone || '').trim();
+        rawEmail = decodeURIComponent(params.userEmail || '').trim().toLowerCase();
+        rawPhone = decodeURIComponent(params.phone || '').trim();
 
         if (!rawEmail || !rawPhone) {
             return new NextResponse('Email do usuário e número de telefone são obrigatórios.', { status: 400 });
         }
 
-        // Busca o ID do usuário correspondente ao e-mail informado
-        const usersSnapshot = await getDocs(collection(db, 'users'));
         let targetUserId = '';
         let targetUserEmail = '';
 
-        for (const userDoc of usersSnapshot.docs) {
-            const uData = userDoc.data();
-            const emailInDoc = (uData.email || '').trim().toLowerCase();
-            if (emailInDoc === rawEmail) {
-                targetUserId = userDoc.id;
-                targetUserEmail = uData.email;
-                break;
+        // 1. Tenta query direta por campo email
+        try {
+            const q = query(collection(db, 'users'), where('email', '==', rawEmail));
+            const qSnap = await getDocs(q);
+            if (!qSnap.empty) {
+                targetUserId = qSnap.docs[0].id;
+                targetUserEmail = qSnap.docs[0].data()?.email || rawEmail;
+            }
+        } catch (e) {
+            console.error('Erro na query por email:', e);
+        }
+
+        // 2. Se não achou com where, percorre os usuários (case-insensitive)
+        if (!targetUserId) {
+            try {
+                const usersSnapshot = await getDocs(collection(db, 'users'));
+                for (const userDoc of usersSnapshot.docs) {
+                    const uData = userDoc.data();
+                    const emailInDoc = (uData.email || '').trim().toLowerCase();
+                    const docIdLower = userDoc.id.trim().toLowerCase();
+                    if (emailInDoc === rawEmail || docIdLower === rawEmail) {
+                        targetUserId = userDoc.id;
+                        targetUserEmail = uData.email || userDoc.id;
+                        break;
+                    }
+                }
+            } catch (e) {
+                console.error('Erro ao percorrer users:', e);
             }
         }
 
-        // Fallback: se não achou no campo email, verifica se o id da collection bate
+        // 3. Fallback: tenta buscar o doc direto usando o rawEmail como ID
         if (!targetUserId) {
-            for (const userDoc of usersSnapshot.docs) {
-                if (userDoc.id.trim().toLowerCase() === rawEmail) {
-                    targetUserId = userDoc.id;
-                    targetUserEmail = userDoc.data()?.email || userDoc.id;
-                    break;
+            try {
+                const docSnap = await getDoc(doc(db, 'users', rawEmail));
+                if (docSnap.exists()) {
+                    targetUserId = docSnap.id;
+                    targetUserEmail = docSnap.data()?.email || rawEmail;
                 }
+            } catch (e) {
+                console.error('Erro ao buscar doc direto:', e);
             }
         }
 
         const userClients: Client[] = [];
 
         if (targetUserId) {
-            // Puxa APENAS os clientes desse usuário específico
-            const clientsSnap = await getDocs(collection(db, 'users', targetUserId, 'clients'));
-            clientsSnap.docs.forEach((docSnap) => {
-                userClients.push({ id: docSnap.id, ...docSnap.data() } as Client);
-            });
+            try {
+                const clientsSnap = await getDocs(collection(db, 'users', targetUserId, 'clients'));
+                clientsSnap.docs.forEach((docSnap) => {
+                    userClients.push({ id: docSnap.id, ...docSnap.data() } as Client);
+                });
+            } catch (e) {
+                console.error(`Erro ao carregar clientes do usuário ${targetUserId}:`, e);
+            }
         }
 
         const searchCanonical = getCanonicalPhone(rawPhone);
         const searchDigits = rawPhone.replace(/\D/g, '');
 
-        // Filtra clientes pelo telefone
+        // Filtra clientes do usuário pelo telefone
         const matchedClients = userClients.filter((c) => {
             if (!c.phone) return false;
             const clientCanonical = getCanonicalPhone(c.phone);
@@ -202,6 +229,27 @@ export async function GET(
         });
     } catch (e: any) {
         console.error('Erro na API de consulta por usuário e telefone:', e);
-        return new NextResponse(`Erro ao consultar assinaturas: ${e.message}`, { status: 500 });
+
+        const fallbackText = [
+            `NomeCliente: N/A`,
+            `Assinaturas Ativas: 0`,
+            `Assinaturas Vencidas: 0`,
+            ``,
+            `Assinaturas Ativas{`,
+            ``,
+            `}`,
+            ``,
+            ``,
+            `Assinaturas Vencidas{`,
+            ``,
+            `}`,
+        ].join('\n');
+
+        return new NextResponse(fallbackText, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+            },
+        });
     }
 }
