@@ -301,14 +301,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoadingSettings, settings?.webhookToken, connectionStatus, setConnectionStatus, setQrCode]);
 
-  // Fetch status once when webhook token is available
+  // Fetch status once when webhook token is first available
   useEffect(() => {
     if (settings?.webhookToken) {
       fetchStatus();
     }
   }, [settings?.webhookToken, fetchStatus]);
 
-  // Poll only when Zap Connect dialog is open and not connected
+  // Global continuous polling every 15s to keep sidebar indicator up to date
+  useEffect(() => {
+    if (!settings?.webhookToken) return;
+    const intervalId = setInterval(() => {
+      fetchStatus();
+    }, 15000);
+    return () => clearInterval(intervalId);
+  }, [settings?.webhookToken, fetchStatus]);
+
+  // Aggressive poll every 3s when Zap Connect dialog is open and not yet connected
   useEffect(() => {
     if (!isZapConnectOpen || liveStatus?.status === 'connected') return;
 
@@ -319,7 +328,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       if (!active) return;
       await fetchStatus();
       if (active && liveStatus?.status !== 'connected' && isZapConnectOpen) {
-        timeoutId = setTimeout(poll, 5000);
+        timeoutId = setTimeout(poll, 3000);
       }
     };
 
