@@ -79,6 +79,8 @@ export type Client = {
   amountPaid?: string | null;
   needsSupport?: boolean;
   createdAt?: Timestamp | null;
+  firstCreatedAt?: Timestamp | null;
+  renewalCount?: number;
   upsellSent?: boolean;
   sentUpsellIds?: string[];
   sentUpsell2Ids?: string[];

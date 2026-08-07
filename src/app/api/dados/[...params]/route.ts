@@ -26,7 +26,7 @@ function formatDate(val: any): string {
     if (!val) return 'N/A';
     let date: Date | null = null;
     if (typeof val?.toDate === 'function') date = val.toDate();
-    else if (typeof val?.toMillis === 'function') date = new Date(val.toMillis());
+    else if (typeof val?.toMillis === 'function') date = val.toMillis();
     else if (val?.seconds !== undefined) date = new Date(val.seconds * 1000);
     else if (val instanceof Date) date = val;
     else if (typeof val === 'number') date = new Date(val);
@@ -40,6 +40,40 @@ function formatDate(val: any): string {
             ? format(date, 'dd/MM/yyyy')
             : format(date, 'dd/MM/yyyy HH:mm');
     } catch { return 'N/A'; }
+}
+
+function getEarliestClientDateFormatted(clients: Client[]): string {
+    let earliestMs: number | null = null;
+
+    for (const c of clients) {
+        const datesToCheck = [c.firstCreatedAt, c.createdAt];
+        for (const val of datesToCheck) {
+            if (!val) continue;
+            let ms: number | null = null;
+            if (typeof (val as any)?.toDate === 'function') ms = (val as any).toDate().getTime();
+            else if (typeof (val as any)?.toMillis === 'function') ms = (val as any).toMillis();
+            else if ((val as any)?.seconds !== undefined) ms = (val as any).seconds * 1000;
+            else if (val instanceof Date) ms = val.getTime();
+            else if (typeof val === 'number') ms = val;
+            else if (typeof val === 'string') {
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) ms = d.getTime();
+            }
+
+            if (ms !== null && !isNaN(ms)) {
+                if (earliestMs === null || ms < earliestMs) {
+                    earliestMs = ms;
+                }
+            }
+        }
+    }
+
+    if (earliestMs === null) return 'N/A';
+    try {
+        return format(new Date(earliestMs), 'dd/MM/yyyy');
+    } catch {
+        return 'N/A';
+    }
 }
 
 function formatEmail(val: any): string {
@@ -67,7 +101,6 @@ function buildClientBlock(c: Client): string {
 
 // Rota catch-all: /api/dados/[...params]
 // Funciona com qualquer URL como /api/dados/email@gmail.com/77998413534
-// O catch-all evita o problema do Next.js com pontos (.) em segmentos dinâmicos
 export async function GET(
     request: Request,
     props: { params: Promise<{ params: string[] }> }
@@ -76,7 +109,6 @@ export async function GET(
         const { params } = await props.params;
 
         // params[0] = email do usuário, params[1] = telefone
-        // Ex: ["pedropedrojivago@gmail.com", "93984007250"]
         const rawEmail = decodeURIComponent(params?.[0] || '').trim().toLowerCase();
         const rawPhone = decodeURIComponent(params?.[1] || '').trim();
 
@@ -154,10 +186,15 @@ export async function GET(
         });
 
         const clientName = matchedClients.find((c) => c.name?.trim())?.name?.trim() || 'N/A';
+        const clienteDesde = getEarliestClientDateFormatted(matchedClients);
+        const renovouVezes = matchedClients.reduce((acc, c) => acc + (c.renewalCount || 0), 0);
+
         const activeClients = matchedClients.filter((c) => c.status === 'Ativo');
         const overdueClients = matchedClients.filter((c) => c.status !== 'Ativo');
 
         let responseText = `NomeCliente: ${clientName}\n`;
+        responseText += `Cliente Desde: ${clienteDesde}\n`;
+        responseText += `RenovouVezes: ${renovouVezes}\n`;
         responseText += `Assinaturas Ativas: ${activeClients.length}\n`;
         responseText += `Assinaturas Vencidas: ${overdueClients.length}\n\n`;
         responseText += `Assinaturas Ativas{\n\n`;
@@ -176,6 +213,8 @@ export async function GET(
                 userEmail: targetUserEmail || rawEmail,
                 userId: targetUserId || null,
                 clientName,
+                clientSince: clienteDesde,
+                renewalCount: renovouVezes,
                 searchPhone: rawPhone,
                 canonicalPhone: searchCanonical,
                 activeCount: activeClients.length,
@@ -194,7 +233,7 @@ export async function GET(
     } catch (e: any) {
         console.error('Erro na API /api/dados:', e);
         return new NextResponse(
-            'NomeCliente: N/A\nAssinaturas Ativas: 0\nAssinaturas Vencidas: 0\n\nAssinaturas Ativas{\n\n}\n\n\nAssinaturas Vencidas{\n\n}',
+            'NomeCliente: N/A\nCliente Desde: N/A\nRenovouVezes: 0\nAssinaturas Ativas: 0\nAssinaturas Vencidas: 0\n\nAssinaturas Ativas{\n\n}\n\n\nAssinaturas Vencidas{\n\n}',
             { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
         );
     }
