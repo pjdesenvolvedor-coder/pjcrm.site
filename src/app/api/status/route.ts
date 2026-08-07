@@ -1,67 +1,85 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
+  const disconnected = NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+
+  let token = '';
+
   try {
-    const body = await request.json().catch(() => ({}));
-    const token = body.token;
+    const body = await request.json();
+    token = body?.token ?? '';
+  } catch {
+    return disconnected;
+  }
 
-    if (!token) {
-      return NextResponse.json({ error: 'Token is required' }, { status: 400 });
-    }
+  if (!token) {
+    return disconnected;
+  }
 
-    // Consulta direta na UAZAPI GET /instance/status
-    // Retorno real da API:
-    // {
-    //   "instance": { "status": "connected", "profileName": "...", "profilePicUrl": "...", ... },
-    //   "status": { "connected": true, "loggedIn": true, ... }
-    // }
+  try {
+    // AbortController para garantir timeout de 8s e não deixar o Vercel cancelar a request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    let uazapiRes: Response;
     try {
-      const uazapiRes = await fetch('https://pjcontas.uazapi.com/instance/status', {
+      uazapiRes = await fetch('https://pjcontas.uazapi.com/instance/status', {
         method: 'GET',
         headers: {
           'token': token,
           'Accept': 'application/json',
         },
+        signal: controller.signal,
       });
-
-      if (uazapiRes.ok) {
-        const data = await uazapiRes.json().catch(() => null);
-        if (data) {
-          const inst = data.instance || {};
-          const statusObj = data.status || {};
-
-          // Prioriza o booleano "connected" do objeto status.connected
-          // Fallback para inst.status string
-          let status: 'connected' | 'connecting' | 'disconnected' = 'disconnected';
-
-          if (statusObj.connected === true || statusObj.loggedIn === true) {
-            status = 'connected';
-          } else {
-            const rawStatus = String(inst.status || '').toLowerCase().trim();
-            if (['connected', 'open', 'inchat', 'authenticated'].includes(rawStatus)) {
-              status = 'connected';
-            } else if (['connecting', 'pair', 'qrcode', 'opening'].includes(rawStatus)) {
-              status = 'connecting';
-            }
-          }
-
-          const nomeperfil = inst.profileName || inst.name || inst.pushname || inst.owner || '';
-          const fotoperfil = inst.profilePicUrl || inst.profilePic || inst.picture || '';
-
-          return NextResponse.json({ status, nomeperfil, fotoperfil });
-        }
-      }
-
-      // Se a UAZAPI retornar erro (ex: 401, 404), instância desconectada ou token inválido
-      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
-
-    } catch (e: any) {
-      console.error('[api/status] UAZAPI fetch failed:', e?.message);
-      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-  } catch (error: any) {
-    console.error('[api/status] Route handler error:', error);
-    return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+    if (!uazapiRes.ok) {
+      return disconnected;
+    }
+
+    let data: any = null;
+    try {
+      data = await uazapiRes.json();
+    } catch {
+      return disconnected;
+    }
+
+    if (!data || typeof data !== 'object') {
+      return disconnected;
+    }
+
+    // Payload real da UAZAPI:
+    // { "instance": { "status": "connected", "profileName": "...", "profilePicUrl": "..." },
+    //   "status": { "connected": true, "loggedIn": true } }
+    const inst = data.instance && typeof data.instance === 'object' ? data.instance : {};
+    const statusObj = data.status && typeof data.status === 'object' ? data.status : {};
+
+    let status: 'connected' | 'connecting' | 'disconnected' = 'disconnected';
+
+    if (statusObj.connected === true || statusObj.loggedIn === true) {
+      status = 'connected';
+    } else {
+      const rawStatus = String(inst.status || '').toLowerCase().trim();
+      if (['connected', 'open', 'inchat', 'authenticated'].includes(rawStatus)) {
+        status = 'connected';
+      } else if (['connecting', 'pair', 'qrcode', 'opening'].includes(rawStatus)) {
+        status = 'connecting';
+      }
+    }
+
+    const nomeperfil = String(inst.profileName || inst.name || inst.pushname || '');
+    const fotoperfil = String(inst.profilePicUrl || inst.profilePic || '');
+
+    return NextResponse.json({ status, nomeperfil, fotoperfil });
+
+  } catch (e: any) {
+    // AbortError = timeout, outros = falha de rede
+    console.error('[api/status] error:', e?.name, e?.message);
+    return disconnected;
   }
 }
