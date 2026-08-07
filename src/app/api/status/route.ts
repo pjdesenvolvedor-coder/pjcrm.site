@@ -9,45 +9,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 });
     }
 
-    const apiUrl = 'https://pjcontas.uazapi.com/instance/status';
+    const webhookUrl = 'https://pjempreendimentos.n8nready.com.br/webhook/c8389fdb-5074-41aa-a452-42b3a99ebf1f';
 
-    const apiResponse = await fetch(apiUrl, {
-      method: 'GET',
+    const webhookResponse = await fetch(webhookUrl, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'token': token,
-        'apikey': token,
       },
+      body: JSON.stringify({ token: token }),
     });
 
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text().catch(() => '');
-      console.error(`UAZAPI /instance/status failed with status ${apiResponse.status}: ${errorText}`);
-      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+    if (webhookResponse.ok) {
+      const rawText = await webhookResponse.text();
+      if (rawText && rawText.trim() !== '') {
+        try {
+          const data = JSON.parse(rawText);
+          return NextResponse.json(data);
+        } catch (parseError) {
+          console.error('Failed to parse webhook response as JSON:', rawText, parseError);
+        }
+      }
     }
 
-    const data = await apiResponse.json().catch(() => null);
-
-    if (!data) {
-      return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
+    // Fallback caso o webhook falhe: tenta consultar a UAZAPI direta
+    try {
+      const uazapiRes = await fetch('https://pjcontas.uazapi.com/instance/status', {
+        method: 'GET',
+        headers: { 'token': token, 'apikey': token },
+      });
+      if (uazapiRes.ok) {
+        const json = await uazapiRes.json().catch(() => null);
+        if (json) {
+          const inst = json.instance || json;
+          const rawStatus = inst.status || inst.state || 'disconnected';
+          const status = (rawStatus === 'connected' || rawStatus === 'connecting') ? rawStatus : 'disconnected';
+          const nomeperfil = inst.profileName || inst.nomeperfil || inst.name || inst.pushname || '';
+          const fotoperfil = inst.profilePicUrl || inst.fotoperfil || inst.profilePictureUrl || inst.profilePic || '';
+          return NextResponse.json({ status, nomeperfil, fotoperfil });
+        }
+      }
+    } catch (e) {
+      console.error('Fallback UAZAPI status error:', e);
     }
 
-    // Extrai os campos do objeto `instance` retornado pela UAZAPI
-    const inst = data.instance || data;
-
-    const rawStatus = inst.status || inst.state || 'disconnected';
-    const status = (rawStatus === 'connected' || rawStatus === 'connecting') ? rawStatus : 'disconnected';
-    const nomeperfil = inst.profileName || inst.nomeperfil || inst.name || inst.pushname || '';
-    const fotoperfil = inst.profilePicUrl || inst.fotoperfil || inst.profilePictureUrl || inst.profilePic || '';
-
-    // Retorna exatamente a estrutura esperada pelo sistema
-    return NextResponse.json({
-      status,
-      nomeperfil,
-      fotoperfil,
-    });
-
+    return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '' });
   } catch (error: any) {
-    console.error('API /api/status error:', error);
+    console.error('API route error:', error);
     return NextResponse.json({ status: 'disconnected', nomeperfil: '', fotoperfil: '', error: 'Internal Server Error' });
   }
 }
