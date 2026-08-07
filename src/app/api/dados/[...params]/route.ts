@@ -18,9 +18,7 @@ function getCanonicalPhone(phone: string): string {
     if (local.length === 11 && local[2] === '9') {
         local = local.slice(0, 2) + local.slice(3);
     }
-    if (local.length === 10) {
-        return '55' + local;
-    }
+    if (local.length === 10) return '55' + local;
     return digits;
 }
 
@@ -38,15 +36,10 @@ function formatDate(val: any): string {
     }
     if (!date) return 'N/A';
     try {
-        const hours = date.getHours();
-        const minutes = date.getMinutes();
-        if (hours === 0 && minutes === 0) {
-            return format(date, 'dd/MM/yyyy');
-        }
-        return format(date, 'dd/MM/yyyy HH:mm');
-    } catch {
-        return 'N/A';
-    }
+        return (date.getHours() === 0 && date.getMinutes() === 0)
+            ? format(date, 'dd/MM/yyyy')
+            : format(date, 'dd/MM/yyyy HH:mm');
+    } catch { return 'N/A'; }
 }
 
 function formatEmail(val: any): string {
@@ -59,46 +52,45 @@ function formatEmail(val: any): string {
 }
 
 function buildClientBlock(c: Client): string {
-    const nomeProduto = c.subscription || c.name || 'N/A';
-    const valorPago = c.amountPaid || '0,00';
-    const compra = formatDate(c.createdAt);
-    const vencimento = formatDate(c.dueDate);
-    const email = formatEmail(c.email);
-    const senha = c.password || 'N/A';
-    const perfil = c.screen || 'N/A';
-    const senhaPerfil = c.pinScreen || 'N/A';
-    const status = c.status || 'Ativo';
-
     return [
-        `NomeProduto: ${nomeProduto}`,
-        `Valor Pago: ${valorPago}`,
-        `Compra: ${compra}`,
-        `Vencimento: ${vencimento}`,
-        `Email: ${email}`,
-        `Senha: ${senha}`,
-        `Perfil: ${perfil}`,
-        `SenhaPerfil: ${senhaPerfil}`,
-        `Status: ${status}`,
+        `NomeProduto: ${c.subscription || c.name || 'N/A'}`,
+        `Valor Pago: ${c.amountPaid || '0,00'}`,
+        `Compra: ${formatDate(c.createdAt)}`,
+        `Vencimento: ${formatDate(c.dueDate)}`,
+        `Email: ${formatEmail(c.email)}`,
+        `Senha: ${c.password || 'N/A'}`,
+        `Perfil: ${c.screen || 'N/A'}`,
+        `SenhaPerfil: ${c.pinScreen || 'N/A'}`,
+        `Status: ${c.status || 'Ativo'}`,
     ].join('\n');
 }
 
+// Rota catch-all: /api/dados/[...params]
+// Funciona com qualquer URL como /api/dados/email@gmail.com/77998413534
+// O catch-all evita o problema do Next.js com pontos (.) em segmentos dinâmicos
 export async function GET(
     request: Request,
-    props: { params: Promise<{ userEmail: string; phone: string }> }
+    props: { params: Promise<{ params: string[] }> }
 ) {
     try {
-        const params = await props.params;
-        const rawEmail = decodeURIComponent(params.userEmail || '').trim().toLowerCase();
-        const rawPhone = decodeURIComponent(params.phone || '').trim();
+        const { params } = await props.params;
+
+        // params[0] = email do usuário, params[1] = telefone
+        // Ex: ["pedropedrojivago@gmail.com", "93984007250"]
+        const rawEmail = decodeURIComponent(params?.[0] || '').trim().toLowerCase();
+        const rawPhone = decodeURIComponent(params?.[1] || '').trim();
 
         if (!rawEmail || !rawPhone) {
-            return new NextResponse('Email do usuário e número de telefone são obrigatórios.', { status: 400 });
+            return new NextResponse(
+                'Uso: /api/dados/{email-do-usuario}/{telefone-do-cliente}',
+                { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+            );
         }
 
         let targetUserId = '';
         let targetUserEmail = '';
 
-        // 1. Tenta query direta por campo email
+        // 1. Query direta por campo email
         try {
             const q = query(collection(db, 'users'), where('email', '==', rawEmail));
             const qSnap = await getDocs(q);
@@ -106,30 +98,25 @@ export async function GET(
                 targetUserId = qSnap.docs[0].id;
                 targetUserEmail = qSnap.docs[0].data()?.email || rawEmail;
             }
-        } catch (e) {
-            console.error('Erro na query por email:', e);
-        }
+        } catch (e) { console.error('Erro na query por email:', e); }
 
-        // 2. Percorre os usuários (case-insensitive) se não achou
+        // 2. Percorre usuários (case-insensitive)
         if (!targetUserId) {
             try {
                 const usersSnapshot = await getDocs(collection(db, 'users'));
                 for (const userDoc of usersSnapshot.docs) {
                     const uData = userDoc.data();
                     const emailInDoc = (uData.email || '').trim().toLowerCase();
-                    const docIdLower = userDoc.id.trim().toLowerCase();
-                    if (emailInDoc === rawEmail || docIdLower === rawEmail) {
+                    if (emailInDoc === rawEmail || userDoc.id.trim().toLowerCase() === rawEmail) {
                         targetUserId = userDoc.id;
                         targetUserEmail = uData.email || userDoc.id;
                         break;
                     }
                 }
-            } catch (e) {
-                console.error('Erro ao percorrer users:', e);
-            }
+            } catch (e) { console.error('Erro ao percorrer users:', e); }
         }
 
-        // 3. Fallback: tenta buscar o doc direto usando rawEmail como ID
+        // 3. Fallback: tenta usar rawEmail como ID direto
         if (!targetUserId) {
             try {
                 const docSnap = await getDoc(doc(db, 'users', rawEmail));
@@ -137,22 +124,17 @@ export async function GET(
                     targetUserId = docSnap.id;
                     targetUserEmail = docSnap.data()?.email || rawEmail;
                 }
-            } catch (e) {
-                console.error('Erro ao buscar doc direto:', e);
-            }
+            } catch (e) { console.error('Erro ao buscar doc direto:', e); }
         }
 
         const userClients: Client[] = [];
-
         if (targetUserId) {
             try {
                 const clientsSnap = await getDocs(collection(db, 'users', targetUserId, 'clients'));
-                clientsSnap.docs.forEach((docSnap) => {
-                    userClients.push({ id: docSnap.id, ...docSnap.data() } as Client);
+                clientsSnap.docs.forEach((d) => {
+                    userClients.push({ id: d.id, ...d.data() } as Client);
                 });
-            } catch (e) {
-                console.error(`Erro ao carregar clientes do usuário ${targetUserId}:`, e);
-            }
+            } catch (e) { console.error('Erro ao carregar clientes:', e); }
         }
 
         const searchCanonical = getCanonicalPhone(rawPhone);
@@ -178,19 +160,11 @@ export async function GET(
         let responseText = `NomeCliente: ${clientName}\n`;
         responseText += `Assinaturas Ativas: ${activeClients.length}\n`;
         responseText += `Assinaturas Vencidas: ${overdueClients.length}\n\n`;
-
         responseText += `Assinaturas Ativas{\n\n`;
-        if (activeClients.length > 0) {
-            responseText += activeClients.map(buildClientBlock).join('\n\n\n');
-            responseText += `\n`;
-        }
+        if (activeClients.length > 0) responseText += activeClients.map(buildClientBlock).join('\n\n\n') + '\n';
         responseText += `}\n\n\n`;
-
         responseText += `Assinaturas Vencidas{\n\n`;
-        if (overdueClients.length > 0) {
-            responseText += overdueClients.map(buildClientBlock).join('\n\n\n');
-            responseText += `\n`;
-        }
+        if (overdueClients.length > 0) responseText += overdueClients.map(buildClientBlock).join('\n\n\n') + '\n';
         responseText += `}`;
 
         const url = new URL(request.url);
@@ -219,18 +193,9 @@ export async function GET(
 
     } catch (e: any) {
         console.error('Erro na API /api/dados:', e);
-        const fallback = [
-            `NomeCliente: N/A`,
-            `Assinaturas Ativas: 0`,
-            `Assinaturas Vencidas: 0`,
-            ``,
-            `Assinaturas Ativas{\n\n}`,
-            ``,
-            `Assinaturas Vencidas{\n\n}`,
-        ].join('\n');
-        return new NextResponse(fallback, {
-            status: 200,
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-        });
+        return new NextResponse(
+            'NomeCliente: N/A\nAssinaturas Ativas: 0\nAssinaturas Vencidas: 0\n\nAssinaturas Ativas{\n\n}\n\n\nAssinaturas Vencidas{\n\n}',
+            { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+        );
     }
 }
