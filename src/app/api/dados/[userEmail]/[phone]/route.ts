@@ -86,13 +86,10 @@ export async function GET(
     request: Request,
     props: { params: Promise<{ userEmail: string; phone: string }> }
 ) {
-    let rawEmail = '';
-    let rawPhone = '';
-
     try {
         const params = await props.params;
-        rawEmail = decodeURIComponent(params.userEmail || '').trim().toLowerCase();
-        rawPhone = decodeURIComponent(params.phone || '').trim();
+        const rawEmail = decodeURIComponent(params.userEmail || '').trim().toLowerCase();
+        const rawPhone = decodeURIComponent(params.phone || '').trim();
 
         if (!rawEmail || !rawPhone) {
             return new NextResponse('Email do usuário e número de telefone são obrigatórios.', { status: 400 });
@@ -113,7 +110,7 @@ export async function GET(
             console.error('Erro na query por email:', e);
         }
 
-        // 2. Se não achou com where, percorre os usuários (case-insensitive)
+        // 2. Percorre os usuários (case-insensitive) se não achou
         if (!targetUserId) {
             try {
                 const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -132,7 +129,7 @@ export async function GET(
             }
         }
 
-        // 3. Fallback: tenta buscar o doc direto usando o rawEmail como ID
+        // 3. Fallback: tenta buscar o doc direto usando rawEmail como ID
         if (!targetUserId) {
             try {
                 const docSnap = await getDoc(doc(db, 'users', rawEmail));
@@ -161,22 +158,16 @@ export async function GET(
         const searchCanonical = getCanonicalPhone(rawPhone);
         const searchDigits = rawPhone.replace(/\D/g, '');
 
-        // Filtra clientes do usuário pelo telefone
         const matchedClients = userClients.filter((c) => {
             if (!c.phone) return false;
             const clientCanonical = getCanonicalPhone(c.phone);
-
-            if (clientCanonical && searchCanonical && clientCanonical === searchCanonical) {
-                return true;
-            }
-
+            if (clientCanonical && searchCanonical && clientCanonical === searchCanonical) return true;
             const cDigits = c.phone.replace(/\D/g, '');
             if (cDigits && searchDigits) {
                 if (cDigits === searchDigits) return true;
                 if (searchDigits.length >= 8 && cDigits.endsWith(searchDigits)) return true;
                 if (cDigits.length >= 8 && searchDigits.endsWith(cDigits)) return true;
             }
-
             return false;
         });
 
@@ -210,7 +201,7 @@ export async function GET(
             return NextResponse.json({
                 userEmail: targetUserEmail || rawEmail,
                 userId: targetUserId || null,
-                clientName: clientName,
+                clientName,
                 searchPhone: rawPhone,
                 canonicalPhone: searchCanonical,
                 activeCount: activeClients.length,
@@ -223,33 +214,23 @@ export async function GET(
 
         return new NextResponse(responseText, {
             status: 200,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-            },
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         });
-    } catch (e: any) {
-        console.error('Erro na API de consulta por usuário e telefone:', e);
 
-        const fallbackText = [
+    } catch (e: any) {
+        console.error('Erro na API /api/dados:', e);
+        const fallback = [
             `NomeCliente: N/A`,
             `Assinaturas Ativas: 0`,
             `Assinaturas Vencidas: 0`,
             ``,
-            `Assinaturas Ativas{`,
+            `Assinaturas Ativas{\n\n}`,
             ``,
-            `}`,
-            ``,
-            ``,
-            `Assinaturas Vencidas{`,
-            ``,
-            `}`,
+            `Assinaturas Vencidas{\n\n}`,
         ].join('\n');
-
-        return new NextResponse(fallbackText, {
+        return new NextResponse(fallback, {
             status: 200,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-            },
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         });
     }
 }
