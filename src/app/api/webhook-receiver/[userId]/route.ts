@@ -287,16 +287,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       
       if (settingsSnap.exists()) {
         const settings = settingsSnap.data();
+        const deliveryMethod = clientData.deliveryMethod || 'credentials';
         
-        const isDeliveryActive = settings.isDeliveryAutomationActive;
+        const isDeliveryActive = deliveryMethod === 'link'
+            ? (settings.isDeliveryLinkAutomationActive !== false)
+            : (settings.isDeliveryAutomationActive !== false);
+            
         const subName = clientData.subscription || '';
-        const deliveryMessageTemplate = getCustomDeliveryMessage(settings.customDeliveryMessages, subName, settings.deliveryMessage);
+        const customTemplate = deliveryMethod === 'link'
+            ? getCustomDeliveryMessage(settings.customDeliveryLinkMessages, subName, settings.deliveryLinkMessage)
+            : getCustomDeliveryMessage(settings.customDeliveryMessages, subName, settings.deliveryMessage);
+
+        const defaultTemplate = deliveryMethod === 'link'
+            ? "Olá {cliente}! Segue o link de acesso da sua assinatura:\n\n📦 Assinatura: {assinatura}\n🔗 Link: {link}\n📅 Vencimento: {vencimento}"
+            : "Olá {cliente}! Seguem os dados de acesso da sua assinatura:\n\n📦 Assinatura: {assinatura}\n📧 Email: {email}\n🔑 Senha: {senha}\n📺 Tela: {tela}\n🔢 Pin: {pin_tela}\n📅 Vencimento: {vencimento}";
+
+        const deliveryMessageTemplate = customTemplate || defaultTemplate;
 
         if (isDeliveryActive && deliveryMessageTemplate && settings.webhookToken) {
             let formattedMessage = deliveryMessageTemplate
                 .replace(/{cliente}/g, clientData.name)
                 .replace(/{telefone}/g, clientData.phone)
-                .replace(/{email}/g, clientData.email.join(', '))
+                .replace(/{email}/g, (clientData.email || []).join(', '))
                 .replace(/{senha}/g, clientData.password || 'N/A')
                 .replace(/{tela}/g, clientData.screen || 'N/A')
                 .replace(/{pin_tela}/g, clientData.pinScreen || 'N/A')
@@ -306,10 +318,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
                 .replace(/{valor}/g, clientData.amountPaid || '0,00')
                 .replace(/{status}/g, clientData.status);
 
-
-
             try {
-                // Envia a mensagem de entrega de credenciais diretamente para a API UAZAPI
                 const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
 
                 await fetch('https://pjcontas.uazapi.com/send/text', {

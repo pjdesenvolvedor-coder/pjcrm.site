@@ -426,52 +426,68 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
         toast({ title: "Cliente adicionado!" });
         onFinished();
 
-        // Executa a sequência em segundo plano de forma assíncrona para não travar o modal do usuário
+        // Executa a sequência em segundo plano de forma assíncrona
         (async () => {
-            // 1. PRIMEIRO: Dispara o Webhook para Salvar o Contato e aguarda a conclusão
-            if (settings?.webhookToken) {
-                try {
-                    await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            nome: trimmedName,
-                            numero: trimmedPhone,
-                            token: settings.webhookToken
-                        })
-                    });
-                    // Pausa de 1.5 segundos para garantir que o contato foi salvo antes do envio da mensagem
-                    await new Promise(r => setTimeout(r, 1500));
-                } catch (e) {
-                    console.error("Falha ao enviar webhook ao adicionar cliente:", e);
-                }
-            }
+            const token = settings?.webhookToken;
+            const deliveryMethod = values.deliveryMethod || 'credentials';
 
-            // 2. Dispara a fila do cron
-            fetch('/api/cron/run').catch(() => {});
+            // 1. PRIMEIRO: Envia a mensagem de entrega de credenciais/acesso IMEDIATAMENTE ao WhatsApp
+            const isDeliveryActive = deliveryMethod === 'link'
+                ? (settings?.isDeliveryLinkAutomationActive !== false)
+                : (settings?.isDeliveryAutomationActive !== false);
 
-            // 3. Em seguida envia a mensagem de entrega de credenciais/acesso
-            const isDeliveryActive = values.deliveryMethod === 'credentials' ? settings?.isDeliveryAutomationActive : settings?.isDeliveryLinkAutomationActive;
-            const deliveryMessageTemplate = values.deliveryMethod === 'credentials'
-                ? getCustomDeliveryMessage(settings?.customDeliveryMessages, trimmedSubscription, settings?.deliveryMessage)
-                : getCustomDeliveryMessage(settings?.customDeliveryLinkMessages, trimmedSubscription, settings?.deliveryLinkMessage);
+            const customTemplate = deliveryMethod === 'link'
+                ? getCustomDeliveryMessage(settings?.customDeliveryLinkMessages, trimmedSubscription, settings?.deliveryLinkMessage)
+                : getCustomDeliveryMessage(settings?.customDeliveryMessages, trimmedSubscription, settings?.deliveryMessage);
 
-            if (isDeliveryActive && deliveryMessageTemplate && settings?.webhookToken) {
+            const defaultTemplate = deliveryMethod === 'link'
+                ? "Olá {cliente}! Segue o link de acesso da sua assinatura:\n\n📦 Assinatura: {assinatura}\n🔗 Link: {link}\n📅 Vencimento: {vencimento}"
+                : "Olá {cliente}! Seguem os dados de acesso da sua assinatura:\n\n📦 Assinatura: {assinatura}\n📧 Email: {email}\n🔑 Senha: {senha}\n📺 Tela: {tela}\n🔢 Pin: {pin_tela}\n📅 Vencimento: {vencimento}";
+
+            const deliveryMessageTemplate = customTemplate || defaultTemplate;
+
+            if (isDeliveryActive && deliveryMessageTemplate && token) {
                 let formattedMessage = deliveryMessageTemplate
-                    .replace(/{cliente}/g, trimmedName).replace(/{telefone}/g, trimmedPhone)
+                    .replace(/{cliente}/g, trimmedName)
+                    .replace(/{telefone}/g, trimmedPhone)
                     .replace(/{email}/g, emailList.join(', '))
-                    .replace(/{senha}/g, trimmedPassword || 'N/A').replace(/{tela}/g, trimmedScreen || 'N/A')
+                    .replace(/{senha}/g, trimmedPassword || 'N/A')
+                    .replace(/{tela}/g, trimmedScreen || 'N/A')
                     .replace(/{pin_tela}/g, trimmedPinScreen || 'N/A')
                     .replace(/{link}/g, trimmedAccessLink || 'N/A')
                     .replace(/{assinatura}/g, trimmedSubscription)
                     .replace(/{vencimento}/g, dueDateTimestamp ? format(dueDateTimestamp.toDate(), 'dd/MM/yyyy') : 'N/A')
-                    .replace(/{valor}/g, trimmedAmountPaid || '0,00').replace(/{status}/g, newStatus);
+                    .replace(/{valor}/g, trimmedAmountPaid || '0,00')
+                    .replace(/{status}/g, newStatus);
 
-                await fetch('/api/send-message', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: formattedMessage, phoneNumber: trimmedPhone, token: settings.webhookToken }),
-                }).catch(console.error);
+                try {
+                    await fetch('/api/send-message', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: formattedMessage, phoneNumber: trimmedPhone, token }),
+                    });
+                    console.log('Mensagem de entrega do produto enviada com sucesso');
+                } catch (err) {
+                    console.error('Erro ao enviar mensagem de entrega:', err);
+                }
             }
+
+            // 2. SEGUNDO: Dispara o Webhook para Salvar o Contato no n8n (em segundo plano)
+            if (token) {
+                fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome: trimmedName,
+                        numero: trimmedPhone,
+                        token: token
+                    })
+                }).catch((e) => console.error("Falha no webhook de salvar contato:", e));
+            }
+
+            // 3. TERCEIRO: Aguarda 3 segundos antes de disparar o Cron/Upsell para garantir que as credenciais cheguem PRIMEIRO!
+            await new Promise(r => setTimeout(r, 3000));
+            fetch('/api/cron/run').catch(() => {});
         })();
         return;
     }
