@@ -141,17 +141,28 @@ export default function ZapVendasConnectionPage() {
                 body: JSON.stringify({ token: settings.zapVendasToken }),
             });
 
-            if (!response.ok) throw new Error('Falha na resposta do webhook.');
+            if (!response.ok) throw new Error(`Falha no servidor de conexão (${response.status}).`);
 
-            const data = await response.json();
-            const qrCodeValue = data.qrcode;
+            const rawText = await response.text();
+            if (!rawText || !rawText.trim()) {
+                throw new Error('O servidor n8n não retornou o QR code. Verifique se o fluxo do webhook no n8n está ativo e a instância existe.');
+            }
+
+            let data: any = {};
+            try {
+                data = JSON.parse(rawText);
+            } catch {
+                throw new Error('Resposta inválida do servidor ao gerar QR code.');
+            }
+
+            const qrCodeValue = data.qrcode || data.qr || data.code;
 
             if (qrCodeValue) {
                 setQrCode(qrCodeValue.startsWith('data:image') ? qrCodeValue : `data:image/png;base64,${qrCodeValue}`);
                 setConnectionStatus('qr_code');
                 toast({ title: 'QR Code Pronto!', description: 'Escaneie para conectar.' });
             } else {
-                throw new Error('QR code inválido.');
+                throw new Error(data.message || data.error || 'QR code não foi retornado pela instância.');
             }
         } catch (error: any) {
             console.error(error);

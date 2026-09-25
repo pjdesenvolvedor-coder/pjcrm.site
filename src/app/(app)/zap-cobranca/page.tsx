@@ -179,15 +179,27 @@ export default function ZapCobrancaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       });
-      if (!res.ok) throw new Error('Falha na resposta do webhook.');
-      const data = await res.json();
-      const qrValue = data.qrcode;
+      if (!res.ok) throw new Error(`Falha no servidor de conexão (${res.status}).`);
+
+      const rawText = await res.text();
+      if (!rawText || !rawText.trim()) {
+        throw new Error('O servidor n8n não retornou o QR code. Verifique se o fluxo do webhook no n8n está ativo e a instância existe.');
+      }
+
+      let data: any = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error('Resposta inválida do servidor ao gerar QR code.');
+      }
+
+      const qrValue = data.qrcode || data.qr || data.code;
       if (qrValue) {
         setQrCode(qrValue.startsWith('data:image') ? qrValue : `data:image/png;base64,${qrValue}`);
         setConnectionState('qr_code');
         toast({ title: 'QR Code Pronto!', description: 'Escaneie com o WhatsApp de Cobrança.' });
       } else {
-        throw new Error('QR code inválido.');
+        throw new Error(data.message || data.error || 'QR code não retornado pela instância.');
       }
     } catch (err: any) {
       setConnectionState('error');
