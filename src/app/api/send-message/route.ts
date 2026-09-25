@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const formattedPhoneNumber = formatPhoneWith55(phoneNumber);
 
-    const apiUrl = 'https://pjcontas.uazapi.com/send/text';
+    const apiUrl = 'https://travelflow.uazapi.com/send/text';
 
     const apiResponse = await fetch(apiUrl, {
       method: 'POST',

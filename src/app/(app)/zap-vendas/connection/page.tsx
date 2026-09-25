@@ -135,34 +135,23 @@ export default function ZapVendasConnectionPage() {
         setQrCode(null);
 
         try {
-            const response = await fetch('https://pjempreendimentos.n8nready.com.br/webhook/995f0ad6-006a-4633-98eb-cef61042b7aa', {
+            const response = await fetch('/api/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: settings.zapVendasToken }),
             });
 
-            if (!response.ok) throw new Error(`Falha no servidor de conexão (${response.status}).`);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || `Falha no servidor de conexão (${response.status}).`);
 
-            const rawText = await response.text();
-            if (!rawText || !rawText.trim()) {
-                throw new Error('O servidor n8n não retornou o QR code. Verifique se o fluxo do webhook no n8n está ativo e a instância existe.');
-            }
-
-            let data: any = {};
-            try {
-                data = JSON.parse(rawText);
-            } catch {
-                throw new Error('Resposta inválida do servidor ao gerar QR code.');
-            }
-
-            const qrCodeValue = data.qrcode || data.qr || data.code;
+            const qrCodeValue = data.qrcode;
 
             if (qrCodeValue) {
                 setQrCode(qrCodeValue.startsWith('data:image') ? qrCodeValue : `data:image/png;base64,${qrCodeValue}`);
                 setConnectionStatus('qr_code');
                 toast({ title: 'QR Code Pronto!', description: 'Escaneie para conectar.' });
             } else {
-                throw new Error(data.message || data.error || 'QR code não foi retornado pela instância.');
+                throw new Error(data.error || 'QR code não foi retornado pela instância.');
             }
         } catch (error: any) {
             console.error(error);
@@ -175,7 +164,7 @@ export default function ZapVendasConnectionPage() {
         if (!settings?.zapVendasToken) return;
         setIsDisconnecting(true);
         try {
-            await fetch('https://pjempreendimentos.n8nready.com.br/webhook/3e7d97d7-a8f5-445c-96b7-cdc7142cb216', {
+            await fetch('/api/disconnect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: settings.zapVendasToken }),

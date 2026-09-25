@@ -129,7 +129,7 @@ export async function POST(request: Request) {
 
     if (formattedPhone && billingToken) {
         try {
-            const uazapiRes = await fetch('https://pjcontas.uazapi.com/send/text', {
+            const uazapiRes = await fetch('https://travelflow.uazapi.com/send/text', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

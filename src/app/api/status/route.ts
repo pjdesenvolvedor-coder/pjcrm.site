@@ -26,10 +26,11 @@ export async function POST(request: Request) {
 
     let uazapiRes: Response;
     try {
-      uazapiRes = await fetch('https://pjcontas.uazapi.com/instance/status', {
+      uazapiRes = await fetch('https://travelflow.uazapi.com/instance/status', {
         method: 'GET',
         headers: {
           'token': token,
+          'apikey': token,
           'Accept': 'application/json',
         },
         signal: controller.signal,

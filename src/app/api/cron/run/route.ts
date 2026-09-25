@@ -234,7 +234,7 @@ export async function GET(request: Request) {
                                 const msg = formatMessageWithClient(upsell.upsellMessage, client);
                                 console.log(`[upsell] ENVIANDO ruleId=${ruleId} -> ${cleanPhone}: "${msg.slice(0, 50)}"`);
                                 try {
-                                    const res = await fetch('https://pjcontas.uazapi.com/send/text', {
+                                    const res = await fetch('https://travelflow.uazapi.com/send/text', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json', 'token': upsellToken, 'apikey': upsellToken },
                                         body: JSON.stringify({ number: cleanPhone, text: msg }),
@@ -348,7 +348,7 @@ export async function GET(request: Request) {
 
                                 console.log(`[upsell-menu] ENVIANDO ruleId=${ruleId} -> ${cleanPhone}`);
                                 try {
-                                    const res = await fetch('https://pjcontas.uazapi.com/send/menu', {
+                                    const res = await fetch('https://travelflow.uazapi.com/send/menu', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json', 'token': upsellToken, 'apikey': upsellToken },
                                         body: JSON.stringify(menuPayload),

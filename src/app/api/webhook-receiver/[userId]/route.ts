@@ -321,7 +321,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
             try {
                 const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
 
-                await fetch('https://pjcontas.uazapi.com/send/text', {
+                await fetch('https://travelflow.uazapi.com/send/text', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
