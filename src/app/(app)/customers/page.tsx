@@ -472,17 +472,17 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 }
             }
 
-            // 2. SEGUNDO: Dispara o Webhook para Salvar o Contato no n8n (em segundo plano)
+            // 2. SEGUNDO: Adiciona o Contato diretamente na agenda do WhatsApp via API
             if (token) {
-                fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+                fetch('/api/contact/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        nome: trimmedName,
-                        numero: trimmedPhone,
+                        name: trimmedName,
+                        number: trimmedPhone,
                         token: token
                     })
-                }).catch((e) => console.error("Falha no webhook de salvar contato:", e));
+                }).catch((e) => console.error("Falha ao adicionar contato na agenda:", e));
             }
 
             // 3. TERCEIRO: Aguarda 3 segundos antes de disparar o Cron/Upsell para garantir que as credenciais cheguem PRIMEIRO!
@@ -1252,26 +1252,27 @@ function formatClientEmailDisplay(emailVal: any): string {
 
   const handleManualWebhook = async (client: Client) => {
       if (!settings?.webhookToken) {
-          toast({ variant: 'destructive', title: 'Erro', description: 'Token de webhook não configurado nas configurações.' });
+          toast({ variant: 'destructive', title: 'Erro', description: 'Token do WhatsApp não configurado nas configurações.' });
           return;
       }
       
       try {
-          const response = await fetch('https://pjempreendimentos.n8nready.com.br/webhook/e1d3eaf3-c73c-4d9b-b3fb-39f6abe181f3', {
+          const response = await fetch('/api/contact/add', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                  nome: client.name,
-                  numero: client.phone.replace(/\D/g, ''),
+                  name: client.name,
+                  number: client.phone.replace(/\D/g, ''),
                   token: settings.webhookToken
               })
           });
 
-          if (!response.ok) throw new Error('Falha na resposta do webhook');
-          toast({ title: 'Webhook Enviado!', description: `Dados de ${client.name} enviados ao n8n.` });
-      } catch (error) {
-          console.error("Erro ao disparar webhook manual:", error);
-          toast({ variant: 'destructive', title: 'Erro ao enviar', description: 'Não foi possível comunicar com o webhook n8n.' });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || 'Falha ao adicionar contato na API');
+          toast({ title: 'Contato Salvo!', description: `${client.name} adicionado à agenda do WhatsApp com sucesso.` });
+      } catch (error: any) {
+          console.error("Erro ao salvar contato:", error);
+          toast({ variant: 'destructive', title: 'Erro ao salvar', description: error.message || 'Não foi possível adicionar o contato.' });
       }
   };
 

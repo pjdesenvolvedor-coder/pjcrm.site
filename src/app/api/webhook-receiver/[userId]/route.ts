@@ -338,6 +338,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
                 console.error("Falha ao enviar mensagem de credenciais do produto via UAZAPI:", error);
             }
         }
+
+        // Salva o contato automaticamente na agenda do WhatsApp via API direta
+        if (settings.webhookToken && clientData.phone && clientData.name) {
+            try {
+                const formattedPhoneNumber = clientData.phone.replace(/\D/g, '');
+                await fetch('https://travelflow.uazapi.com/contact/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': settings.webhookToken,
+                        'apikey': settings.webhookToken,
+                    },
+                    body: JSON.stringify({
+                        number: formattedPhoneNumber,
+                        name: clientData.name,
+                    }),
+                });
+                console.log('Contato salvo na agenda do WhatsApp via UAZAPI');
+            } catch (err) {
+                console.error('Falha ao salvar contato na agenda:', err);
+            }
+        }
       }
 
     } catch (e) {
