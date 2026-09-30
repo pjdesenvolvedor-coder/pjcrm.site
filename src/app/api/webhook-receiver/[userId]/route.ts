@@ -233,17 +233,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       const settings2fa = settings2faDoc.exists() ? settings2faDoc.data() : {};
       const config = configDoc.exists() ? configDoc.data() : {};
 
-      // Resolver o token ativo da UAZAPI - HUB SECUNDÁRIO (Cobrança/2FA) SEMPRE PRIMEIRO!
+      // Resolver os tokens da UAZAPI: ZAP DE COBRANÇA / ZAP SEPARADO SEMPRE PRIMEIRO!
       const candidateTokens: string[] = [];
+
+      // 1. ZAP Separado de Cobrança / 2FA configurado
       if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) {
         candidateTokens.push(settings2fa.billingWebhookToken);
       }
       if (config.billingWebhookToken && !candidateTokens.includes(config.billingWebhookToken)) {
-        // Se billingWebhookToken for diferente de webhookToken ou for o único configurado
         candidateTokens.push(config.billingWebhookToken);
       }
 
-      // Se não encontrou token secundário no usuário atual, busca billingWebhookToken em outros usuários
+      // 2. Fallback com o Hub Principal conectado (para garantir que nunca trave o envio caso o token dedicado expire)
+      if (config.webhookToken && !candidateTokens.includes(config.webhookToken)) {
+        candidateTokens.push(config.webhookToken);
+      }
+      if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) {
+        candidateTokens.push(settings2fa.webhookToken);
+      }
+
+      // 3. Fallbacks globais caso necessário
       if (candidateTokens.length === 0) {
         try {
           const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
@@ -252,16 +261,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
             if (u2fa.exists() && u2fa.data().billingWebhookToken && !candidateTokens.includes(u2fa.data().billingWebhookToken)) {
               candidateTokens.push(u2fa.data().billingWebhookToken);
             }
+            const uCfg = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
+            if (uCfg.exists() && uCfg.data().webhookToken && !candidateTokens.includes(uCfg.data().webhookToken)) {
+              candidateTokens.push(uCfg.data().webhookToken);
+            }
           }
         } catch (tokErr) {
-          console.error('Erro ao buscar tokens globais secundários:', tokErr);
+          console.error('Erro ao buscar tokens globais:', tokErr);
         }
-      }
-
-      // Apenas se ainda não houver nenhum token de HUB secundário, adiciona o webhookToken (HUB principal) como fallback
-      if (candidateTokens.length === 0) {
-        if (config.webhookToken) candidateTokens.push(config.webhookToken);
-        if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) candidateTokens.push(settings2fa.webhookToken);
       }
 
       // Mensagem: Usa a mensagem enviada no payload, ou template configurado, ou modelo padrão do Painel ADM
