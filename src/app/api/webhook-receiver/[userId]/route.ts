@@ -233,41 +233,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       const settings2fa = settings2faDoc.exists() ? settings2faDoc.data() : {};
       const config = configDoc.exists() ? configDoc.data() : {};
 
-      // Resolver os tokens da UAZAPI: ZAP DE COBRANÇA / ZAP SEPARADO SEMPRE PRIMEIRO!
+      // Resolver o token ativo da UAZAPI
       const candidateTokens: string[] = [];
+      if (config.billingWebhookToken) candidateTokens.push(config.billingWebhookToken);
+      if (config.webhookToken && !candidateTokens.includes(config.webhookToken)) candidateTokens.push(config.webhookToken);
+      if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) candidateTokens.push(settings2fa.billingWebhookToken);
+      if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) candidateTokens.push(settings2fa.webhookToken);
 
-      // 1. ZAP Separado de Cobrança / 2FA configurado
-      if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) {
-        candidateTokens.push(settings2fa.billingWebhookToken);
-      }
-      if (config.billingWebhookToken && !candidateTokens.includes(config.billingWebhookToken)) {
-        candidateTokens.push(config.billingWebhookToken);
-      }
-
-      // 2. Fallback com o Hub Principal conectado (para garantir que nunca trave o envio caso o token dedicado expire)
-      if (config.webhookToken && !candidateTokens.includes(config.webhookToken)) {
-        candidateTokens.push(config.webhookToken);
-      }
-      if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) {
-        candidateTokens.push(settings2fa.webhookToken);
-      }
-
-      // 3. Fallbacks globais caso necessário
+      // Se não encontrou token para este usuário, buscar globalmente em outros usuários cadastrados
       if (candidateTokens.length === 0) {
         try {
           const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
           for (const uDoc of usersSnap.docs) {
-            const u2fa = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
-            if (u2fa.exists() && u2fa.data().billingWebhookToken && !candidateTokens.includes(u2fa.data().billingWebhookToken)) {
-              candidateTokens.push(u2fa.data().billingWebhookToken);
-            }
-            const uCfg = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
-            if (uCfg.exists() && uCfg.data().webhookToken && !candidateTokens.includes(uCfg.data().webhookToken)) {
-              candidateTokens.push(uCfg.data().webhookToken);
+            const uConfig = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
+            if (uConfig.exists()) {
+              const uData = uConfig.data();
+              if (uData.billingWebhookToken && !candidateTokens.includes(uData.billingWebhookToken)) candidateTokens.push(uData.billingWebhookToken);
+              if (uData.webhookToken && !candidateTokens.includes(uData.webhookToken)) candidateTokens.push(uData.webhookToken);
             }
           }
         } catch (tokErr) {
-          console.error('Erro ao buscar tokens globais:', tokErr);
+          console.error('Erro ao buscar tokens globais de fallback:', tokErr);
         }
       }
 

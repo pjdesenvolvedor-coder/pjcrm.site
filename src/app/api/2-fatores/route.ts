@@ -113,15 +113,15 @@ export async function POST(request: Request) {
 
     const formattedPhone = formatPhoneWith55(String(rawPhone));
 
-    const secondaryTokens: string[] = [];
-    const fallbackTokens: string[] = [];
+    // Coleta todos os tokens disponíveis dos usuários cadastrados
+    const candidateTokens: string[] = [];
     let customTemplate = '';
     let targetUserId = '';
 
     // Se o webhook passou um token explícito
     const explicitToken = getFlexValue(['token', 'apikey', 'webhooktoken']);
-    if (explicitToken && !secondaryTokens.includes(explicitToken)) {
-        secondaryTokens.push(explicitToken);
+    if (explicitToken && !candidateTokens.includes(explicitToken)) {
+        candidateTokens.push(explicitToken);
     }
 
     try {
@@ -129,35 +129,28 @@ export async function POST(request: Request) {
         for (const uDoc of usersSnap.docs) {
             targetUserId = targetUserId || uDoc.id;
 
-            // Template e Token Secundário de 2FA configurado
-            const settings2faSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
-            if (settings2faSnap.exists()) {
-                const fData = settings2faSnap.data();
-                if (!customTemplate && fData?.messageTemplate) {
-                    customTemplate = fData.messageTemplate;
-                }
-                if (fData?.billingWebhookToken && !secondaryTokens.includes(fData.billingWebhookToken)) {
-                    secondaryTokens.push(fData.billingWebhookToken);
+            // Template de 2FA configurado
+            if (!customTemplate) {
+                const settings2faSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
+                if (settings2faSnap.exists() && settings2faSnap.data()?.messageTemplate) {
+                    customTemplate = settings2faSnap.data()?.messageTemplate;
                 }
             }
 
             const configSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
             if (configSnap.exists()) {
                 const s = configSnap.data();
-                if (s.billingWebhookToken && !secondaryTokens.includes(s.billingWebhookToken)) {
-                    secondaryTokens.push(s.billingWebhookToken);
+                if (s.billingWebhookToken && !candidateTokens.includes(s.billingWebhookToken)) {
+                    candidateTokens.push(s.billingWebhookToken);
                 }
-                if (s.webhookToken && !fallbackTokens.includes(s.webhookToken)) {
-                    fallbackTokens.push(s.webhookToken);
+                if (s.webhookToken && !candidateTokens.includes(s.webhookToken)) {
+                    candidateTokens.push(s.webhookToken);
                 }
             }
         }
     } catch (dbErr) {
         console.error('Erro ao buscar configurações no Firestore:', dbErr);
     }
-
-    // HUB Secundário tem prioridade absoluta para envio de 2FA
-    const candidateTokens: string[] = [...secondaryTokens, ...fallbackTokens];
 
     let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Jivago';
     let rawMessage = getFlexValue(['mensagem', 'texto', 'text', 'message']);
