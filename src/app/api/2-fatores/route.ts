@@ -152,14 +152,20 @@ export async function POST(request: Request) {
         console.error('Erro ao buscar configurações no Firestore:', dbErr);
     }
 
-    // Modelo padrão se nenhum for configurado
-    const defaultTemplate = `🔐 Olá!\n\nSeu *código de acesso* para o Aplicativo PJ Assinaturas:\n\n📲 Código: *{codigo}*\n\n⚠️ *Este código é pessoal e intransferível.*`;
-    const templateToUse = customTemplate?.trim() || defaultTemplate;
+    let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Jivago';
+    let rawMessage = getFlexValue(['mensagem', 'texto', 'text', 'message']);
 
-    // Substitui variáveis {codigo} e {numero}
+    // Modelo padrão se nenhum for configurado
+    const defaultTemplate = `🔒 *PJ CONTAS - CÓDIGO DE VERIFICAÇÃO*\n\nOlá *{nome}*, seu código de segurança para acessar o Painel ADM é:\n\n👉 *{codigo}*\n\n_Válido por 10 minutos. Se você não solicitou, ignore esta mensagem._`;
+    const templateToUse = rawMessage?.trim() || customTemplate?.trim() || defaultTemplate;
+
+    // Substitui variáveis {codigo}, {nome} e {numero}
     const messageText = templateToUse
         .replace(/{codigo}/gi, code || 'N/A')
         .replace(/{code}/gi, code || 'N/A')
+        .replace(/{nome}/gi, rawName || 'Cliente')
+        .replace(/{cliente}/gi, rawName || 'Cliente')
+        .replace(/{name}/gi, rawName || 'Cliente')
         .replace(/{numero}/gi, rawPhone || formattedPhone || 'N/A')
         .replace(/{telefone}/gi, rawPhone || formattedPhone || 'N/A');
 
