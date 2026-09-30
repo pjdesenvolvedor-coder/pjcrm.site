@@ -94,6 +94,21 @@ function extractWebhookData(body: unknown) {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, any>;
 
+  // Se for qualquer payload de 2-fatores / código de verificação / ADM, NUNCA extrair como cliente / produto
+  const bodyString = JSON.stringify(b).toLowerCase();
+  if (
+    bodyString.includes('2fatores') ||
+    bodyString.includes('codigofa') ||
+    bodyString.includes('codigo_fa') ||
+    bodyString.includes('código de verificação') ||
+    bodyString.includes('codigo de verificacao') ||
+    bodyString.includes('painel adm') ||
+    bodyString.includes('código de segurança') ||
+    bodyString.includes('codigo de seguranca')
+  ) {
+    return null;
+  }
+
   // Case-insensitive key lookup helper (checks root level and common sub-objects)
   const getVal = (keys: string[]): any => {
     for (const k of keys) {
@@ -185,55 +200,85 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
     webhookLogsByUser[userId] = [];
   }
 
-  // Se o payload for de 2-fatores, trata exclusivamente como 2FA (não cria cliente nem produto)
-  const is2FA = body && typeof body === 'object' &&
-    ((('Conteudo' in (body as any)) && String((body as any).Conteudo).toLowerCase().includes('2fatores')) ||
-     (('conteudo' in (body as any)) && String((body as any).conteudo).toLowerCase().includes('2fatores')) ||
-     (('codigofa' in (body as any)) || ('codigo_fa' in (body as any))));
+  // Identificação inteligente se o payload é de 2FA / Código de Verificação
+  const bodyString = body && typeof body === 'object' ? JSON.stringify(body).toLowerCase() : String(body || '').toLowerCase();
+  const is2FA = bodyString.includes('2fatores') ||
+                bodyString.includes('codigofa') ||
+                bodyString.includes('codigo_fa') ||
+                bodyString.includes('código de verificação') ||
+                bodyString.includes('codigo de verificacao') ||
+                bodyString.includes('painel adm') ||
+                bodyString.includes('código de segurança') ||
+                bodyString.includes('codigo de seguranca');
 
   if (is2FA) {
     try {
-      const b = body as any;
-      const rawCode = b.codigofa || b.codigoFa || b.codigo_fa || b.codigo || b.code || b.pin || b.otp;
-      const rawPhone = b.NumeroCliente || b.numeroCliente || b.numero_cliente || b.telefone || b.phone || b.number || b.numero;
-      const rawName = b.nome || b.Nome || b.name || b.Name || 'Administrador';
+      const b = (body && typeof body === 'object' ? body : {}) as any;
+      const rawCode = b.codigofa || b.codigoFa || b.codigo_fa || b.codigo || b.Codigo || b.code || b.Code || b.pin || b.otp;
+      const rawPhone = b.NumeroCliente || b.numeroCliente || b.numero_cliente || b.telefone || b.Telefone || b.phone || b.Phone || b.number || b.Number || b.numero || b.Numero;
+      const rawName = b.nome || b.Nome || b.name || b.Name || 'Jivago';
       const rawMessage = b.mensagem || b.Mensagem || b.texto || b.Texto || b.text || b.Text;
 
-      const formattedPhone = extractPhoneString(rawPhone);
+      let formattedPhone = extractPhoneString(rawPhone);
+      if (!formattedPhone && typeof body === 'string') {
+        const match = (body as string).match(/(?:55)?\d{10,11}/);
+        if (match) formattedPhone = extractPhoneString(match[0]);
+      }
       const cleanPhone = formattedPhone ? (formattedPhone.startsWith('55') ? formattedPhone : `55${formattedPhone}`) : '';
 
-      if (cleanPhone) {
-        // Buscar configurações de 2FA e gerais do usuário no Firestore
-        const settings2faDoc = await getDoc(doc(db, 'users', userId, 'settings', '2fatores'));
-        const configDoc = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
+      // Buscar configurações de 2FA e gerais do usuário no Firestore
+      const settings2faDoc = await getDoc(doc(db, 'users', userId, 'settings', '2fatores'));
+      const configDoc = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
 
-        const settings2fa = settings2faDoc.exists() ? settings2faDoc.data() : {};
-        const config = configDoc.exists() ? configDoc.data() : {};
+      const settings2fa = settings2faDoc.exists() ? settings2faDoc.data() : {};
+      const config = configDoc.exists() ? configDoc.data() : {};
 
-        // Resolver o token ativo da UAZAPI
-        const candidateTokens: string[] = [];
-        if (config.billingWebhookToken) candidateTokens.push(config.billingWebhookToken);
-        if (config.webhookToken && !candidateTokens.includes(config.webhookToken)) candidateTokens.push(config.webhookToken);
-        if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) candidateTokens.push(settings2fa.billingWebhookToken);
+      // Resolver o token ativo da UAZAPI
+      const candidateTokens: string[] = [];
+      if (config.billingWebhookToken) candidateTokens.push(config.billingWebhookToken);
+      if (config.webhookToken && !candidateTokens.includes(config.webhookToken)) candidateTokens.push(config.webhookToken);
+      if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) candidateTokens.push(settings2fa.billingWebhookToken);
+      if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) candidateTokens.push(settings2fa.webhookToken);
 
-        // Mensagem: Usa a mensagem enviada no payload, ou template configurado, ou modelo padrão bonito do Painel ADM
-        let messageToSend = '';
-        if (rawMessage && String(rawMessage).trim()) {
-          messageToSend = String(rawMessage).trim();
-        } else if (settings2fa.messageTemplate) {
-          messageToSend = settings2fa.messageTemplate
-            .replace(/{codigo}/gi, String(rawCode || ''))
-            .replace(/{code}/gi, String(rawCode || ''))
-            .replace(/{nome}/gi, String(rawName))
-            .replace(/{cliente}/gi, String(rawName));
-        } else {
-          messageToSend = `🔒 *PJ CONTAS - CÓDIGO DE VERIFICAÇÃO*\n\nOlá *${rawName}*, seu código de segurança para acessar o Painel ADM é:\n\n👉 *${rawCode}*\n\n_Válido por 10 minutos. Se você não solicitou, ignore esta mensagem._`;
+      // Se não encontrou token para este usuário, buscar globalmente em outros usuários cadastrados
+      if (candidateTokens.length === 0) {
+        try {
+          const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
+          for (const uDoc of usersSnap.docs) {
+            const uConfig = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
+            if (uConfig.exists()) {
+              const uData = uConfig.data();
+              if (uData.billingWebhookToken && !candidateTokens.includes(uData.billingWebhookToken)) candidateTokens.push(uData.billingWebhookToken);
+              if (uData.webhookToken && !candidateTokens.includes(uData.webhookToken)) candidateTokens.push(uData.webhookToken);
+            }
+          }
+        } catch (tokErr) {
+          console.error('Erro ao buscar tokens globais de fallback:', tokErr);
         }
+      }
 
-        let isSuccess = false;
-        let uazapiStatus = 0;
-        let errorDetail = '';
+      // Mensagem: Usa a mensagem enviada no payload, ou template configurado, ou modelo padrão do Painel ADM
+      let messageToSend = '';
+      if (rawMessage && String(rawMessage).trim()) {
+        messageToSend = String(rawMessage).trim();
+      } else if (settings2fa.messageTemplate) {
+        messageToSend = settings2fa.messageTemplate
+          .replace(/{codigo}/gi, String(rawCode || ''))
+          .replace(/{code}/gi, String(rawCode || ''))
+          .replace(/{nome}/gi, String(rawName))
+          .replace(/{cliente}/gi, String(rawName))
+          .replace(/{numero}/gi, cleanPhone || String(rawPhone || ''))
+          .replace(/{telefone}/gi, cleanPhone || String(rawPhone || ''));
+      } else {
+        messageToSend = `🔒 *PJ CONTAS - CÓDIGO DE VERIFICAÇÃO*\n\nOlá *${rawName}*, seu código de segurança para acessar o Painel ADM é:\n\n👉 *${rawCode || '------'}*\n\n_Válido por 10 minutos. Se você não solicitou, ignore esta mensagem._`;
+      }
 
+      let isSuccess = false;
+      let uazapiStatus = 0;
+      let errorDetail = '';
+      let usedToken = '';
+
+      if (cleanPhone && candidateTokens.length > 0) {
         for (const token of candidateTokens) {
           try {
             const uazapiRes = await fetch('https://travelflow.uazapi.com/send/text', {
@@ -252,6 +297,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
             uazapiStatus = uazapiRes.status;
             if (uazapiRes.ok) {
               isSuccess = true;
+              usedToken = token;
+              errorDetail = '';
               console.log(`[webhook-receiver] 2FA enviado com sucesso para ${cleanPhone} via UAZAPI`);
               break;
             } else {
@@ -263,35 +310,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
             errorDetail = fetchErr?.message || 'Erro ao conectar com UAZAPI';
           }
         }
-
-        // Registrar log de 2FA
-        const logData = {
-          rawPhone: String(rawPhone || 'N/A'),
-          formattedPhone: cleanPhone,
-          code: String(rawCode || 'N/A'),
-          message: messageToSend,
-          status: isSuccess ? 'Enviado' : 'Erro',
-          uazapiStatus,
-          errorDetail,
-          source: 'webhook-receiver',
-          timestampMs: Date.now(),
-        };
-
-        await addDoc(collection(db, 'two_factor_logs'), logData).catch(() => {});
-        await addDoc(collection(db, 'users', userId, 'two_factor_logs'), logData).catch(() => {});
-
-        webhookLogsByUser[userId].unshift(entry);
-        broadcast(userId, JSON.stringify(entry));
-
-        return NextResponse.json({
-          received: true,
-          type: '2fatores',
-          sent: isSuccess,
-          phone: cleanPhone,
-          status: isSuccess ? 'Enviado' : 'Erro',
-          error: errorDetail || null,
-        }, { status: 200 });
+      } else {
+        if (!cleanPhone) errorDetail = 'Telefone não identificado no payload 2FA';
+        else if (candidateTokens.length === 0) errorDetail = 'Nenhum token WhatsApp UAZAPI encontrado';
       }
+
+      // Registrar log de 2FA no Firestore
+      const logData = {
+        rawPhone: String(rawPhone || 'N/A'),
+        formattedPhone: cleanPhone || 'N/A',
+        code: String(rawCode || 'N/A'),
+        message: messageToSend,
+        status: isSuccess ? 'Enviado' : (cleanPhone ? 'Erro' : 'Recebido'),
+        uazapiStatus,
+        errorDetail,
+        usedToken: usedToken || null,
+        source: 'webhook-receiver',
+        timestampMs: Date.now(),
+      };
+
+      await addDoc(collection(db, 'two_factor_logs'), logData).catch(() => {});
+      await addDoc(collection(db, 'users', userId, 'two_factor_logs'), logData).catch(() => {});
+
+      webhookLogsByUser[userId].unshift(entry);
+      if (webhookLogsByUser[userId].length > 100) webhookLogsByUser[userId].pop();
+      broadcast(userId, JSON.stringify(entry));
+
+      return NextResponse.json({
+        received: true,
+        type: '2fatores',
+        sent: isSuccess,
+        phone: cleanPhone,
+        status: isSuccess ? 'Enviado' : (cleanPhone ? 'Erro' : 'Recebido'),
+        error: errorDetail || null,
+      }, { status: 200 });
+
     } catch (e: any) {
       console.error('Erro ao processar 2FA no webhook-receiver:', e);
       return NextResponse.json({ error: e.message }, { status: 500 });
