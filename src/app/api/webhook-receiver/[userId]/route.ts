@@ -233,28 +233,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       const settings2fa = settings2faDoc.exists() ? settings2faDoc.data() : {};
       const config = configDoc.exists() ? configDoc.data() : {};
 
-      // Resolver o token ativo da UAZAPI
+      // Resolver o token ativo da UAZAPI - HUB SECUNDÁRIO (Cobrança/2FA) SEMPRE PRIMEIRO!
       const candidateTokens: string[] = [];
-      if (config.billingWebhookToken) candidateTokens.push(config.billingWebhookToken);
-      if (config.webhookToken && !candidateTokens.includes(config.webhookToken)) candidateTokens.push(config.webhookToken);
-      if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) candidateTokens.push(settings2fa.billingWebhookToken);
-      if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) candidateTokens.push(settings2fa.webhookToken);
+      if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) {
+        candidateTokens.push(settings2fa.billingWebhookToken);
+      }
+      if (config.billingWebhookToken && !candidateTokens.includes(config.billingWebhookToken)) {
+        // Se billingWebhookToken for diferente de webhookToken ou for o único configurado
+        candidateTokens.push(config.billingWebhookToken);
+      }
 
-      // Se não encontrou token para este usuário, buscar globalmente em outros usuários cadastrados
+      // Se não encontrou token secundário no usuário atual, busca billingWebhookToken em outros usuários
       if (candidateTokens.length === 0) {
         try {
           const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
           for (const uDoc of usersSnap.docs) {
-            const uConfig = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
-            if (uConfig.exists()) {
-              const uData = uConfig.data();
-              if (uData.billingWebhookToken && !candidateTokens.includes(uData.billingWebhookToken)) candidateTokens.push(uData.billingWebhookToken);
-              if (uData.webhookToken && !candidateTokens.includes(uData.webhookToken)) candidateTokens.push(uData.webhookToken);
+            const u2fa = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
+            if (u2fa.exists() && u2fa.data().billingWebhookToken && !candidateTokens.includes(u2fa.data().billingWebhookToken)) {
+              candidateTokens.push(u2fa.data().billingWebhookToken);
             }
           }
         } catch (tokErr) {
-          console.error('Erro ao buscar tokens globais de fallback:', tokErr);
+          console.error('Erro ao buscar tokens globais secundários:', tokErr);
         }
+      }
+
+      // Apenas se ainda não houver nenhum token de HUB secundário, adiciona o webhookToken (HUB principal) como fallback
+      if (candidateTokens.length === 0) {
+        if (config.webhookToken) candidateTokens.push(config.webhookToken);
+        if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) candidateTokens.push(settings2fa.webhookToken);
       }
 
       // Mensagem: Usa a mensagem enviada no payload, ou template configurado, ou modelo padrão do Painel ADM
