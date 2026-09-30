@@ -66,47 +66,85 @@ export async function POST(request: Request) {
         return '';
     };
 
-    let rawPhone = getFlexValue(['numero', 'phone', 'telefone', 'number', 'celular', 'num', 'whatsapp', 'client', 'mobile', 'numerocliente']);
-    let code = getFlexValue(['codigo', 'code', 'codigofa', 'token', 'passcode', 'otp', 'pin', 'senha']);
+    let rawPhone = getFlexValue([
+        'numerocliente',
+        'numero_cliente',
+        'numero',
+        'phone',
+        'telefone',
+        'number',
+        'celular',
+        'num',
+        'whatsapp',
+        'client',
+        'mobile',
+        'contato'
+    ]);
 
-    // Fallback: Tenta extrair com Regex se o payload veio em texto puro ou chaves incomuns
+    let code = getFlexValue([
+        'codigofa',
+        'codigo_fa',
+        'codigo2fa',
+        'codigodeacesso',
+        'codigo',
+        'code',
+        'token',
+        'passcode',
+        'otp',
+        'pin',
+        'senha'
+    ]);
+
+    // Fallbacks inteligentes por Regex caso venha em texto puro
     if (!rawPhone && bodyRaw) {
         const phoneMatch = bodyRaw.match(/(?:55)?\d{10,11}/);
         if (phoneMatch) rawPhone = phoneMatch[0];
     }
     if (!code && bodyRaw) {
-        const codeMatch = bodyRaw.match(/\b\d{4,8}\b/);
-        if (codeMatch && codeMatch[0] !== rawPhone) code = codeMatch[0];
+        // Aceita códigos numéricos ou alfanuméricos (ex: GKEAEY, 5893, etc)
+        const codeMatch = bodyRaw.match(/["']?(?:codigofa|codigo|code|token|otp)["']?\s*[:=]\s*["']?([A-Za-z0-9]{4,10})["']?/i);
+        if (codeMatch && codeMatch[1]) {
+            code = codeMatch[1];
+        } else {
+            const genericMatch = bodyRaw.match(/\b(?![0-9]{10,14}\b)[A-Za-z0-9]{4,8}\b/);
+            if (genericMatch && genericMatch[0] !== rawPhone) code = genericMatch[0];
+        }
     }
 
     const formattedPhone = formatPhoneWith55(String(rawPhone));
 
-    // Busca o Token do Zap de Cobranças e o Modelo de Mensagem nos usuários
-    let billingToken = '';
-    let targetUserId = '';
+    // Coleta todos os tokens disponíveis dos usuários cadastrados
+    const candidateTokens: string[] = [];
     let customTemplate = '';
+    let targetUserId = '';
+
+    // Se o webhook passou um token explícito
+    const explicitToken = getFlexValue(['token', 'apikey', 'webhooktoken']);
+    if (explicitToken && !candidateTokens.includes(explicitToken)) {
+        candidateTokens.push(explicitToken);
+    }
 
     try {
-        const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
+        const usersSnap = await getDocs(query(collection(db, 'users'), limit(15)));
         for (const uDoc of usersSnap.docs) {
             targetUserId = targetUserId || uDoc.id;
 
-            // Tenta carregar modelo de mensagem personalizado das configurações de 2FA
-            const settings2faSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
-            if (settings2faSnap.exists() && settings2faSnap.data()?.messageTemplate) {
-                customTemplate = settings2faSnap.data()?.messageTemplate;
+            // Template de 2FA configurado
+            if (!customTemplate) {
+                const settings2faSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
+                if (settings2faSnap.exists() && settings2faSnap.data()?.messageTemplate) {
+                    customTemplate = settings2faSnap.data()?.messageTemplate;
+                }
             }
 
             const configSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
             if (configSnap.exists()) {
                 const s = configSnap.data();
-                const resolvedToken = (s.useSeparateBillingZap && s.billingWebhookToken)
-                    ? s.billingWebhookToken
-                    : (s.billingWebhookToken || s.webhookToken || '');
-                if (resolvedToken) {
-                    billingToken = resolvedToken;
-                    targetUserId = uDoc.id;
-                    if (customTemplate) break;
+                if (s.billingWebhookToken && !candidateTokens.includes(s.billingWebhookToken)) {
+                    candidateTokens.push(s.billingWebhookToken);
+                }
+                if (s.webhookToken && !candidateTokens.includes(s.webhookToken)) {
+                    candidateTokens.push(s.webhookToken);
                 }
             }
         }
@@ -115,48 +153,59 @@ export async function POST(request: Request) {
     }
 
     // Modelo padrão se nenhum for configurado
-    const defaultTemplate = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: {codigo}`;
+    const defaultTemplate = `🔐 Olá!\n\nSeu *código de acesso* para o Aplicativo PJ Assinaturas:\n\n📲 Código: *{codigo}*\n\n⚠️ *Este código é pessoal e intransferível.*`;
     const templateToUse = customTemplate?.trim() || defaultTemplate;
 
     // Substitui variáveis {codigo} e {numero}
     const messageText = templateToUse
         .replace(/{codigo}/gi, code || 'N/A')
-        .replace(/{numero}/gi, rawPhone || formattedPhone || 'N/A');
+        .replace(/{code}/gi, code || 'N/A')
+        .replace(/{numero}/gi, rawPhone || formattedPhone || 'N/A')
+        .replace(/{telefone}/gi, rawPhone || formattedPhone || 'N/A');
 
     let isSuccess = false;
     let uazapiStatus = 0;
     let errorDetail = '';
+    let usedToken = '';
 
-    if (formattedPhone && billingToken) {
-        try {
-            const uazapiRes = await fetch('https://travelflow.uazapi.com/send/text', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'token': billingToken,
-                    'apikey': billingToken,
-                },
-                body: JSON.stringify({
-                    number: formattedPhone,
-                    text: messageText,
-                }),
-            });
+    if (formattedPhone && candidateTokens.length > 0) {
+        for (const token of candidateTokens) {
+            try {
+                const uazapiRes = await fetch('https://travelflow.uazapi.com/send/text', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': token,
+                        'apikey': token,
+                    },
+                    body: JSON.stringify({
+                        number: formattedPhone,
+                        text: messageText,
+                    }),
+                });
 
-            uazapiStatus = uazapiRes.status;
-            isSuccess = uazapiRes.ok;
-
-            if (!uazapiRes.ok) {
-                errorDetail = await uazapiRes.text().catch(() => `HTTP ${uazapiRes.status}`);
+                uazapiStatus = uazapiRes.status;
+                if (uazapiRes.ok) {
+                    isSuccess = true;
+                    usedToken = token;
+                    errorDetail = '';
+                    break;
+                } else {
+                    const errText = await uazapiRes.text().catch(() => '');
+                    errorDetail = `Token ${token.slice(0, 8)}... falhou (${uazapiRes.status}): ${errText}`;
+                    console.warn(`[2-fatores] ${errorDetail}`);
+                }
+            } catch (fetchErr: any) {
+                errorDetail = fetchErr?.message || 'Erro ao conectar com UAZAPI';
+                console.error(`[2-fatores] Erro de rede:`, fetchErr);
             }
-        } catch (fetchErr: any) {
-            errorDetail = fetchErr.message || 'Erro ao conectar com UAZAPI';
         }
     } else {
         if (!formattedPhone) errorDetail = 'Telefone não identificado no payload';
-        else if (!billingToken) errorDetail = 'Token do Zap de Cobranças não configurado';
+        else if (candidateTokens.length === 0) errorDetail = 'Nenhum token do WhatsApp configurado no CRM';
     }
 
-    // Grava SEMPRE a requisição no Firestore
+    // Grava SEMPRE o log no Firestore
     const logData = {
         rawPhone: String(rawPhone || 'Não especificado'),
         formattedPhone: formattedPhone || 'N/A',
@@ -165,6 +214,7 @@ export async function POST(request: Request) {
         status: isSuccess ? 'Enviado' : (formattedPhone ? 'Erro' : 'Recebido'),
         uazapiStatus,
         errorDetail,
+        usedToken: usedToken || null,
         bodyRaw: bodyRaw ? (bodyRaw.length > 500 ? bodyRaw.slice(0, 500) + '...' : bodyRaw) : JSON.stringify(combined),
         timestampMs: Date.now(),
     };
@@ -179,12 +229,13 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-        success: true,
+        success: isSuccess,
         receivedPayload: combined,
         extractedPhone: formattedPhone,
         extractedCode: code,
         messageText,
         messageSent: isSuccess,
+        usedToken: usedToken || null,
         errorDetail: errorDetail || null,
     }, { status: 200 });
 }
