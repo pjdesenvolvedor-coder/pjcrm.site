@@ -42,6 +42,87 @@ export function formatPhoneWith55(phone: string): string {
   return digits;
 }
 
+export function resolveRenewalWhatsAppTokens(settings: Settings): {
+  primaryToken: string;
+  fallbackToken: string;
+  source: 'main' | 'billing' | 'auto';
+} {
+  const hubToken = settings.webhookToken?.trim() || '';
+  const billingToken = settings.billingWebhookToken?.trim() || '';
+  const choice = settings.renewalZapInstance || (settings.useSeparateBillingZap ? 'billing' : 'main');
+
+  if (choice === 'billing') {
+    return {
+      primaryToken: billingToken || hubToken,
+      fallbackToken: billingToken ? hubToken : '',
+      source: 'billing',
+    };
+  }
+
+  if (choice === 'main') {
+    return {
+      primaryToken: hubToken || billingToken,
+      fallbackToken: hubToken ? billingToken : '',
+      source: 'main',
+    };
+  }
+
+  // 'auto'
+  const primary = (settings.useSeparateBillingZap && billingToken) ? billingToken : (hubToken || billingToken);
+  const fallback = primary === billingToken ? hubToken : billingToken;
+  return {
+    primaryToken: primary,
+    fallbackToken: fallback,
+    source: 'auto',
+  };
+}
+
+export async function sendWhatsAppWithFallback(
+  number: string,
+  text: string,
+  primaryToken: string,
+  fallbackToken?: string
+): Promise<{ success: boolean; tokenUsed: string; error?: string }> {
+  if (!primaryToken && !fallbackToken) {
+    return { success: false, tokenUsed: '', error: 'Nenhum token de WhatsApp configurado.' };
+  }
+
+  const cleanNum = formatPhoneWith55(number);
+  let currentToken = primaryToken || fallbackToken!;
+  let res = await fetch('https://travelflow.uazapi.com/send/text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', token: currentToken, apikey: currentToken },
+    body: JSON.stringify({ number: cleanNum, text }),
+  });
+
+  if (res.ok) {
+    return { success: true, tokenUsed: currentToken };
+  }
+
+  const firstErr = await res.text().catch(() => '');
+  console.warn(`[sendWhatsApp] Falha com token (${res.status}): ${firstErr}`);
+
+  // Se retornou 401, 403 ou qualquer erro e houver outro token, tenta o fallback
+  if (fallbackToken && fallbackToken !== currentToken) {
+    console.log(`[sendWhatsApp] Tentando envio com token de fallback...`);
+    currentToken = fallbackToken;
+    const fallbackRes = await fetch('https://travelflow.uazapi.com/send/text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token: currentToken, apikey: currentToken },
+      body: JSON.stringify({ number: cleanNum, text }),
+    });
+
+    if (fallbackRes.ok) {
+      return { success: true, tokenUsed: currentToken };
+    }
+
+    const secondErr = await fallbackRes.text().catch(() => '');
+    return { success: false, tokenUsed: currentToken, error: secondErr || firstErr };
+  }
+
+  return { success: false, tokenUsed: currentToken, error: firstErr || `Status ${res.status}` };
+}
+
 /**
  * Cria ou recupera uma sessão de renovação para um grupo de assinaturas de um mesmo cliente.
  */
@@ -233,61 +314,44 @@ export async function executeRenewalPayment({
       const configSnap = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
       const settings = configSnap.exists() ? (configSnap.data() as Settings) : {};
 
-      const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken
-        ? settings.billingWebhookToken
-        : (settings.webhookToken || settings.billingWebhookToken);
+      const { primaryToken, fallbackToken } = resolveRenewalWhatsAppTokens(settings);
 
-      if (billingToken && session.phone) {
-        const cleanPhone = formatPhoneWith55(session.phone);
+      if ((primaryToken || fallbackToken) && session.phone) {
+          const defaultTemplate =
+            '🎉 *PAGAMENTO CONFIRMADO!*\n\n' +
+            'Olá *{cliente}*, identificamos seu pagamento PIX e sua renovação foi realizada com sucesso!\n\n' +
+            '📦 *Assinatura(s):* {assinaturas}\n' +
+            '📅 *Novo Vencimento:* {novo_vencimento}\n' +
+            '💰 *Valor Pago:* R$ {valor}\n' +
+            '⚡ *Status:* Ativo\n\n' +
+            'Obrigado pela preferência e bom entretenimento! 🚀';
 
-        const defaultTemplate =
-          '🎉 *PAGAMENTO CONFIRMADO!*\n\n' +
-          'Olá *{cliente}*, identificamos seu pagamento PIX e sua renovação foi realizada com sucesso!\n\n' +
-          '📦 *Assinatura(s):* {assinaturas}\n' +
-          '📅 *Novo Vencimento:* {novo_vencimento}\n' +
-          '💰 *Valor Pago:* R$ {valor}\n' +
-          '⚡ *Status:* Ativo\n\n' +
-          'Obrigado pela preferência e bom entretenimento! 🚀';
+          const template = settings.renewalSuccessMessage?.trim() || defaultTemplate;
+          const totalReais = amountInCents ? (amountInCents / 100).toFixed(2).replace('.', ',') : '0,00';
 
-        const template = settings.renewalSuccessMessage?.trim() || defaultTemplate;
-        const totalReais = amountInCents ? (amountInCents / 100).toFixed(2).replace('.', ',') : '0,00';
+          const finalMsg = template
+            .replace(/{cliente}/gi, session.clientName)
+            .replace(/{nome}/gi, session.clientName)
+            .replace(/{telefone}/gi, session.phone)
+            .replace(/{numero}/gi, session.phone)
+            .replace(/{assinaturas}/gi, renewedNames.join(' + '))
+            .replace(/{assinatura}/gi, renewedNames.join(' + '))
+            .replace(/{novo_vencimento}/gi, newestDueDateFormatted)
+            .replace(/{vencimento}/gi, newestDueDateFormatted)
+            .replace(/{valor}/gi, totalReais)
+            .replace(/{status}/gi, 'Ativo');
 
-        const finalMsg = template
-          .replace(/{cliente}/gi, session.clientName)
-          .replace(/{nome}/gi, session.clientName)
-          .replace(/{telefone}/gi, session.phone)
-          .replace(/{numero}/gi, session.phone)
-          .replace(/{assinaturas}/gi, renewedNames.join(' + '))
-          .replace(/{assinatura}/gi, renewedNames.join(' + '))
-          .replace(/{novo_vencimento}/gi, newestDueDateFormatted)
-          .replace(/{vencimento}/gi, newestDueDateFormatted)
-          .replace(/{valor}/gi, totalReais)
-          .replace(/{status}/gi, 'Ativo');
-
-        const uazapiRes = await fetch('https://travelflow.uazapi.com/send/text', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            token: billingToken,
-            apikey: billingToken,
-          },
-          body: JSON.stringify({
-            number: cleanPhone,
-            text: finalMsg,
-          }),
-        });
-
-        if (uazapiRes.ok) {
-          messageSent = true;
-          console.log(`[RenewalService] Mensagem de confirmação enviada com sucesso para ${cleanPhone}`);
-        } else {
-          const errBody = await uazapiRes.text().catch(() => '');
-          console.warn(`[RenewalService] Falha ao enviar WhatsApp de confirmação: ${errBody}`);
+          const sendResult = await sendWhatsAppWithFallback(session.phone, finalMsg, primaryToken, fallbackToken);
+          messageSent = sendResult.success;
+          if (messageSent) {
+            console.log(`[RenewalService] Confirmação enviada via token: ${sendResult.tokenUsed.slice(0, 10)}...`);
+          } else {
+            console.warn(`[RenewalService] Falha ao enviar confirmação: ${sendResult.error}`);
+          }
         }
+      } catch (msgErr) {
+        console.error('[RenewalService] Erro ao disparar mensagem WhatsApp:', msgErr);
       }
-    } catch (msgErr) {
-      console.error('[RenewalService] Erro ao disparar mensagem WhatsApp:', msgErr);
-    }
 
     return {
       success: true,

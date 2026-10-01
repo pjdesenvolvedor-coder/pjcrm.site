@@ -52,11 +52,13 @@ export default function ChargeOverduePage() {
       return;
     }
 
-    const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken 
-      ? settings.billingWebhookToken 
-      : settings.webhookToken;
+    const hubToken = settings.webhookToken || '';
+    const billingToken = settings.billingWebhookToken || '';
+    const choice = settings.renewalZapInstance || (settings.useSeparateBillingZap ? 'billing' : 'main');
+    const primaryToken = choice === 'billing' ? (billingToken || hubToken) : (choice === 'main' ? (hubToken || billingToken) : ((settings.useSeparateBillingZap && billingToken) ? billingToken : (hubToken || billingToken)));
+    const fallbackToken = primaryToken === billingToken ? hubToken : billingToken;
 
-    if (!billingToken) {
+    if (!primaryToken && !fallbackToken) {
       toast({
         variant: 'destructive',
         title: 'WhatsApp não conectado',
@@ -186,7 +188,8 @@ export default function ChargeOverduePage() {
             body: JSON.stringify({
               message: formattedMessage,
               phoneNumber: primaryClient.phone,
-              token: billingToken,
+              token: primaryToken,
+              fallbackToken: fallbackToken,
             }),
           });
 

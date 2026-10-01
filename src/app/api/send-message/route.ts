@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
     const apiUrl = 'https://travelflow.uazapi.com/send/text';
 
-    const apiResponse = await fetch(apiUrl, {
+    let apiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -36,6 +36,23 @@ export async function POST(request: Request) {
         text: message,
       }),
     });
+
+    // Se o token principal falhar com 401 (Inválido) ou 403 e tiver fallbackToken, tenta o fallback
+    if (!apiResponse.ok && (apiResponse.status === 401 || apiResponse.status === 403) && body.fallbackToken && body.fallbackToken !== token) {
+      console.log(`[send-message] Token principal retornou ${apiResponse.status}. Tentando fallbackToken...`);
+      apiResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': body.fallbackToken,
+          'apikey': body.fallbackToken,
+        },
+        body: JSON.stringify({
+          number: formattedPhoneNumber,
+          text: message,
+        }),
+      });
+    }
 
     let responseData;
     const responseText = await apiResponse.text();

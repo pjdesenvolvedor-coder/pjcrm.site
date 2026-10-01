@@ -99,44 +99,45 @@ export async function POST(req: NextRequest) {
 
     // 3. ENVIO REAL DE MENSAGEM VIA WHATSAPP (UAZAPI)
     if (action === 'send-whatsapp') {
-      const { targetPhone, message } = body;
+      const { targetPhone, message, chosenZap } = body;
       if (!targetPhone || !message) {
         return NextResponse.json({ error: 'Telefone e mensagem são obrigatórios' }, { status: 400 });
       }
 
       const configSnap = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
       const settings = configSnap.exists() ? (configSnap.data() as Settings) : {};
-      const token = settings.useSeparateBillingZap && settings.billingWebhookToken
-        ? settings.billingWebhookToken
-        : (settings.webhookToken || settings.billingWebhookToken);
+      
+      const { resolveRenewalWhatsAppTokens, sendWhatsAppWithFallback } = await import('@/lib/renewal-service');
+      
+      // Se o usuário selecionou uma instância específica na tela de teste, aplica
+      const customSettings = {
+        ...settings,
+        renewalZapInstance: (chosenZap || settings.renewalZapInstance || 'auto') as any,
+      };
 
-      if (!token) {
+      const { primaryToken, fallbackToken } = resolveRenewalWhatsAppTokens(customSettings);
+
+      if (!primaryToken && !fallbackToken) {
         return NextResponse.json(
           { error: 'Nenhum token de WhatsApp conectado. Conecte sua instância nas configurações.' },
           { status: 400 }
         );
       }
 
-      const cleanTarget = formatPhoneWith55(targetPhone);
-      const res = await fetch('https://travelflow.uazapi.com/send/text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          token,
-          apikey: token,
-        },
-        body: JSON.stringify({
-          number: cleanTarget,
-          text: message,
-        }),
-      });
+      const result = await sendWhatsAppWithFallback(targetPhone, message, primaryToken, fallbackToken);
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        return NextResponse.json({ error: `Falha ao enviar via WhatsApp (${res.status}): ${errText}` }, { status: 500 });
+      if (!result.success) {
+        return NextResponse.json(
+          { error: `Falha ao enviar via WhatsApp: ${result.error || 'Token inválido ou desconectado'}` },
+          { status: 500 }
+        );
       }
 
-      return NextResponse.json({ success: true, message: 'Mensagem de teste enviada com sucesso no WhatsApp!' });
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Mensagem de teste enviada com sucesso no WhatsApp!',
+        tokenUsed: result.tokenUsed?.slice(0, 10) + '...',
+      });
     }
 
     return NextResponse.json({ error: 'Ação não reconhecida' }, { status: 400 });

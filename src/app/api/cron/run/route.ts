@@ -121,9 +121,12 @@ export async function GET(request: Request) {
             const specificConfig = configSnap.docs.find(d => d.id === 'config');
             if (!specificConfig || !specificConfig.exists()) continue;
             const settings = specificConfig.data() as Settings;
-
-            const billingToken = settings.useSeparateBillingZap && settings.billingWebhookToken
-                ? settings.billingWebhookToken : settings.webhookToken;
+            const hubToken = settings.webhookToken || '';
+            const bToken = settings.billingWebhookToken || '';
+            const choice = settings.renewalZapInstance || (settings.useSeparateBillingZap ? 'billing' : 'main');
+            const primaryToken = choice === 'billing' ? (bToken || hubToken) : (choice === 'main' ? (hubToken || bToken) : ((settings.useSeparateBillingZap && bToken) ? bToken : (hubToken || bToken)));
+            const fallbackToken = primaryToken === bToken ? hubToken : bToken;
+            const billingToken = primaryToken || fallbackToken;
             if (!billingToken) continue;
 
             const clientsSnapshot = await getDocs(collection(db, 'users', userId, 'clients'));
@@ -211,7 +214,8 @@ export async function GET(request: Request) {
                                 body: JSON.stringify({
                                     message: formattedMessage,
                                     phoneNumber: primaryClient.phone,
-                                    token: billingToken,
+                                    token: primaryToken,
+                                    fallbackToken: fallbackToken,
                                 }),
                             });
                         } catch (sendErr) {

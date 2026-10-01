@@ -29,8 +29,10 @@ import {
   QrCode,
   ShieldCheck,
   RefreshCw,
+  DollarSign,
 } from 'lucide-react';
 import ProductIcon from '@/components/ProductIcon';
+import { cn } from '@/lib/utils';
 
 interface TestProduct {
   name: string;
@@ -85,6 +87,53 @@ export default function TestRenewalPage() {
   const [isSimulatingPaid, setIsSimulatingPaid] = useState(false);
   const [whatsAppSuccess, setWhatsAppSuccess] = useState(false);
   const [simulationSuccess, setSimulationSuccess] = useState(false);
+
+  // Instância de WhatsApp escolhida para envio do teste e status
+  const [testZapChoice, setTestZapChoice] = useState<'main' | 'billing' | 'auto'>('auto');
+  const [hubStatus, setHubStatus] = useState<{ status: 'idle' | 'checking' | 'connected' | 'disconnected'; name?: string }>({ status: 'checking' });
+  const [billingStatus, setBillingStatus] = useState<{ status: 'idle' | 'checking' | 'connected' | 'disconnected'; name?: string }>({ status: 'checking' });
+  const [isCheckingZaps, setIsCheckingZaps] = useState(false);
+
+  const checkZapStatuses = async () => {
+    setIsCheckingZaps(true);
+    setHubStatus(prev => ({ ...prev, status: 'checking' }));
+    setBillingStatus(prev => ({ ...prev, status: 'checking' }));
+
+    const checkOne = async (token?: string) => {
+      if (!token) return { status: 'disconnected' as const };
+      try {
+        const res = await fetch('/api/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        return {
+          status: data.status === 'connected' ? ('connected' as const) : ('disconnected' as const),
+          name: data.nomeperfil || '',
+        };
+      } catch {
+        return { status: 'disconnected' as const };
+      }
+    };
+
+    const hubResult = await checkOne(settings?.webhookToken);
+    setHubStatus(hubResult);
+
+    const billingResult = await checkOne(settings?.billingWebhookToken);
+    setBillingStatus(billingResult);
+
+    setIsCheckingZaps(false);
+  };
+
+  useEffect(() => {
+    if (settings) {
+      if (settings.renewalZapInstance) {
+        setTestZapChoice(settings.renewalZapInstance);
+      }
+      checkZapStatuses();
+    }
+  }, [settings?.webhookToken, settings?.billingWebhookToken]);
 
   // Polling dinâmico do status da sessão criada
   useEffect(() => {
@@ -230,6 +279,7 @@ export default function TestRenewalPage() {
           userId: user.uid,
           targetPhone: phone,
           message: messageText,
+          chosenZap: testZapChoice,
         }),
       });
 
@@ -241,7 +291,7 @@ export default function TestRenewalPage() {
       setWhatsAppSuccess(true);
       toast({
         title: 'Mensagem Enviada!',
-        description: `Cobrança de teste com link enviada para ${phone}.`,
+        description: `Cobrança de teste com link enviada para ${phone} ${data.tokenUsed ? `(Token: ${data.tokenUsed})` : ''}`,
       });
     } catch (err: any) {
       toast({
@@ -483,6 +533,126 @@ export default function TestRenewalPage() {
                 <span className="text-base font-extrabold text-emerald-700 dark:text-emerald-400 font-mono">
                   R$ {totalCalculated.toFixed(2).replace('.', ',')}
                 </span>
+              </div>
+            </div>
+
+            {/* SELEÇÃO DA INSTÂNCIA DO WHATSAPP */}
+            <div className="space-y-3 pt-3 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-emerald-600" />
+                    Instância WhatsApp para Disparo do Teste
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Escolha qual ZAP enviará a mensagem de cobrança no teste. O sistema detecta o status em tempo real.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={checkZapStatuses}
+                  disabled={isCheckingZaps}
+                  className="text-xs font-semibold gap-1.5 h-7 shrink-0"
+                >
+                  <RefreshCw className={cn("h-3 w-3", isCheckingZaps && "animate-spin")} />
+                  Verificar ZAPs
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* HUB PRINCIPAL */}
+                <div
+                  onClick={() => setTestZapChoice('main')}
+                  className={cn(
+                    "p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-2",
+                    testZapChoice === 'main'
+                      ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="h-4 w-4 text-blue-600" />
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Hub Principal</span>
+                    </div>
+                    {testZapChoice === 'main' && (
+                      <Badge className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5">ATIVO</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-muted-foreground">Status:</span>
+                    {hubStatus.status === 'checking' ? (
+                      <span className="text-blue-500 font-medium flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Verificando</span>
+                    ) : hubStatus.status === 'connected' ? (
+                      <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" /> Conectado</span>
+                    ) : (
+                      <span className="text-red-500 font-bold flex items-center gap-1"><AlertCircle className="h-3 w-3 text-red-500" /> Desconectado</span>
+                    )}
+                  </div>
+                  {hubStatus.name && (
+                    <p className="text-[10px] text-slate-500 truncate">Perfil: {hubStatus.name}</p>
+                  )}
+                </div>
+
+                {/* ZAP COBRANÇA */}
+                <div
+                  onClick={() => setTestZapChoice('billing')}
+                  className={cn(
+                    "p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-2",
+                    testZapChoice === 'billing'
+                      ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-orange-600" />
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">ZAP Cobrança</span>
+                    </div>
+                    {testZapChoice === 'billing' && (
+                      <Badge className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5">ATIVO</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-muted-foreground">Status:</span>
+                    {billingStatus.status === 'checking' ? (
+                      <span className="text-blue-500 font-medium flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Verificando</span>
+                    ) : billingStatus.status === 'connected' ? (
+                      <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" /> Conectado</span>
+                    ) : (
+                      <span className="text-red-500 font-bold flex items-center gap-1"><AlertCircle className="h-3 w-3 text-red-500" /> Desconectado</span>
+                    )}
+                  </div>
+                  {billingStatus.name && (
+                    <p className="text-[10px] text-slate-500 truncate">Perfil: {billingStatus.name}</p>
+                  )}
+                </div>
+
+                {/* AUTOMÁTICO */}
+                <div
+                  onClick={() => setTestZapChoice('auto')}
+                  className={cn(
+                    "p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between space-y-2",
+                    testZapChoice === 'auto'
+                      ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-amber-500" />
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Automático</span>
+                    </div>
+                    {testZapChoice === 'auto' && (
+                      <Badge className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5">RECOMENDADO</Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight pt-1 border-t border-slate-100 dark:border-slate-800">
+                    Alterna inteligentemente entre os ZAPs caso algum retorne erro ou desconexão.
+                  </p>
+                </div>
               </div>
             </div>
 

@@ -43,11 +43,13 @@ export function DueDateMessageHandler() {
                 return;
             }
 
-            const billingToken = settings?.useSeparateBillingZap && settings?.billingWebhookToken 
-                ? settings?.billingWebhookToken 
-                : settings?.webhookToken;
+            const hubToken = settings?.webhookToken || '';
+            const billingToken = settings?.billingWebhookToken || '';
+            const choice = settings?.renewalZapInstance || (settings?.useSeparateBillingZap ? 'billing' : 'main');
+            const primaryToken = choice === 'billing' ? (billingToken || hubToken) : (choice === 'main' ? (hubToken || billingToken) : ((settings?.useSeparateBillingZap && billingToken) ? billingToken : (hubToken || billingToken)));
+            const fallbackToken = primaryToken === billingToken ? hubToken : billingToken;
 
-            if (!activeClients || activeClients.length === 0 || !settings?.isDueDateMessageActive || !settings.dueDateMessage || !billingToken || !user || !firestore) {
+            if (!activeClients || activeClients.length === 0 || !settings?.isDueDateMessageActive || !settings.dueDateMessage || (!primaryToken && !fallbackToken) || !user || !firestore) {
                 return;
             }
 
@@ -153,10 +155,6 @@ export function DueDateMessageHandler() {
                     timestamp: serverTimestamp(),
                 });
 
-                const billingToken = settings?.useSeparateBillingZap && settings?.billingWebhookToken 
-                    ? settings?.billingWebhookToken 
-                    : settings?.webhookToken;
-
                 try {
                     const response = await fetch('/api/send-message', {
                         method: 'POST',
@@ -164,7 +162,8 @@ export function DueDateMessageHandler() {
                         body: JSON.stringify({
                             message: formattedMessage,
                             phoneNumber: primaryClient.phone,
-                            token: billingToken,
+                            token: primaryToken,
+                            fallbackToken: fallbackToken,
                         }),
                     });
 

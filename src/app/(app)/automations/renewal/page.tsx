@@ -14,8 +14,24 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Copy, Check, CreditCard, ShieldCheck, MessageSquare, Zap, ExternalLink } from 'lucide-react';
+import {
+  Sparkles,
+  Copy,
+  Check,
+  CreditCard,
+  ShieldCheck,
+  MessageSquare,
+  Zap,
+  ExternalLink,
+  Smartphone,
+  DollarSign,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
 import { DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
+import { cn } from '@/lib/utils';
 
 const DEFAULT_SUCCESS_MESSAGE =
   '🎉 *PAGAMENTO CONFIRMADO!*\n\n' +
@@ -52,14 +68,55 @@ export default function RenewalAutomationPage() {
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Instância de WhatsApp escolhida para renovação e status de conexão
+  const [renewalZapInstance, setRenewalZapInstance] = useState<'main' | 'billing' | 'auto'>('auto');
+  const [hubStatus, setHubStatus] = useState<{ status: 'idle' | 'checking' | 'connected' | 'disconnected'; name?: string; pic?: string }>({ status: 'checking' });
+  const [billingStatus, setBillingStatus] = useState<{ status: 'idle' | 'checking' | 'connected' | 'disconnected'; name?: string; pic?: string }>({ status: 'checking' });
+  const [isCheckingZaps, setIsCheckingZaps] = useState(false);
+
+  const checkZapStatuses = async () => {
+    setIsCheckingZaps(true);
+    setHubStatus(prev => ({ ...prev, status: 'checking' }));
+    setBillingStatus(prev => ({ ...prev, status: 'checking' }));
+
+    const checkOne = async (token?: string) => {
+      if (!token) return { status: 'disconnected' as const };
+      try {
+        const res = await fetch('/api/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        return {
+          status: data.status === 'connected' ? ('connected' as const) : ('disconnected' as const),
+          name: data.nomeperfil || '',
+          pic: data.fotoperfil || '',
+        };
+      } catch {
+        return { status: 'disconnected' as const };
+      }
+    };
+
+    const hubResult = await checkOne(settings?.webhookToken);
+    setHubStatus(hubResult);
+
+    const billingResult = await checkOne(settings?.billingWebhookToken);
+    setBillingStatus(billingResult);
+
+    setIsCheckingZaps(false);
+  };
+
   useEffect(() => {
     if (settings) {
       setIsActive(settings.isAutoRenewalActive !== false);
       setSuccessMessage(settings.renewalSuccessMessage || DEFAULT_SUCCESS_MESSAGE);
       setBillingMessage(settings.renewalBillingMessage || DEFAULT_BILLING_MESSAGE);
       setLinkinpayToken(settings.linkinpayToken || DEFAULT_LINKINPAY_TOKEN);
+      setRenewalZapInstance(settings.renewalZapInstance || 'auto');
+      checkZapStatuses();
     }
-  }, [settings]);
+  }, [settings?.webhookToken, settings?.billingWebhookToken, settings?.renewalZapInstance]);
 
   const handleSave = () => {
     if (!settingsDocRef) return;
@@ -72,6 +129,7 @@ export default function RenewalAutomationPage() {
         renewalSuccessMessage: successMessage.trim(),
         renewalBillingMessage: billingMessage.trim(),
         linkinpayToken: linkinpayToken.trim(),
+        renewalZapInstance,
       },
       { merge: true }
     );
@@ -165,6 +223,169 @@ export default function RenewalAutomationPage() {
                 </p>
               </div>
               <Switch checked={isActive} onCheckedChange={setIsActive} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ESCOLHA DA INSTÂNCIA DO WHATSAPP (ZAP DE DISPARO) */}
+        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <CardTitle className="text-lg">Instância do WhatsApp para Renovação</CardTitle>
+                  <CardDescription>
+                    Selecione qual número do WhatsApp enviará as mensagens de cobrança e confirmação PIX.
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={checkZapStatuses}
+                disabled={isCheckingZaps}
+                className="text-xs font-semibold gap-1.5 h-8 shrink-0"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isCheckingZaps && "animate-spin")} />
+                Verificar Status dos ZAPs
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* HUB PRINCIPAL */}
+              <div
+                onClick={() => setRenewalZapInstance('main')}
+                className={cn(
+                  "p-4 rounded-xl border-2 cursor-pointer transition-all relative flex flex-col justify-between space-y-3",
+                  renewalZapInstance === 'main'
+                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm"
+                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">Hub Principal</h4>
+                      <p className="text-[11px] text-muted-foreground">Instância Principal</p>
+                    </div>
+                  </div>
+                  {renewalZapInstance === 'main' && (
+                    <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
+                      SELECIONADO
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Status:</span>
+                    {hubStatus.status === 'checking' ? (
+                      <Badge variant="outline" className="text-blue-500 text-[10px] gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Verificando
+                      </Badge>
+                    ) : hubStatus.status === 'connected' ? (
+                      <Badge className="bg-green-500 text-white text-[10px] font-bold gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Conectado
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-[10px] font-bold gap-1">
+                        <AlertCircle className="h-3 w-3" /> Desconectado
+                      </Badge>
+                    )}
+                  </div>
+                  {hubStatus.name && (
+                    <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300 mt-1 truncate">
+                      Perfil: {hubStatus.name}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* ZAP COBRANÇA */}
+              <div
+                onClick={() => setRenewalZapInstance('billing')}
+                className={cn(
+                  "p-4 rounded-xl border-2 cursor-pointer transition-all relative flex flex-col justify-between space-y-3",
+                  renewalZapInstance === 'billing'
+                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm"
+                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-orange-600" />
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">ZAP Cobrança</h4>
+                      <p className="text-[11px] text-muted-foreground">Instância de Cobrança</p>
+                    </div>
+                  </div>
+                  {renewalZapInstance === 'billing' && (
+                    <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
+                      SELECIONADO
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Status:</span>
+                    {billingStatus.status === 'checking' ? (
+                      <Badge variant="outline" className="text-blue-500 text-[10px] gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Verificando
+                      </Badge>
+                    ) : billingStatus.status === 'connected' ? (
+                      <Badge className="bg-green-500 text-white text-[10px] font-bold gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Conectado
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-[10px] font-bold gap-1">
+                        <AlertCircle className="h-3 w-3" /> Desconectado
+                      </Badge>
+                    )}
+                  </div>
+                  {billingStatus.name && (
+                    <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300 mt-1 truncate">
+                      Perfil: {billingStatus.name}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* AUTOMÁTICO COM FALLBACK */}
+              <div
+                onClick={() => setRenewalZapInstance('auto')}
+                className={cn(
+                  "p-4 rounded-xl border-2 cursor-pointer transition-all relative flex flex-col justify-between space-y-3",
+                  renewalZapInstance === 'auto'
+                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm"
+                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-amber-500" />
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">Automático Inteligente</h4>
+                      <p className="text-[11px] text-muted-foreground">Com Fallback Anti-Falhas</p>
+                    </div>
+                  </div>
+                  {renewalZapInstance === 'auto' && (
+                    <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
+                      RECOMENDADO
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Dispara pelo ZAP Cobrança e, se este estiver desconectado ou der erro, usa o Hub Principal automaticamente.
+                  </p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
