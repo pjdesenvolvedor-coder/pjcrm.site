@@ -122,6 +122,33 @@ export default function RenewalAutomationPage() {
       />
 
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6 max-w-5xl">
+        {/* BANNER PARA TESTE RÁPIDO */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-500/30 gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-amber-500 text-white shadow-sm">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                Quer testar a Renovação PIX agora?
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Digite um número de WhatsApp e selecione um produto para testar o link, as perguntas e a renovação instantânea.
+              </p>
+            </div>
+          </div>
+          <Button
+            asChild
+            variant="default"
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 shadow-sm"
+          >
+            <a href="/automations/test-renewal">
+              🧪 Ir para Teste de Renovação
+            </a>
+          </Button>
+        </div>
+
         {/* ATIVAR AUTOMAÇÃO */}
         <Card className="border-2 border-emerald-500/20 bg-emerald-500/5">
           <CardContent className="pt-6">

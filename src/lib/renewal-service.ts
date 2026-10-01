@@ -48,7 +48,8 @@ export function formatPhoneWith55(phone: string): string {
 export async function getOrCreateRenewalSession(
   userId: string,
   clients: Client[],
-  originUrl = 'https://pjcrm.site'
+  originUrl = 'https://pjcrm.site',
+  forceNew = false
 ): Promise<{ session: RenewalSession; link: string }> {
   if (!clients || clients.length === 0) {
     throw new Error('Nenhum cliente informado para criar a sessão de renovação');
@@ -57,30 +58,33 @@ export async function getOrCreateRenewalSession(
   const primaryClient = clients[0];
   const canonical = getCanonicalPhone(primaryClient.phone);
 
-  // Procura sessão ativa recente para este telefone (últimas 24h e status 'pending')
   const now = Date.now();
   const sessionsRef = collection(db, 'renewal_sessions');
-  const q = query(
-    sessionsRef,
-    where('userId', '==', userId),
-    where('canonicalPhone', '==', canonical),
-    where('status', '==', 'pending')
-  );
 
-  try {
-    const existingSnap = await getDocs(q);
-    for (const d of existingSnap.docs) {
-      const data = d.data() as RenewalSession;
-      const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
-      if (now - createdMs < 24 * 60 * 60 * 1000) {
-        return {
-          session: { id: d.id, ...data },
-          link: `${originUrl}/renovar/${d.id}`,
-        };
+  if (!forceNew) {
+    // Procura sessão ativa recente para este telefone (últimas 24h e status 'pending')
+    const q = query(
+      sessionsRef,
+      where('userId', '==', userId),
+      where('canonicalPhone', '==', canonical),
+      where('status', '==', 'pending')
+    );
+
+    try {
+      const existingSnap = await getDocs(q);
+      for (const d of existingSnap.docs) {
+        const data = d.data() as RenewalSession;
+        const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
+        if (now - createdMs < 24 * 60 * 60 * 1000) {
+          return {
+            session: { id: d.id, ...data },
+            link: `${originUrl}/renovar/${d.id}`,
+          };
+        }
       }
+    } catch (e) {
+      console.warn('[RenewalService] Erro ao buscar sessões existentes:', e);
     }
-  } catch (e) {
-    console.warn('[RenewalService] Erro ao buscar sessões existentes:', e);
   }
 
   // Cria nova sessão com ID curto e amigável
