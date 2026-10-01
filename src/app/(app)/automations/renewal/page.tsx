@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc } from 'firebase/firestore';
+import { doc, collection, getDocs } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { Settings } from '@/lib/types';
+import type { Settings, Client } from '@/lib/types';
+import { getCanonicalPhone } from '@/lib/renewal-service';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,11 @@ import {
   AlertCircle,
   Loader2,
   LifeBuoy,
+  Clock,
+  Play,
+  Eye,
+  ShieldAlert,
+  Send,
 } from 'lucide-react';
 import { DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
 import { cn } from '@/lib/utils';
@@ -70,6 +76,9 @@ export default function RenewalAutomationPage() {
   const { data: settings, isLoading } = useDoc<Settings>(settingsDocRef);
 
   const [isActive, setIsActive] = useState(false);
+  const [renewalSendTime, setRenewalSendTime] = useState('14:30');
+  const [renewalDelaySeconds, setRenewalDelaySeconds] = useState(15);
+  const [isLoadingManual, setIsLoadingManual] = useState(false);
   const [successMessage, setSuccessMessage] = useState(DEFAULT_SUCCESS_MESSAGE);
   const [billingMessage, setBillingMessage] = useState(DEFAULT_BILLING_MESSAGE);
   const [supportMessage, setSupportMessage] = useState(DEFAULT_SUPPORT_MESSAGE);
@@ -121,6 +130,8 @@ export default function RenewalAutomationPage() {
   useEffect(() => {
     if (settings) {
       setIsActive(Boolean(settings.isAutoRenewalActive));
+      setRenewalSendTime(settings.renewalSendTime || '14:30');
+      setRenewalDelaySeconds(settings.renewalDelaySeconds ?? 15);
       setSuccessMessage(settings.renewalSuccessMessage || DEFAULT_SUCCESS_MESSAGE);
       setBillingMessage(settings.renewalBillingMessage || DEFAULT_BILLING_MESSAGE);
       setSupportMessage(settings.renewalSupportMessage || settings.supportStartedMessage || DEFAULT_SUPPORT_MESSAGE);
@@ -130,16 +141,35 @@ export default function RenewalAutomationPage() {
       setRenewalZapInstance(settings.renewalZapInstance || 'auto');
       checkZapStatuses();
     }
-  }, [settings?.webhookToken, settings?.billingWebhookToken, settings?.renewalZapInstance]);
+  }, [settings?.webhookToken, settings?.billingWebhookToken, settings?.renewalZapInstance, settings?.renewalSendTime, settings?.renewalDelaySeconds]);
 
   const handleSave = () => {
     if (!settingsDocRef) return;
     setIsSaving(true);
 
+    const offset = -3 * 60 * 60 * 1000;
+    const nowBr = new Date(Date.now() + offset);
+    const todayBrasiliaStr = format(nowBr, 'yyyy-MM-dd');
+    const nowMinutes = nowBr.getUTCHours() * 60 + nowBr.getUTCMinutes();
+
+    let lastAutoRun = settings?.lastAutoRenewalRunDate;
+    if (isActive && renewalSendTime) {
+      const [h, m] = renewalSendTime.split(':').map(Number);
+      const targetMinutes = (h || 0) * 60 + (m || 0);
+      // Se o horário definido já passou hoje (ex: definiu 14:00 e já são 14:01+):
+      // Marca lastAutoRenewalRunDate como hoje para que NUNCA dispare hoje, aguardando amanhã pontualmente!
+      if (nowMinutes >= targetMinutes) {
+        lastAutoRun = todayBrasiliaStr;
+      }
+    }
+
     setDocumentNonBlocking(
       settingsDocRef,
       {
         isAutoRenewalActive: isActive,
+        renewalSendTime: renewalSendTime.trim(),
+        renewalDelaySeconds: Number(renewalDelaySeconds) || 15,
+        lastAutoRenewalRunDate: lastAutoRun || null,
         renewalSuccessMessage: successMessage.trim(),
         renewalBillingMessage: billingMessage.trim(),
         renewalSupportMessage: supportMessage.trim(),
@@ -158,6 +188,146 @@ export default function RenewalAutomationPage() {
         description: 'Automação de renovação PIX atualizada com sucesso.',
       });
     }, 400);
+  };
+
+  // Disparo Manual Real
+  const handleStartManualDispatch = async () => {
+    if (!user) return;
+
+    try {
+      setIsLoadingManual(true);
+      const clientsRef = collection(firestore, 'users', user.uid, 'clients');
+      const snap = await getDocs(clientsRef);
+      const allClients = snap.docs.map(d => ({ id: d.id, ...d.data() } as Client));
+
+      const now = new Date();
+      const todayStr = format(now, 'yyyy-MM-dd');
+
+      const toRebill = allClients.filter(c => {
+        if (!c.dueDate) return false;
+        const due = (c.dueDate as any).toDate ? (c.dueDate as any).toDate() : new Date(c.dueDate);
+        return format(due, 'yyyy-MM-dd') === todayStr && (c.status === 'Ativo' || c.status === 'Vencido');
+      });
+
+      if (toRebill.length === 0) {
+        toast({
+          title: 'Nenhum cliente para hoje',
+          description: 'Não há clientes com vencimento hoje marcados como Ativo ou Vencido.',
+        });
+        setIsLoadingManual(false);
+        return;
+      }
+
+      // Agrupa por telefone canônico
+      const groupsByPhone = new Map<string, Client[]>();
+      for (const client of toRebill) {
+        const canon = getCanonicalPhone(client.phone);
+        if (!canon) continue;
+        if (!groupsByPhone.has(canon)) groupsByPhone.set(canon, []);
+        groupsByPhone.get(canon)!.push(client);
+      }
+
+      const items = Array.from(groupsByPhone.values()).map(group => {
+        const primary = group[0];
+        const subNames = group.map(c => c.subscription || 'Assinatura').join(' + ');
+        return {
+          clientIds: group.map(c => c.id),
+          name: `${primary.name}${group.length > 1 ? ` (${group.length} assinaturas)` : ''}`,
+          phone: primary.phone,
+          subNames,
+          status: 'pending' as const,
+        };
+      });
+
+      const newJob = {
+        id: 'manual_' + Date.now(),
+        userId: user.uid,
+        isSimulation: false,
+        status: 'running' as const,
+        currentIndex: 0,
+        total: items.length,
+        delaySeconds: renewalDelaySeconds || 15,
+        items,
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      window.dispatchEvent(new CustomEvent('START_RENEWAL_DISPATCH', { detail: { job: newJob } }));
+
+      toast({
+        title: 'Disparo Manual Iniciado!',
+        description: `${items.length} clientes na fila. Acompanhe a barra de progresso no painel flutuante no canto inferior esquerdo.`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Iniciar Disparo',
+        description: err.message || 'Erro inesperado.',
+      });
+    } finally {
+      setIsLoadingManual(false);
+    }
+  };
+
+  // Simulação / Demonstração da Barra
+  const handleStartDemoSimulation = () => {
+    const mockItems = [
+      {
+        clientIds: ['mock-1', 'mock-1b'],
+        name: 'João Silva (2 assinaturas)',
+        phone: '5577998413534',
+        subNames: 'Netflix 4K + Prime Video',
+        status: 'pending' as const,
+      },
+      {
+        clientIds: ['mock-2'],
+        name: 'Mariana Souza',
+        phone: '5511999999999',
+        subNames: 'Disney+ Premium',
+        status: 'pending' as const,
+      },
+      {
+        clientIds: ['mock-3'],
+        name: 'Carlos Eduardo',
+        phone: '5521988888888',
+        subNames: 'Max Standard',
+        status: 'pending' as const,
+      },
+      {
+        clientIds: ['mock-4', 'mock-4b'],
+        name: 'Fernanda Lima (2 assinaturas)',
+        phone: '5531977777777',
+        subNames: 'YouTube Premium + Spotify',
+        status: 'pending' as const,
+      },
+      {
+        clientIds: ['mock-5'],
+        name: 'Roberto Alves',
+        phone: '5541966666666',
+        subNames: 'Globoplay + Telecine',
+        status: 'pending' as const,
+      },
+    ];
+
+    const demoJob = {
+      id: 'demo_' + Date.now(),
+      userId: user?.uid || 'demo',
+      isSimulation: true,
+      status: 'running' as const,
+      currentIndex: 0,
+      total: mockItems.length,
+      delaySeconds: 3,
+      items: mockItems,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    window.dispatchEvent(new CustomEvent('START_RENEWAL_DISPATCH', { detail: { job: demoJob } }));
+
+    toast({
+      title: 'Demonstração Iniciada!',
+      description: 'Veja o painel arrastável no canto inferior esquerdo. Nenhuma mensagem real está sendo enviada.',
+    });
   };
 
   const insertSuccessTag = (tag: string) => {
@@ -228,32 +398,157 @@ export default function RenewalAutomationPage() {
           </Button>
         </div>
 
-        {/* ATIVAR AUTOMAÇÃO */}
-        <Card className={cn(
-          "border-2 transition-all",
-          isActive
-            ? "border-emerald-500/20 bg-emerald-500/5"
-            : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40"
-        )}>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between gap-4">
+        {/* SEÇÃO: ENVIO DE COBRANÇAS (AUTOMÁTICA & MANUAL) */}
+        <Card className="border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <CardHeader className="bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Send className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <CardTitle className="text-lg">Envio de Cobranças</CardTitle>
+                  <CardDescription>
+                    Configure o disparo automático diário com horário agendado ou realize disparos manuais acompanhando o progresso em tempo real.
+                  </CardDescription>
+                </div>
+              </div>
+              <Badge
+                variant={isActive ? "default" : "secondary"}
+                className={isActive ? "bg-emerald-600 text-white font-bold" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold"}
+              >
+                {isActive ? `Automático Ativo às ${renewalSendTime || '14:30'}` : "Automático Desativado"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-6">
+            {/* OPÇÃO 1: DISPARO AUTOMÁTICO */}
+            <div className="p-4 rounded-2xl border bg-slate-50/40 dark:bg-slate-900/30 space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Clock className={cn("h-4 w-4", isActive ? "text-emerald-600" : "text-slate-400")} />
+                    <Label className="text-sm font-bold text-zinc-900 dark:text-white cursor-pointer" htmlFor="auto-renewal-toggle">
+                      Disparo Automático Diário
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Envia as mensagens de renovação automaticamente no horário configurado para todos os clientes que vencem no dia.
+                  </p>
+                </div>
+                <Switch
+                  id="auto-renewal-toggle"
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
+                />
+              </div>
+
+              {isActive && (
+                <div className="pt-3 border-t border-slate-200/70 dark:border-slate-800 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-emerald-600" /> Horário de Disparo (Brasília)
+                      </Label>
+                      <Input
+                        type="time"
+                        value={renewalSendTime}
+                        onChange={(e) => setRenewalSendTime(e.target.value)}
+                        className="font-mono font-bold text-base bg-white dark:bg-zinc-900"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Exemplo: <strong>14:30</strong>. Todo dia nesse horário o sistema enviará a renovação.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5 text-emerald-600" /> Intervalo Anti-Banimento (Segundos)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={5}
+                        max={120}
+                        value={renewalDelaySeconds}
+                        onChange={(e) => setRenewalDelaySeconds(Number(e.target.value))}
+                        className="font-mono font-bold text-base bg-white dark:bg-zinc-900"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Padrão recomendado: <strong>15 segundos</strong> entre cada mensagem para proteger o WhatsApp.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* REGRAS E PROTEÇÕES EXPLICADAS */}
+                  <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 space-y-2 text-xs text-amber-800 dark:text-amber-200">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-900 dark:text-amber-100">
+                      <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" /> Regras de Segurança do Disparo Automático:
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-900/90 dark:text-amber-200/90">
+                      <li>
+                        <strong>Proteção Anti-Disparo Retroativo:</strong> Se você definir o horário para as <strong>{renewalSendTime || '14:00'}</strong> e já tiver passado desse horário hoje, o sistema <strong>NÃO dispara para os clientes de hoje</strong>, disparando amanhã pontualmente no horário agendado.
+                      </li>
+                      <li>
+                        <strong>Agrupamento Inteligente:</strong> Se um cliente possuir 2, 3 ou mais assinaturas vencendo no dia, ele receberá <strong>somente 1 mensagem</strong> listando todas as assinaturas e um único botão para renovação total.
+                      </li>
+                      <li>
+                        <strong>Intervalo Anti-Banimento:</strong> O delay de {renewalDelaySeconds}s entre os envios é respeitado rigorosamente para manter a segurança do número.
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* OPÇÃO 2: DISPARO MANUAL & DEMONSTRAÇÃO */}
+            <div className="p-4 rounded-2xl border bg-slate-50/40 dark:bg-slate-900/30 space-y-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <Zap className={cn("h-5 w-5", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")} />
-                  <Label className="text-base font-bold text-zinc-900 dark:text-white">
-                    Ativar Renovação Automática via PIX
+                  <Play className="h-4 w-4 text-blue-600" />
+                  <Label className="text-sm font-bold text-zinc-900 dark:text-white">
+                    Disparo Manual & Demonstração da Barra
                   </Label>
-                  <Badge variant={isActive ? "default" : "secondary"} className={isActive ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold"}>
-                    {isActive ? "ATIVA" : "DESATIVADA"}
-                  </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {isActive
-                    ? "Quando ativa, os avisos de vencimento geram links PIX automáticos para clientes reais."
-                    : "🔒 DESATIVADA: Nenhuma mensagem automática será disparada para clientes reais. Apenas a tela de TESTE (/automations/test-renewal) está funcionando para validação segura."}
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Não quer esperar o horário automático? Você pode disparar manualmente agora para todos os clientes que vencem hoje, ou testar a barra de progresso em modo demonstração.
                 </p>
               </div>
-              <Switch checked={isActive} onCheckedChange={setIsActive} />
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {/* BOTÃO DISPARO MANUAL REAL */}
+                <Button
+                  type="button"
+                  onClick={handleStartManualDispatch}
+                  disabled={isLoadingManual}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 shadow-sm rounded-xl h-10 px-4 cursor-pointer"
+                >
+                  {isLoadingManual ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Buscando Clientes de Hoje...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Disparar Cobrança Manual Agora</span>
+                    </>
+                  )}
+                </Button>
+
+                {/* BOTÃO DEMONSTRAÇÃO (SEM ENVIAR NADA) */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleStartDemoSimulation}
+                  className="border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30 font-bold text-xs gap-2 rounded-xl h-10 px-4 cursor-pointer"
+                  title="Testa a experiência da barra de progresso sem disparar mensagem para ninguém"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <span>Ver Demonstração do Painel (Sem Enviar)</span>
+                </Button>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground pt-1 flex items-center gap-1.5">
+                <span className="text-emerald-600 font-bold">●</span> O painel de progresso é flutuante no canto inferior esquerdo, pode ser arrastado pela tela, persiste se você recarregar a página e não duplica disparos se você tiver várias abas abertas.
+              </p>
             </div>
           </CardContent>
         </Card>

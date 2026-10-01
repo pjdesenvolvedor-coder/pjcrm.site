@@ -137,7 +137,50 @@ export async function GET(request: Request) {
             /* --- 1. PROCESSAR VENCIMENTOS --- */
             const dueNowClients = activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now);
             if (dueNowClients.length > 0) {
-                const canSendDueDateMsg = Boolean(settings.isDueDateMessageActive && settings.dueDateMessage && billingToken);
+                // 1.1 Configuração de Renovação Automática e Verificação de Horário
+                const isAutoRenewalActive = Boolean(settings.isAutoRenewalActive);
+                const offset = -3 * 60 * 60 * 1000; // Fuso Brasília (UTC-3)
+                const nowBr = new Date(now.getTime() + offset);
+                const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
+                const nowMinutes = nowBr.getUTCHours() * 60 + nowBr.getUTCMinutes();
+
+                let shouldRunAutoRenewalToday = false;
+
+                if (isAutoRenewalActive) {
+                    const [targetH, targetM] = (settings.renewalSendTime || '14:30').split(':').map(Number);
+                    const targetMinutes = (targetH || 0) * 60 + (targetM || 0);
+
+                    if (settings.lastAutoRenewalRunDate === todayDateBrasilia) {
+                        // Já disparou hoje ou foi configurado após o horário hoje -> aguarda amanhã
+                        shouldRunAutoRenewalToday = false;
+                    } else if (nowMinutes < targetMinutes) {
+                        // Ainda não chegou o horário configurado de hoje
+                        shouldRunAutoRenewalToday = false;
+                    } else if (nowMinutes > targetMinutes + 2) {
+                        // O horário agendado já passou hoje (ex: configurou 14:00 e já são 14:01+)
+                        // Conforme exigência estrita: NÃO dispara hoje para clientes de hoje, só amanhã pontualmente!
+                        shouldRunAutoRenewalToday = false;
+                        try {
+                            const configDocRef = doc(db, 'users', userId, 'settings', 'config');
+                            await runTransaction(db, async (txn) => {
+                                txn.update(configDocRef, { lastAutoRenewalRunDate: todayDateBrasilia });
+                            });
+                        } catch (e) {}
+                    } else {
+                        // Janela exata do horário de disparo! (targetMinutes a targetMinutes + 2)
+                        shouldRunAutoRenewalToday = true;
+                        try {
+                            const configDocRef = doc(db, 'users', userId, 'settings', 'config');
+                            await runTransaction(db, async (txn) => {
+                                txn.update(configDocRef, { lastAutoRenewalRunDate: todayDateBrasilia });
+                            });
+                        } catch (e) {}
+                    }
+                }
+
+                const canSendDueDateMsg = isAutoRenewalActive
+                    ? shouldRunAutoRenewalToday
+                    : Boolean(settings.isDueDateMessageActive && settings.dueDateMessage && billingToken);
 
                 // Agrupa clientes com vencimento pelo telefone canônico (para enviar apenas 1 mensagem mesmo com >1 assinaturas)
                 const dueGroupsByPhone = new Map<string, Client[]>();
@@ -148,7 +191,10 @@ export async function GET(request: Request) {
                     dueGroupsByPhone.get(canon)!.push(client);
                 }
 
-                for (const [phoneKey, clientGroup] of dueGroupsByPhone.entries()) {
+                const dueGroupEntries = Array.from(dueGroupsByPhone.entries());
+
+                for (let groupIdx = 0; groupIdx < dueGroupEntries.length; groupIdx++) {
+                    const [phoneKey, clientGroup] = dueGroupEntries[groupIdx];
                     const primaryClient = clientGroup[0];
                     const newlyMarkedClientIds: string[] = [];
 
@@ -165,9 +211,8 @@ export async function GET(request: Request) {
                         } catch (e) {}
                     }
 
-                    // Se marcou como vencido e tem envio de mensagem configurado
+                    // Se marcou como vencido e tem envio de mensagem configurado para agora
                     if (newlyMarkedClientIds.length > 0 && canSendDueDateMsg) {
-                        const isAutoRenewalActive = Boolean(settings.isAutoRenewalActive);
                         let renewalLink = '';
                         if (isAutoRenewalActive) {
                             try {
@@ -252,6 +297,12 @@ export async function GET(request: Request) {
                             }
                         } catch (sendErr) {
                             console.error('[cron:vencimento] Falha ao enviar mensagem de vencimento:', sendErr);
+                        }
+
+                        // Delay de segurança anti-banimento entre disparos
+                        if (groupIdx < dueGroupEntries.length - 1) {
+                            const delayMs = (settings.renewalDelaySeconds || 15) * 1000;
+                            await new Promise((r) => setTimeout(r, delayMs));
                         }
                     }
                 }

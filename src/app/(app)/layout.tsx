@@ -109,6 +109,7 @@ import { RemarketingMessageHandler } from '@/components/remarketing-message-hand
 import { SubscriptionTimer } from '@/components/SubscriptionTimer';
 import { SystemAlert } from '@/components/SystemAlert';
 import { SystemNotification } from '@/components/SystemNotification';
+import { RenewalDispatchWidget } from '@/components/RenewalDispatchWidget';
 
 type LiveStatus = {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -999,6 +1000,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </SidebarInset>
       <SubscriptionTimer />
       <Upsell2MessageHandler />
+      <RenewalDispatchWidget />
     </SidebarProvider>
   );
 }

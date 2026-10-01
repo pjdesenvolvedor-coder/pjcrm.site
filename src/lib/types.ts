@@ -145,6 +145,9 @@ export type Settings = {
 
   // Renovação Automática PIX (LinkinPay)
   isAutoRenewalActive?: boolean;
+  renewalSendTime?: string;
+  lastAutoRenewalRunDate?: string;
+  renewalDelaySeconds?: number;
   linkinpayToken?: string;
   renewalSuccessMessage?: string;
   renewalBillingMessage?: string;
