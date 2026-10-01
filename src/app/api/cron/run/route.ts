@@ -205,13 +205,18 @@ export async function GET(request: Request) {
                                     .trim();
                             }
 
+                            const clientDueDateMs = primaryClient.dueDate ? getTimestampMs(primaryClient.dueDate) : null;
+                            const clientDueDate = clientDueDateMs ? new Date(clientDueDateMs) : new Date();
+                            const dueFormatted = `${format(clientDueDate, 'dd/MM')} *Hoje*`;
+
                             formattedMessage = template
                                 .replace(/{cliente}/g, primaryClient.name)
                                 .replace(/{telefone}/g, primaryClient.phone)
                                 .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
                                 .replace(/{assinatura}/g, primaryClient.subscription || '')
                                 .replace(/{assinaturas}/g, primaryClient.subscription || '')
-                                .replace(/{vencimento}/g, primaryClient.dueDate ? formatDateSafe(primaryClient.dueDate) : '')
+                                .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
+                                .replace(/{vencimento}/g, dueFormatted)
                                 .replace(/{valor}/g, primaryClient.amountPaid || '0,00')
                                 .replace(/{link_renovacao}/g, renewalLink)
                                 .replace(/{link}/g, renewalLink)

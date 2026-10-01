@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useFirebase, useUser, useDoc, useMemoFirebase, useCollection } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import type { Subscription, Settings } from '@/lib/types';
+import { format } from 'date-fns';
 import {
   Sparkles,
   Link as LinkIcon,
@@ -258,7 +259,7 @@ export default function TestRenewalPage() {
         const defaultTemplate =
           'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
           '📦 *Assinatura(s):* {assinaturas}\n' +
-          '📅 *Vencimento:* Hoje\n\n' +
+          '📅 *Vencimento:* {vencimento}\n\n' +
           '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
         let template = settings?.renewalBillingMessage?.trim() || defaultTemplate;
@@ -268,12 +269,16 @@ export default function TestRenewalPage() {
           .replace(/🔗?\s*{link}/gi, '')
           .trim();
 
+        const todayFormatted = format(new Date(), 'dd/MM');
+        const dueFormatted = `${todayFormatted} *Hoje*`;
+
         messageText = template
           .replace(/{cliente}/g, clientName || 'Cliente')
           .replace(/{telefone}/g, phone)
           .replace(/{assinatura}/g, products[0]?.name || '')
           .replace(/{assinaturas}/g, products[0]?.name || '')
-          .replace(/{vencimento}/g, 'Hoje')
+          .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
+          .replace(/{vencimento}/g, dueFormatted)
           .replace(/{valor}/g, products[0]?.value || '0,00');
       }
 

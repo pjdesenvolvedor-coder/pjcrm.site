@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
+import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -565,8 +566,8 @@ export default function RenewalAutomationPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
-              <span className="text-xs font-bold text-muted-foreground self-center mr-1">Tags do Texto:</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold text-muted-foreground mr-1">Tags do Texto:</span>
               {[
                 { label: '{cliente}', tag: '{cliente}' },
                 { label: '{assinaturas}', tag: '{assinaturas}' },
@@ -582,6 +583,9 @@ export default function RenewalAutomationPage() {
                   {item.label}
                 </button>
               ))}
+              <span className="text-[11px] text-muted-foreground ml-2">
+                (A tag <code className="text-emerald-600 font-mono">&#123;vencimento&#125;</code> gera <strong>{format(new Date(), 'dd/MM')} *Hoje*</strong>)
+              </span>
             </div>
 
             <Textarea
@@ -602,7 +606,8 @@ export default function RenewalAutomationPage() {
                   {billingMessage
                     .replace(/{cliente}/g, 'João Silva')
                     .replace(/{assinaturas}/g, 'Netflix 4K Ultra HD')
-                    .replace(/{vencimento}/g, 'Hoje')
+                    .replace(/{vencimento}\s*\*?Hoje\*?/gi, `${format(new Date(), 'dd/MM')} *Hoje*`)
+                    .replace(/{vencimento}/g, `${format(new Date(), 'dd/MM')} *Hoje*`)
                     .replace(/{valor}/g, '35,00')
                     .replace(/🔗?\s*{link_renovacao}/gi, '')
                     .replace(/🔗?\s*{link}/gi, '')
