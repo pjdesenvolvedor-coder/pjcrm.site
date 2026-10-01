@@ -85,35 +85,96 @@ export default function ChargeOverduePage() {
         return;
       }
 
-      setTotal(toRebill.length);
+      // Agrupa clientes vencidos pelo telefone canônico (para não enviar mensagens duplicadas)
+      const getCanonicalPhone = (phone: string) => {
+        if (!phone) return '';
+        const digits = phone.replace(/\D/g, '');
+        let local = (digits.startsWith('55') && digits.length >= 12) ? digits.slice(2) : digits;
+        if (local.length === 11 && local[2] === '9') local = local.slice(0, 2) + local.slice(3);
+        if (local.length === 10) return '55' + local;
+        return digits;
+      };
+
+      const groupsByPhone = new Map<string, Client[]>();
+      for (const client of toRebill) {
+        const canon = getCanonicalPhone(client.phone);
+        if (!canon) continue;
+        if (!groupsByPhone.has(canon)) groupsByPhone.set(canon, []);
+        groupsByPhone.get(canon)!.push(client);
+      }
+
+      const phoneGroups = Array.from(groupsByPhone.values());
+
+      setTotal(phoneGroups.length);
       const logCollectionRef = collection(firestore, 'users', user.uid, 'logs');
       const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
       const DELAY_MS = messageDelay * 1000;
 
-      for (let i = 0; i < toRebill.length; i++) {
-        const client = toRebill[i];
-        const logEntry = { name: client.name, status: 'sending' as const, time: format(new Date(), 'HH:mm:ss') };
+      for (let i = 0; i < phoneGroups.length; i++) {
+        const clientGroup = phoneGroups[i];
+        const primaryClient = clientGroup[0];
+        const hasMultiple = clientGroup.length > 1;
+        const subNames = clientGroup.map(c => c.subscription || 'Assinatura').join(' + ');
+        const subListBullet = clientGroup.map(c => `👉 *${c.subscription || 'Assinatura'}*`).join('\n');
+
+        const logEntry = { 
+          name: `${primaryClient.name}${hasMultiple ? ` (${clientGroup.length} assinaturas)` : ''}`, 
+          status: 'sending' as const, 
+          time: format(new Date(), 'HH:mm:ss') 
+        };
         setLogs(prev => [logEntry, ...prev].slice(0, 50));
 
-        let formattedMessage = customMessage
-          .replace(/{cliente}/g, client.name)
-          .replace(/{telefone}/g, client.phone)
-          .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : (client.email || ''))
-          .replace(/{assinatura}/g, client.subscription || '')
-          .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : 'N/A')
-          .replace(/{valor}/g, client.amountPaid || '0,00')
-          .replace(/{senha}/g, client.password || 'N/A')
-          .replace(/{tela}/g, client.screen || 'N/A')
-          .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
-          .replace(/{status}/g, 'Vencido');
+        // Gera link oficial de renovação PIX com LinkinPay
+        let renewalLink = '';
+        try {
+          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://pjcrm.site';
+          const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
+          const { link } = await getOrCreateRenewalSession(user.uid, clientGroup, origin);
+          renewalLink = link;
+        } catch (linkErr) {
+          console.error('Erro ao gerar link de renovação:', linkErr);
+        }
+
+        let formattedMessage = '';
+
+        if (hasMultiple && !customMessage.includes('{assinaturas}') && !customMessage.includes('{assinatura}') && !customMessage.includes('{link_renovacao}')) {
+          formattedMessage = 
+            `Olá *${primaryClient.name}*!\n\n` +
+            `Notamos que você tem *${clientGroup.length} assinaturas* vencidas:\n\n` +
+            `${subListBullet}\n\n` +
+            (renewalLink 
+              ? `👉 *Para regularizar com facilidade via PIX e reativar seus acessos, use o link oficial abaixo:*\n🔗 ${renewalLink}\n\n_Ao pagar, seu acesso é renovado de imediato!_`
+              : `Por favor, responda esta mensagem para renovar seus acessos.`);
+        } else {
+          formattedMessage = customMessage
+            .replace(/{cliente}/g, primaryClient.name)
+            .replace(/{telefone}/g, primaryClient.phone)
+            .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
+            .replace(/{assinatura}/g, subNames)
+            .replace(/{assinaturas}/g, subNames)
+            .replace(/{vencimento}/g, primaryClient.dueDate ? format(primaryClient.dueDate.toDate(), 'dd/MM/yyyy') : 'N/A')
+            .replace(/{valor}/g, primaryClient.amountPaid || '0,00')
+            .replace(/{link_renovacao}/g, renewalLink)
+            .replace(/{link}/g, renewalLink)
+            .replace(/{senha}/g, primaryClient.password || 'N/A')
+            .replace(/{tela}/g, primaryClient.screen || 'N/A')
+            .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
+            .replace(/{status}/g, 'Vencido');
+
+          // Se tiver link e não foi inserido na mensagem customizada, adiciona no final
+          if (renewalLink && !customMessage.includes('{link_renovacao}') && !customMessage.includes('{link}')) {
+            formattedMessage += `\n\n👉 *Link de Renovação PIX:*\n🔗 ${renewalLink}`;
+          }
+        }
 
         addDocumentNonBlocking(logCollectionRef, {
           userId: user.uid,
           type: 'Cobrança Vencidos',
-          clientName: client.name,
-          target: client.phone,
+          clientName: primaryClient.name,
+          target: primaryClient.phone,
           status: 'Enviando',
           delayApplied: (i > 0 ? DELAY_MS : 0) / 1000,
+          details: `${clientGroup.length} assinatura(s): ${subNames}`,
           timestamp: serverTimestamp(),
         });
 
@@ -124,7 +185,7 @@ export default function ChargeOverduePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               message: formattedMessage,
-              phoneNumber: client.phone,
+              phoneNumber: primaryClient.phone,
               token: billingToken,
             }),
           });
@@ -133,21 +194,23 @@ export default function ChargeOverduePage() {
             success = true;
             setLogs(prev => prev.map((l, idx) => idx === 0 ? { ...l, status: 'success' as const } : l));
             addDocumentNonBlocking(logCollectionRef, {
-                userId: user.uid, type: 'Cobrança Vencidos', clientName: client.name, target: client.phone, status: 'Enviado', timestamp: serverTimestamp()
+                userId: user.uid, type: 'Cobrança Vencidos', clientName: primaryClient.name, target: primaryClient.phone, status: 'Enviado', timestamp: serverTimestamp()
             });
             
-            // Delete client if option is checked and message was sent successfully
+            // Delete all clients in this group if option is checked and message was sent successfully
             if (deleteAfterSend) {
-               try {
-                   await deleteDoc(doc(firestore, 'users', user.uid, 'clients', client.id));
-               } catch (deleteErr) {
-                   console.error('Erro ao deletar cliente após enviar mensagem:', deleteErr);
+               for (const c of clientGroup) {
+                 try {
+                     await deleteDoc(doc(firestore, 'users', user.uid, 'clients', c.id));
+                 } catch (deleteErr) {
+                     console.error('Erro ao deletar cliente após enviar mensagem:', deleteErr);
+                 }
                }
             }
           } else {
             setLogs(prev => prev.map((l, idx) => idx === 0 ? { ...l, status: 'error' as const } : l));
             addDocumentNonBlocking(logCollectionRef, {
-                userId: user.uid, type: 'Cobrança Vencidos', clientName: client.name, target: client.phone, status: 'Erro', timestamp: serverTimestamp()
+                userId: user.uid, type: 'Cobrança Vencidos', clientName: primaryClient.name, target: primaryClient.phone, status: 'Erro', timestamp: serverTimestamp()
             });
           }
         } catch (err) {
@@ -156,14 +219,14 @@ export default function ChargeOverduePage() {
 
         setProgress(i + 1);
 
-        if (i < toRebill.length - 1) {
+        if (i < phoneGroups.length - 1) {
           await sleep(DELAY_MS);
         }
       }
 
       toast({
         title: 'Cobrança Finalizada',
-        description: `Enviado para ${toRebill.length} clientes vencidos com sucesso.`,
+        description: `Enviado para ${phoneGroups.length} contatos (${toRebill.length} assinaturas) com sucesso.`,
       });
 
     } catch (error) {
@@ -179,7 +242,7 @@ export default function ChargeOverduePage() {
   };
 
   const insertTag = (tag: string) => {
-    setCustomMessage(prev => prev + tag);
+    setCustomMessage(prev => prev + ' ' + tag);
   };
 
   return (
@@ -230,7 +293,7 @@ export default function ChargeOverduePage() {
                 <div className="space-y-2">
                     <label className="text-sm font-semibold text-slate-700">Mensagem Personalizada</label>
                     <div className="flex flex-wrap gap-2 mb-2">
-                        {['{cliente}', '{vencimento}', '{valor}', '{assinatura}', '{telefone}', '{email}', '{senha}', '{tela}', '{pin_tela}'].map((tag) => (
+                        {['{cliente}', '{vencimento}', '{valor}', '{assinatura}', '{assinaturas}', '{link_renovacao}', '{telefone}', '{email}', '{senha}', '{tela}', '{pin_tela}'].map((tag) => (
                             <Badge 
                                 key={tag} 
                                 variant="outline" 

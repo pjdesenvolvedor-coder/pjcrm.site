@@ -142,6 +142,45 @@ export type Settings = {
   zapVendasToken?: string;
   billingWebhookToken?: string;
   useSeparateBillingZap?: boolean;
+
+  // Renovação Automática PIX (LinkinPay)
+  isAutoRenewalActive?: boolean;
+  linkinpayToken?: string;
+  renewalSuccessMessage?: string;
+  renewalBillingMessage?: string;
+};
+
+export type RenewalSessionItem = {
+  clientId: string;
+  name: string;
+  value: string;
+  email?: string[];
+  screen?: string | null;
+  pinScreen?: string | null;
+  currentDueDate?: any;
+};
+
+export type RenewalSession = {
+  id: string;
+  userId: string;
+  phone: string;
+  canonicalPhone: string;
+  clientName: string;
+  clientIds: string[];
+  subscriptions: RenewalSessionItem[];
+  status: 'pending' | 'paid' | 'expired';
+  pixTransactionId?: string;
+  pixCode?: string;
+  pixQrCodeBase64?: string;
+  totalAmountPaid?: number; // em centavos
+  paidAt?: any;
+  renewedClientIds?: string[];
+  reportedIssues?: {
+    clientId: string;
+    subscriptionName: string;
+  }[];
+  createdAt: any;
+  expiresAt: any;
 };
 
 

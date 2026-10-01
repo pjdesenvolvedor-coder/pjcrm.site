@@ -65,7 +65,7 @@ function formatDateSafe(val: any): string {
     try { return format(new Date(ms), 'dd/MM/yyyy'); } catch { return 'N/A'; }
 }
 
-function formatMessageWithClient(template: string, client: Client): string {
+function formatMessageWithClient(template: string, client: Client, renewalLink = ''): string {
     if (!template) return '';
     return template
         .replace(/{cliente}/g, client.name || '')
@@ -74,8 +74,10 @@ function formatMessageWithClient(template: string, client: Client): string {
         .replace(/{senha}/g, client.password || 'N/A')
         .replace(/{tela}/g, client.screen || 'N/A')
         .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
-        .replace(/{link}/g, client.accessLink || 'N/A')
+        .replace(/{link_renovacao}/g, renewalLink)
+        .replace(/{link}/g, renewalLink || client.accessLink || 'N/A')
         .replace(/{assinatura}/g, client.subscription || 'N/A')
+        .replace(/{assinaturas}/g, client.subscription || 'N/A')
         .replace(/{vencimento}/g, formatDateSafe(client.dueDate))
         .replace(/{valor}/g, client.amountPaid || '0,00')
         .replace(/{status}/g, client.status || 'Ativo');
@@ -130,14 +132,93 @@ export async function GET(request: Request) {
             const overdueStatusClients = clients.filter(c => c.status === 'Vencido');
 
             /* --- 1. PROCESSAR VENCIMENTOS --- */
-            for (const client of activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now)) {
-                const ref = doc(db, 'users', userId, 'clients', client.id);
-                try {
-                    await runTransaction(db, async (txn) => {
-                        const snap = await txn.get(ref);
-                        if (snap.data()?.status === 'Ativo') txn.update(ref, { status: 'Vencido' });
-                    });
-                } catch (e) {}
+            const dueNowClients = activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now);
+            if (dueNowClients.length > 0) {
+                const canSendDueDateMsg = Boolean(settings.isDueDateMessageActive && settings.dueDateMessage && billingToken);
+
+                // Agrupa clientes com vencimento pelo telefone canônico (para enviar apenas 1 mensagem mesmo com >1 assinaturas)
+                const dueGroupsByPhone = new Map<string, Client[]>();
+                for (const client of dueNowClients) {
+                    const canon = getCanonicalPhone(client.phone);
+                    if (!canon) continue;
+                    if (!dueGroupsByPhone.has(canon)) dueGroupsByPhone.set(canon, []);
+                    dueGroupsByPhone.get(canon)!.push(client);
+                }
+
+                for (const [phoneKey, clientGroup] of dueGroupsByPhone.entries()) {
+                    const primaryClient = clientGroup[0];
+                    const newlyMarkedClientIds: string[] = [];
+
+                    for (const client of clientGroup) {
+                        const ref = doc(db, 'users', userId, 'clients', client.id);
+                        try {
+                            await runTransaction(db, async (txn) => {
+                                const snap = await txn.get(ref);
+                                if (snap.exists() && snap.data()?.status === 'Ativo') {
+                                    txn.update(ref, { status: 'Vencido' });
+                                    newlyMarkedClientIds.push(client.id);
+                                }
+                            });
+                        } catch (e) {}
+                    }
+
+                    // Se marcou como vencido e tem envio de mensagem configurado
+                    if (newlyMarkedClientIds.length > 0 && canSendDueDateMsg) {
+                        let renewalLink = '';
+                        try {
+                            const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
+                            const { link } = await getOrCreateRenewalSession(userId, clientGroup, originUrl);
+                            renewalLink = link;
+                        } catch (linkErr) {
+                            console.error('[cron:renewal-link] Erro ao gerar link de renovação:', linkErr);
+                        }
+
+                        const hasMultiple = clientGroup.length > 1;
+                        const subNames = clientGroup.map(c => c.subscription || 'Assinatura').join(' + ');
+                        const subListBullet = clientGroup.map(c => `👉 *${c.subscription || 'Assinatura'}*`).join('\n');
+
+                        let formattedMessage = '';
+                        if (hasMultiple) {
+                            formattedMessage = 
+                                `Olá *${primaryClient.name}*!\n\n` +
+                                `Notamos que você tem *${clientGroup.length} assinaturas* com vencimento hoje:\n\n` +
+                                `${subListBullet}\n\n` +
+                                (renewalLink 
+                                    ? `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, use o link oficial abaixo:*\n🔗 ${renewalLink}\n\n_Ao pagar, seu acesso é renovado de imediato!_`
+                                    : `Por favor, responda esta mensagem para renovar seus acessos.`);
+                        } else {
+                            const template = settings.renewalBillingMessage?.trim() || settings.dueDateMessage!;
+                            formattedMessage = template
+                                .replace(/{cliente}/g, primaryClient.name)
+                                .replace(/{telefone}/g, primaryClient.phone)
+                                .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
+                                .replace(/{assinatura}/g, primaryClient.subscription || '')
+                                .replace(/{assinaturas}/g, primaryClient.subscription || '')
+                                .replace(/{vencimento}/g, primaryClient.dueDate ? formatDateSafe(primaryClient.dueDate) : '')
+                                .replace(/{valor}/g, primaryClient.amountPaid || '0,00')
+                                .replace(/{link_renovacao}/g, renewalLink)
+                                .replace(/{link}/g, renewalLink)
+                                .replace(/{senha}/g, primaryClient.password || 'N/A')
+                                .replace(/{tela}/g, primaryClient.screen || 'N/A')
+                                .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
+                                .replace(/{status}/g, 'Vencido');
+                        }
+
+                        try {
+                            await fetch(`${originUrl}/api/send-message`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    message: formattedMessage,
+                                    phoneNumber: primaryClient.phone,
+                                    token: billingToken,
+                                }),
+                            });
+                        } catch (sendErr) {
+                            console.error('[cron:vencimento] Falha ao enviar mensagem de vencimento:', sendErr);
+                        }
+                    }
+                }
             }
 
             /* --- 2. PROCESSAR UPSELL ---
