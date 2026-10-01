@@ -271,7 +271,7 @@ export default function RenewalAutomationPage() {
                     <div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">Hub Principal</h4>
                       <p className="text-[11px] text-muted-foreground font-mono">
-                        {settings?.webhookToken ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Instância Principal'}
+                        {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Instância Principal'}
                       </p>
                     </div>
                   </div>
@@ -323,7 +323,7 @@ export default function RenewalAutomationPage() {
                     <div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">ZAP Cobrança</h4>
                       <p className="text-[11px] text-muted-foreground font-mono">
-                        {settings?.billingWebhookToken ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Instância de Cobrança'}
+                        {typeof settings?.billingWebhookToken === 'string' && settings.billingWebhookToken.length > 0 ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Instância de Cobrança'}
                       </p>
                     </div>
                   </div>

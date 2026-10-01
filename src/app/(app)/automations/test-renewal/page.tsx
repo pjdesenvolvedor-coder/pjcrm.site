@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Send,
   CheckCircle2,
+  AlertCircle,
   AlertTriangle,
   Plus,
   Trash2,
@@ -50,22 +51,24 @@ const DEFAULT_PRESET_PRODUCTS = [
 ];
 
 export default function TestRenewalPage() {
-  const { firestore } = useFirebase();
+  const { firestore, effectiveUserId } = useFirebase();
   const { user } = useUser();
   const { toast } = useToast();
 
+  const targetUserId = effectiveUserId || user?.uid || '';
+
   // Configurações do CRM
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return doc(firestore, 'users', targetUserId, 'settings', 'config');
+  }, [firestore, targetUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
   // Assinaturas cadastradas no sistema do usuário
   const subscriptionsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'subscriptions'), orderBy('name'));
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'subscriptions'), orderBy('name'));
+  }, [firestore, targetUserId]);
   const { data: userSubscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
   // Estados do formulário de teste
@@ -186,7 +189,7 @@ export default function TestRenewalPage() {
 
   // Gerar Sessão de Renovação Real
   const handleGenerateTestSession = async () => {
-    if (!user) return;
+    if (!targetUserId) return;
     if (!phone.trim()) {
       toast({ variant: 'destructive', title: 'Telefone Obrigatório', description: 'Informe o número de WhatsApp.' });
       return;
@@ -202,7 +205,7 @@ export default function TestRenewalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create',
-          userId: user.uid,
+          userId: targetUserId,
           phone,
           clientName,
           products,
@@ -235,7 +238,7 @@ export default function TestRenewalPage() {
 
   // Enviar Mensagem Real de Teste no WhatsApp
   const handleSendWhatsApp = async () => {
-    if (!user || !generatedLink) return;
+    if (!targetUserId || !generatedLink) return;
 
     try {
       setIsSendingWhatsApp(true);
@@ -276,7 +279,7 @@ export default function TestRenewalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send-whatsapp',
-          userId: user.uid,
+          userId: targetUserId,
           targetPhone: phone,
           message: messageText,
           chosenZap: testZapChoice,
@@ -306,7 +309,7 @@ export default function TestRenewalPage() {
 
   // Simular Pagamento Aprovado Instantâneo
   const handleSimulatePayment = async () => {
-    if (!user || !generatedSessionId) return;
+    if (!targetUserId || !generatedSessionId) return;
 
     try {
       setIsSimulatingPaid(true);
@@ -316,7 +319,7 @@ export default function TestRenewalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'simulate-paid',
-          userId: user.uid,
+          userId: targetUserId,
           sessionId: generatedSessionId,
         }),
       });
@@ -351,7 +354,7 @@ export default function TestRenewalPage() {
     toast({ title: 'Copiado!', description: 'Link copiado para a área de transferência.' });
   };
 
-  const totalCalculated = products.reduce((acc, p) => acc + (parseFloat(p.value.replace(',', '.')) || 0), 0);
+  const totalCalculated = products.reduce((acc, p) => acc + (parseFloat(String(p?.value || '').replace(',', '.')) || 0), 0);
 
   return (
     <div className="flex flex-col h-full bg-slate-50/60 dark:bg-slate-950">
@@ -578,7 +581,7 @@ export default function TestRenewalPage() {
                       <div>
                         <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Hub Principal</span>
                         <p className="text-[10px] text-muted-foreground font-mono">
-                          {settings?.webhookToken ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Principal'}
+                          {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Principal'}
                         </p>
                       </div>
                     </div>
@@ -617,7 +620,7 @@ export default function TestRenewalPage() {
                       <div>
                         <span className="font-bold text-xs text-slate-800 dark:text-slate-200">ZAP Cobrança</span>
                         <p className="text-[10px] text-muted-foreground font-mono">
-                          {settings?.billingWebhookToken ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Cobrança'}
+                          {typeof settings?.billingWebhookToken === 'string' && settings.billingWebhookToken.length > 0 ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Cobrança'}
                         </p>
                       </div>
                     </div>

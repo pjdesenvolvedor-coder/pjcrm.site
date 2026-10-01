@@ -756,11 +756,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip={`Hub Principal ${settings?.webhookToken ? `(${settings.webhookToken.slice(0, 8)}...)` : ''}`}>
+                    <SidebarMenuButton tooltip={`Hub Principal ${typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `(${settings.webhookToken.slice(0, 8)}...)` : ''}`}>
                       <MessageSquareShare className="h-4 w-4 text-emerald-600 dark:text-emerald-500 shrink-0" />
                       <div className="flex flex-col min-w-0 flex-1 text-left group-data-[collapsible=icon]:hidden">
                         <span className="text-[13px] font-bold text-emerald-700 dark:text-emerald-400 leading-tight">Hub Principal</span>
-                        {settings?.webhookToken && (
+                        {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 && (
                           <span className="text-[10px] text-muted-foreground font-mono leading-none truncate opacity-75">
                             {settings.webhookToken.slice(0, 8)}...
                           </span>
@@ -939,11 +939,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <Key className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span className="text-[10px] font-semibold uppercase tracking-wider">Token UAZAPI</span>
                       </div>
-                      <span className="font-mono text-xs font-bold text-foreground mt-0.5 truncate" title={settings?.webhookToken || 'Não configurado'}>
-                        {settings?.webhookToken ? `${settings.webhookToken.slice(0, 10)}...${settings.webhookToken.slice(-4)}` : 'Não configurado'}
+                      <span className="font-mono text-xs font-bold text-foreground mt-0.5 truncate" title={typeof settings?.webhookToken === 'string' ? settings.webhookToken : 'Não configurado'}>
+                        {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `${settings.webhookToken.slice(0, 10)}...${settings.webhookToken.slice(-4)}` : 'Não configurado'}
                       </span>
                     </div>
-                    {settings?.webhookToken && (
+                    {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -951,8 +951,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground hover:bg-background/80"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigator.clipboard.writeText(settings.webhookToken);
-                          toast({ title: 'Token copiado!', description: 'O token do Hub Principal foi copiado.' });
+                          if (settings?.webhookToken) {
+                            navigator.clipboard.writeText(settings.webhookToken);
+                            toast({ title: 'Token copiado!', description: 'O token do Hub Principal foi copiado.' });
+                          }
                         }}
                         title="Copiar token completo"
                       >

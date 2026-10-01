@@ -158,7 +158,7 @@ export async function getOrCreateRenewalSession(
         const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
         if (now - createdMs < 24 * 60 * 60 * 1000) {
           return {
-            session: { id: d.id, ...data },
+            session: { ...data, id: d.id },
             link: `${originUrl}/renovar/${d.id}`,
           };
         }
