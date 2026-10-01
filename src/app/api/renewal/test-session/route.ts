@@ -84,11 +84,16 @@ export async function POST(req: NextRequest) {
       const subs = sessionData.subscriptions || [];
       const totalCents = subs.reduce((acc: number, s: any) => acc + Math.round(parseFloat(s.value || '0') * 100), 0);
 
+      const targetIds = (sessionData.renewedClientIds && sessionData.renewedClientIds.length > 0)
+        ? sessionData.renewedClientIds
+        : (sessionData.clientIds || subs.map((s: any) => s.clientId));
+
       const result = await executeRenewalPayment({
         sessionId,
         pixTransactionId: `simulated_test_${Date.now()}`,
         amountInCents: totalCents,
-        renewedClientIds: sessionData.clientIds || subs.map((s: any) => s.clientId),
+        renewedClientIds: targetIds,
+        reportedIssues: sessionData.reportedIssues || [],
       });
 
       return NextResponse.json({

@@ -195,8 +195,14 @@ export default function RenewalPage() {
   };
 
   // Gerar PIX via API LinkinPay
-  const handleGeneratePix = async () => {
-    if (selectedToRenew.length === 0) {
+  const handleGeneratePix = async (
+    overrideSelectedIds?: string[],
+    overrideBrokenIds?: string[]
+  ) => {
+    const finalSelected = overrideSelectedIds || selectedToRenew;
+    const finalBroken = overrideBrokenIds !== undefined ? overrideBrokenIds : brokenSubscriptions;
+
+    if (finalSelected.length === 0) {
       alert('Selecione pelo menos 1 assinatura para renovar.');
       return;
     }
@@ -210,8 +216,8 @@ export default function RenewalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
-          selectedClientIds: selectedToRenew,
-          reportedIssueClientIds: brokenSubscriptions,
+          selectedClientIds: finalSelected,
+          reportedIssueClientIds: finalBroken,
           payerName: session?.clientName,
         }),
       });
@@ -319,8 +325,9 @@ export default function RenewalPage() {
                   if (hasMultiple) {
                     setStep('select_yes');
                   } else {
-                    setSelectedToRenew([subscriptions[0].clientId]);
-                    handleGeneratePix();
+                    const singleId = [subscriptions[0].clientId];
+                    setSelectedToRenew(singleId);
+                    handleGeneratePix(singleId, []);
                   }
                 }}
                 className="w-full py-4 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer"

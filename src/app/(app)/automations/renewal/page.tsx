@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  LifeBuoy,
 } from 'lucide-react';
 import { DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,13 @@ const DEFAULT_BILLING_MESSAGE =
   '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, acesse o link oficial abaixo:\n' +
   '🔗 {link_renovacao}';
 
+const DEFAULT_SUPPORT_MESSAGE =
+  '🛠️ *SUPORTE PJ CONTAS - CHAMADO ABERTO*\n\n' +
+  'Olá *{cliente}*! Identificamos o seu relato de problema na assinatura *{assinatura}* ao renovar.\n\n' +
+  '✅ Seu pagamento PIX foi aprovado e sua assinatura já foi renovada com sucesso!\n' +
+  '🚨 O seu chamado de suporte já foi aberto automaticamente em nosso sistema. 🧑‍💻\n\n' +
+  'Nossa equipe técnica já foi notificada e em breve entrará em contato para verificar e resolver seu acesso com prioridade. Fique tranquilo(a)! 🤝✨';
+
 export default function RenewalAutomationPage() {
   const { firestore } = useFirebase();
   const { user } = useUser();
@@ -64,6 +72,7 @@ export default function RenewalAutomationPage() {
   const [isActive, setIsActive] = useState(true);
   const [successMessage, setSuccessMessage] = useState(DEFAULT_SUCCESS_MESSAGE);
   const [billingMessage, setBillingMessage] = useState(DEFAULT_BILLING_MESSAGE);
+  const [supportMessage, setSupportMessage] = useState(DEFAULT_SUPPORT_MESSAGE);
   const [linkinpayToken, setLinkinpayToken] = useState(DEFAULT_LINKINPAY_TOKEN);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -112,6 +121,7 @@ export default function RenewalAutomationPage() {
       setIsActive(settings.isAutoRenewalActive !== false);
       setSuccessMessage(settings.renewalSuccessMessage || DEFAULT_SUCCESS_MESSAGE);
       setBillingMessage(settings.renewalBillingMessage || DEFAULT_BILLING_MESSAGE);
+      setSupportMessage(settings.renewalSupportMessage || settings.supportStartedMessage || DEFAULT_SUPPORT_MESSAGE);
       setLinkinpayToken(settings.linkinpayToken || DEFAULT_LINKINPAY_TOKEN);
       setRenewalZapInstance(settings.renewalZapInstance || 'auto');
       checkZapStatuses();
@@ -128,6 +138,7 @@ export default function RenewalAutomationPage() {
         isAutoRenewalActive: isActive,
         renewalSuccessMessage: successMessage.trim(),
         renewalBillingMessage: billingMessage.trim(),
+        renewalSupportMessage: supportMessage.trim(),
         linkinpayToken: linkinpayToken.trim(),
         renewalZapInstance,
       },
@@ -149,6 +160,10 @@ export default function RenewalAutomationPage() {
 
   const insertBillingTag = (tag: string) => {
     setBillingMessage((prev) => `${prev} ${tag}`);
+  };
+
+  const insertSupportTag = (tag: string) => {
+    setSupportMessage((prev) => `${prev} ${tag}`);
   };
 
   const webhookUrl = typeof window !== 'undefined'
@@ -534,6 +549,56 @@ export default function RenewalAutomationPage() {
               value={billingMessage}
               onChange={(e) => setBillingMessage(e.target.value)}
               placeholder="Digite o modelo de cobrança com o link..."
+              className="font-mono text-sm leading-relaxed"
+            />
+          </CardContent>
+        </Card>
+
+        {/* MENSAGEM DE SUPORTE AUTOMÁTICO NA RENOVAÇÃO */}
+        <Card className="border-red-200 dark:border-red-950/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <LifeBuoy className="h-5 w-5 text-red-600" />
+                  <CardTitle className="text-lg">Mensagem de Suporte Aberto (Quando o Cliente Relata Problema)</CardTitle>
+                </div>
+                <CardDescription>
+                  Disparada no WhatsApp quando o cliente marca &quot;Não está funcionando&quot; ao renovar. O CRM marca suporte automaticamente e envia esta mensagem.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
+                Suporte Automático
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-xs font-bold text-muted-foreground self-center mr-1">Tags:</span>
+              {[
+                { label: '{cliente}', tag: '{cliente}' },
+                { label: '{assinatura}', tag: '{assinatura}' },
+                { label: '{novo_vencimento}', tag: '{novo_vencimento}' },
+                { label: '{valor}', tag: '{valor}' },
+                { label: '{telefone}', tag: '{telefone}' },
+                { label: '{status}', tag: '{status}' },
+              ].map((item) => (
+                <button
+                  key={item.tag}
+                  type="button"
+                  onClick={() => insertSupportTag(item.tag)}
+                  className="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-secondary hover:bg-primary/10 border transition-colors"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <Textarea
+              rows={8}
+              value={supportMessage}
+              onChange={(e) => setSupportMessage(e.target.value)}
+              placeholder="Digite o modelo de mensagem de suporte..."
               className="font-mono text-sm leading-relaxed"
             />
           </CardContent>

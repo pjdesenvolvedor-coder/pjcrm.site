@@ -235,6 +235,10 @@ export async function executeRenewalPayment({
       return { success: true, renewedCount: session.renewedClientIds?.length || 0, messageSent: true };
     }
 
+    const effectiveReportedIssues = (reportedIssues && reportedIssues.length > 0)
+      ? reportedIssues
+      : (session.reportedIssues || []);
+
     const targetClientIds = (renewedClientIds && renewedClientIds.length > 0)
       ? renewedClientIds
       : (session.renewedClientIds && session.renewedClientIds.length > 0 ? session.renewedClientIds : session.clientIds);
@@ -261,7 +265,7 @@ export async function executeRenewalPayment({
         const newDueDate = add(baseDate, { months: 1 });
         newestDueDateFormatted = format(newDueDate, 'dd/MM/yyyy');
 
-        const hasReportedIssue = reportedIssues?.some((r) => r.clientId === clientId);
+        const hasReportedIssue = effectiveReportedIssues.some((r) => r.clientId === clientId);
 
         const updateData: any = {
           status: 'Ativo',
@@ -277,13 +281,35 @@ export async function executeRenewalPayment({
         if (hasReportedIssue) {
           updateData.needsSupport = true;
           const oldNotes = clientData.notes || '';
-          updateData.notes = `${oldNotes}\n[🚨 Cliente informou problema na assinatura em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim();
+          updateData.notes = `${oldNotes}\n[🚨 Cliente informou problema na assinatura na renovação em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim();
         }
 
         await updateDoc(clientRef, updateData);
-        console.log(`[RenewalService] Cliente ${clientId} (${clientData.name}) renovado com sucesso até ${newestDueDateFormatted}`);
+        console.log(`[RenewalService] Cliente ${clientId} (${clientData.name}) renovado com sucesso até ${newestDueDateFormatted}${hasReportedIssue ? ' com suporte marcado' : ''}`);
       } catch (clientErr) {
         console.error(`[RenewalService] Erro ao renovar cliente ${clientId}:`, clientErr);
+      }
+    }
+
+    // Se houver alguma assinatura reportada com problema que NÃO foi selecionada para renovação, ainda assim marca suporte
+    for (const reported of effectiveReportedIssues) {
+      if (!targetClientIds.includes(reported.clientId)) {
+        try {
+          const now = new Date();
+          const otherRef = doc(db, 'users', userId, 'clients', reported.clientId);
+          const otherSnap = await getDoc(otherRef);
+          if (otherSnap.exists()) {
+            const otherData = otherSnap.data() as Client;
+            const oldNotes = otherData.notes || '';
+            await updateDoc(otherRef, {
+              needsSupport: true,
+              notes: `${oldNotes}\n[🚨 Cliente informou problema na assinatura na renovação em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim(),
+            });
+            console.log(`[RenewalService] Cliente ${reported.clientId} (${otherData.name}) marcado como needsSupport: true (não renovado)`);
+          }
+        } catch (e) {
+          console.error(`[RenewalService] Erro ao marcar suporte para cliente não renovado ${reported.clientId}:`, e);
+        }
       }
     }
 
@@ -294,7 +320,8 @@ export async function executeRenewalPayment({
       pixTransactionId: pixTransactionId || session.pixTransactionId || null,
       totalAmountPaid: amountInCents || session.totalAmountPaid || 0,
       renewedClientIds: targetClientIds,
-      reportedIssues: reportedIssues || session.reportedIssues || [],
+      reportedIssues: effectiveReportedIssues,
+      hasSupportRequest: effectiveReportedIssues.length > 0,
     });
 
     // Registra log geral
@@ -304,7 +331,7 @@ export async function executeRenewalPayment({
       clientName: session.clientName,
       target: session.phone,
       status: 'Enviado',
-      details: `Renovadas: ${renewedNames.join(', ')} | Novo vencimento: ${newestDueDateFormatted}`,
+      details: `Renovadas: ${renewedNames.join(', ')} | Novo vencimento: ${newestDueDateFormatted}${effectiveReportedIssues.length > 0 ? ' | Suporte Aberto Automático 🚨' : ''}`,
       timestamp: serverTimestamp(),
     }).catch(() => {});
 
@@ -347,6 +374,66 @@ export async function executeRenewalPayment({
             console.log(`[RenewalService] Confirmação enviada via token: ${sendResult.tokenUsed.slice(0, 10)}...`);
           } else {
             console.warn(`[RenewalService] Falha ao enviar confirmação: ${sendResult.error}`);
+          }
+
+          // Se houve relato de problemas na assinatura, dispara a mensagem de abertura de suporte
+          if (effectiveReportedIssues.length > 0) {
+            try {
+              const defaultSupportTemplate =
+                '🛠️ *SUPORTE PJ CONTAS - CHAMADO ABERTO*\n\n' +
+                'Olá *{cliente}*! Identificamos o seu relato de problema na assinatura *{assinatura}* ao renovar.\n\n' +
+                '✅ Seu pagamento PIX foi aprovado e sua assinatura foi renovada com sucesso!\n' +
+                '🚨 O seu chamado de suporte já foi aberto automaticamente em nosso sistema. 🧑‍💻\n\n' +
+                'Nossa equipe técnica já foi notificada e em breve entrará em contato para verificar e resolver seu acesso com prioridade. Fique tranquilo(a)! 🤝✨';
+
+              const supportTemplate =
+                settings.renewalSupportMessage?.trim() ||
+                settings.supportStartedMessage?.trim() ||
+                defaultSupportTemplate;
+
+              const issueNames = effectiveReportedIssues.map((r) => r.subscriptionName || 'Assinatura');
+              const issueDisplay = issueNames.join(' + ') || renewedNames.join(' + ');
+
+              const supportMsg = supportTemplate
+                .replace(/{cliente}/gi, session.clientName)
+                .replace(/{nome}/gi, session.clientName)
+                .replace(/{telefone}/gi, session.phone)
+                .replace(/{numero}/gi, session.phone)
+                .replace(/{assinaturas}/gi, issueDisplay)
+                .replace(/{assinatura}/gi, issueDisplay)
+                .replace(/{novo_vencimento}/gi, newestDueDateFormatted)
+                .replace(/{vencimento}/gi, newestDueDateFormatted)
+                .replace(/{valor}/gi, totalReais)
+                .replace(/{status}/gi, 'Em Suporte');
+
+              // Pausa de 1.5s para garantir que as mensagens cheguem em ordem sem conflito de envio no WhatsApp
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+
+              const supportResult = await sendWhatsAppWithFallback(
+                session.phone,
+                supportMsg,
+                primaryToken,
+                fallbackToken
+              );
+
+              if (supportResult.success) {
+                console.log(`[RenewalService] Mensagem de suporte automático enviada para ${session.phone}`);
+              } else {
+                console.warn(`[RenewalService] Falha ao enviar mensagem de suporte: ${supportResult.error}`);
+              }
+
+              await addDoc(collection(db, 'users', userId, 'logs'), {
+                userId,
+                type: 'Suporte Aberto (Renovação)',
+                clientName: session.clientName,
+                target: session.phone,
+                status: supportResult.success ? 'Enviado' : 'Falha',
+                details: `Chamado de suporte aberto para assinatura(s): ${issueDisplay}`,
+                timestamp: serverTimestamp(),
+              }).catch(() => {});
+            } catch (supErr) {
+              console.error('[RenewalService] Erro ao disparar mensagem de suporte na renovação:', supErr);
+            }
           }
         }
       } catch (msgErr) {

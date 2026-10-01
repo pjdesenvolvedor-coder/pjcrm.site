@@ -148,6 +148,7 @@ export type Settings = {
   linkinpayToken?: string;
   renewalSuccessMessage?: string;
   renewalBillingMessage?: string;
+  renewalSupportMessage?: string;
   renewalZapInstance?: 'main' | 'billing' | 'auto';
 };
 
