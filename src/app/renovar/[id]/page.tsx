@@ -199,8 +199,13 @@ export default function RenewalPage() {
     overrideSelectedIds?: string[],
     overrideBrokenIds?: string[]
   ) => {
-    const finalSelected = overrideSelectedIds || selectedToRenew;
-    const finalBroken = overrideBrokenIds !== undefined ? overrideBrokenIds : brokenSubscriptions;
+    // Garante que só use override se for estritamente um Array (evita passar SyntheticEvent / MouseEvent do onClick)
+    const finalSelected = (Array.isArray(overrideSelectedIds) && overrideSelectedIds.length > 0)
+      ? overrideSelectedIds
+      : selectedToRenew;
+    const finalBroken = Array.isArray(overrideBrokenIds)
+      ? overrideBrokenIds
+      : brokenSubscriptions;
 
     if (finalSelected.length === 0) {
       alert('Selecione pelo menos 1 assinatura para renovar.');
@@ -447,7 +452,7 @@ export default function RenewalPage() {
             <div className="space-y-2.5">
               <button
                 type="button"
-                onClick={handleGeneratePix}
+                onClick={() => handleGeneratePix()}
                 disabled={generatingPix || selectedToRenew.length === 0}
                 className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] disabled:opacity-50 text-white font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer"
               >
@@ -653,7 +658,7 @@ export default function RenewalPage() {
             <div className="space-y-2.5">
               <button
                 type="button"
-                onClick={handleGeneratePix}
+                onClick={() => handleGeneratePix()}
                 disabled={generatingPix || selectedToRenew.length === 0}
                 className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] disabled:opacity-40 text-white font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer"
               >
