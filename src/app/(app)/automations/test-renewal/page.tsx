@@ -575,7 +575,12 @@ export default function TestRenewalPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Smartphone className="h-4 w-4 text-blue-600" />
-                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Hub Principal</span>
+                      <div>
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Hub Principal</span>
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          {settings?.webhookToken ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Principal'}
+                        </p>
+                      </div>
                     </div>
                     {testZapChoice === 'main' && (
                       <Badge className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5">ATIVO</Badge>
@@ -609,7 +614,12 @@ export default function TestRenewalPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <DollarSign className="h-4 w-4 text-orange-600" />
-                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">ZAP Cobrança</span>
+                      <div>
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-200">ZAP Cobrança</span>
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          {settings?.billingWebhookToken ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Cobrança'}
+                        </p>
+                      </div>
                     </div>
                     {testZapChoice === 'billing' && (
                       <Badge className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.5">ATIVO</Badge>

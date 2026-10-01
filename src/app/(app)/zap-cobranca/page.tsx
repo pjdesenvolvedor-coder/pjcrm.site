@@ -383,7 +383,9 @@ export default function ZapCobrancaPage() {
           <div className="flex gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
             <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold">Usando Hub Principal</p>
+              <p className="font-semibold">
+                Usando Hub Principal {settings?.webhookToken && <span className="font-mono text-xs opacity-75 font-normal">({settings.webhookToken.slice(0, 8)}...)</span>}
+              </p>
               <p className="text-blue-700 mt-0.5">
                 Todas as mensagens de cobrança serão enviadas pelo mesmo número conectado no Hub Principal. Se quiser separar, clique em "Usar ZAP separado".
               </p>

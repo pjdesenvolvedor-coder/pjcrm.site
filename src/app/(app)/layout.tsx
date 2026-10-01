@@ -53,6 +53,8 @@ import {
   Link2,
   ShieldCheck,
   Bug,
+  Copy,
+  Key,
 } from 'lucide-react';
 import Image from 'next/image';
 import { Upsell2MessageHandler } from '@/components/upsell-2-message-handler';
@@ -754,9 +756,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {permissions.zapconnect && (
                 <DialogTrigger asChild>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Conexão Automática">
-                      <MessageSquareShare className="h-4 w-4 text-emerald-600 dark:text-emerald-500" /><span className="flex-1 text-[13px] font-bold text-emerald-700 dark:text-emerald-400">Hub Principal</span>
-                      <div className="group-data-[collapsible=icon]:hidden">
+                    <SidebarMenuButton tooltip={`Hub Principal ${settings?.webhookToken ? `(${settings.webhookToken.slice(0, 8)}...)` : ''}`}>
+                      <MessageSquareShare className="h-4 w-4 text-emerald-600 dark:text-emerald-500 shrink-0" />
+                      <div className="flex flex-col min-w-0 flex-1 text-left group-data-[collapsible=icon]:hidden">
+                        <span className="text-[13px] font-bold text-emerald-700 dark:text-emerald-400 leading-tight">Hub Principal</span>
+                        {settings?.webhookToken && (
+                          <span className="text-[10px] text-muted-foreground font-mono leading-none truncate opacity-75">
+                            {settings.webhookToken.slice(0, 8)}...
+                          </span>
+                        )}
+                      </div>
+                      <div className="group-data-[collapsible=icon]:hidden shrink-0">
                         {liveStatus?.status === 'connected' ? <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> : <div className="h-2 w-2 rounded-full bg-destructive" />}
                       </div>
                     </SidebarMenuButton>
@@ -904,7 +914,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </SidebarMenu>
             <DialogContent className="sm:max-w-sm">
                 <DialogHeader className="p-6 border-b flex flex-row items-center justify-between space-y-0">
-                    <DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />ZapConexão</DialogTitle>
+                    <div>
+                      <DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />Hub Principal</DialogTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5">Conexão Zap do Sistema</p>
+                    </div>
                     {settings?.webhookToken && (
                         <Button 
                             variant="ghost" 
@@ -917,6 +930,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         </Button>
                     )}
                 </DialogHeader>
+
+                {/* Bloco de exibição do Token do Hub Principal */}
+                <div className="px-6 pt-4 pb-0">
+                  <div className="flex items-center justify-between gap-2 p-3 rounded-lg border bg-muted/40 border-border text-xs">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Key className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider">Token UAZAPI</span>
+                      </div>
+                      <span className="font-mono text-xs font-bold text-foreground mt-0.5 truncate" title={settings?.webhookToken || 'Não configurado'}>
+                        {settings?.webhookToken ? `${settings.webhookToken.slice(0, 10)}...${settings.webhookToken.slice(-4)}` : 'Não configurado'}
+                      </span>
+                    </div>
+                    {settings?.webhookToken && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground hover:bg-background/80"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(settings.webhookToken);
+                          toast({ title: 'Token copiado!', description: 'O token do Hub Principal foi copiado.' });
+                        }}
+                        title="Copiar token completo"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
                 {renderContent()}
                 <DialogFooter className="p-6 border-t bg-muted/50">
                   {liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code' && (

@@ -270,7 +270,9 @@ export default function RenewalAutomationPage() {
                     <Smartphone className="h-5 w-5 text-blue-600" />
                     <div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">Hub Principal</h4>
-                      <p className="text-[11px] text-muted-foreground">Instância Principal</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {settings?.webhookToken ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Instância Principal'}
+                      </p>
                     </div>
                   </div>
                   {renewalZapInstance === 'main' && (
@@ -320,7 +322,9 @@ export default function RenewalAutomationPage() {
                     <DollarSign className="h-5 w-5 text-orange-600" />
                     <div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">ZAP Cobrança</h4>
-                      <p className="text-[11px] text-muted-foreground">Instância de Cobrança</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {settings?.billingWebhookToken ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Instância de Cobrança'}
+                      </p>
                     </div>
                   </div>
                   {renewalZapInstance === 'billing' && (
