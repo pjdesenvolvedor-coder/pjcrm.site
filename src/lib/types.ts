@@ -149,6 +149,8 @@ export type Settings = {
   renewalSuccessMessage?: string;
   renewalBillingMessage?: string;
   renewalSupportMessage?: string;
+  renewalButtonText?: string;
+  renewalFooterText?: string;
   renewalZapInstance?: 'main' | 'billing' | 'auto';
 };
 

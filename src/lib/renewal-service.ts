@@ -124,6 +124,95 @@ export async function sendWhatsAppWithFallback(
 }
 
 /**
+ * Envia mensagem no WhatsApp com botão interativo de URL (CTA) no formato nativo da Uazapi (/send/menu).
+ * Ex: Botão "SIM, RENOVAR AGORA" que abre o link de renovação diretamente sem exibir a URL no texto.
+ */
+export async function sendWhatsAppButtonWithFallback({
+  number,
+  text,
+  footerText = 'Entrega Automática • ⬇️Clique No Botão⬇️',
+  buttonLabel = 'SIM, RENOVAR AGORA',
+  buttonUrl,
+  primaryToken,
+  fallbackToken,
+}: {
+  number: string;
+  text: string;
+  footerText?: string;
+  buttonLabel?: string;
+  buttonUrl: string;
+  primaryToken: string;
+  fallbackToken?: string;
+}): Promise<{ success: boolean; tokenUsed: string; withButton: boolean; error?: string }> {
+  if (!primaryToken && !fallbackToken) {
+    return { success: false, tokenUsed: '', withButton: false, error: 'Nenhum token de WhatsApp configurado.' };
+  }
+
+  const cleanNum = formatPhoneWith55(number);
+  const cleanButtonUrl = (buttonUrl || '').trim();
+  const cleanLabel = (buttonLabel || '').trim() || 'SIM, RENOVAR AGORA';
+  const choice = `${cleanLabel}|${cleanButtonUrl}`;
+
+  const payload: any = {
+    number: cleanNum,
+    type: 'button',
+    text: text.trim(),
+    choices: [choice],
+  };
+
+  if (footerText && footerText.trim()) {
+    payload.footerText = footerText.trim();
+  }
+
+  let currentToken = primaryToken || fallbackToken!;
+
+  // 1. Tenta envio com botão interativo via endpoint /send/menu
+  try {
+    const res = await fetch('https://travelflow.uazapi.com/send/menu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token: currentToken, apikey: currentToken },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      console.log(`[sendWhatsAppButton] Botão "${cleanLabel}" enviado com sucesso via /send/menu`);
+      return { success: true, tokenUsed: currentToken, withButton: true };
+    }
+
+    const firstErr = await res.text().catch(() => '');
+    console.warn(`[sendWhatsAppButton] Falha com token primário (${res.status}):`, firstErr);
+
+    // Tenta fallback com /send/menu se houver token secundário
+    if (fallbackToken && fallbackToken !== currentToken) {
+      currentToken = fallbackToken;
+      const fallbackRes = await fetch('https://travelflow.uazapi.com/send/menu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: currentToken, apikey: currentToken },
+        body: JSON.stringify(payload),
+      });
+
+      if (fallbackRes.ok) {
+        console.log(`[sendWhatsAppButton] Botão "${cleanLabel}" enviado com sucesso via fallback`);
+        return { success: true, tokenUsed: currentToken, withButton: true };
+      }
+    }
+  } catch (err: any) {
+    console.error(`[sendWhatsAppButton] Erro de conexão com /send/menu:`, err);
+  }
+
+  // Fallback de segurança: se /send/menu falhar, envia mensagem convencional anexando o link
+  console.log(`[sendWhatsAppButton] Fazendo fallback para texto simples com link...`);
+  const textWithLink = `${text.trim()}\n\n🔗 ${cleanButtonUrl}`;
+  const textResult = await sendWhatsAppWithFallback(number, textWithLink, primaryToken, fallbackToken);
+  return {
+    success: textResult.success,
+    tokenUsed: textResult.tokenUsed,
+    withButton: false,
+    error: textResult.error,
+  };
+}
+
+/**
  * Cria ou recupera uma sessão de renovação para um grupo de assinaturas de um mesmo cliente.
  */
 export async function getOrCreateRenewalSession(

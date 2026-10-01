@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
 
     // 3. ENVIO REAL DE MENSAGEM VIA WHATSAPP (UAZAPI)
     if (action === 'send-whatsapp') {
-      const { targetPhone, message, chosenZap } = body;
+      const { targetPhone, message, renewalLink, buttonLabel, footerText, chosenZap } = body;
       if (!targetPhone || !message) {
         return NextResponse.json({ error: 'Telefone e mensagem são obrigatórios' }, { status: 400 });
       }
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
       const configSnap = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
       const settings = configSnap.exists() ? (configSnap.data() as Settings) : {};
       
-      const { resolveRenewalWhatsAppTokens, sendWhatsAppWithFallback } = await import('@/lib/renewal-service');
+      const { resolveRenewalWhatsAppTokens, sendWhatsAppWithFallback, sendWhatsAppButtonWithFallback } = await import('@/lib/renewal-service');
       
       // Se o usuário selecionou uma instância específica na tela de teste, aplica
       const customSettings = {
@@ -129,7 +129,20 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const result = await sendWhatsAppWithFallback(targetPhone, message, primaryToken, fallbackToken);
+      let result: any;
+      if (renewalLink) {
+        result = await sendWhatsAppButtonWithFallback({
+          number: targetPhone,
+          text: message,
+          footerText: footerText || settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
+          buttonLabel: buttonLabel || settings.renewalButtonText || 'SIM, RENOVAR AGORA',
+          buttonUrl: renewalLink,
+          primaryToken,
+          fallbackToken,
+        });
+      } else {
+        result = await sendWhatsAppWithFallback(targetPhone, message, primaryToken, fallbackToken);
+      }
 
       if (!result.success) {
         return NextResponse.json(
@@ -140,8 +153,11 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({ 
         success: true, 
-        message: 'Mensagem de teste enviada com sucesso no WhatsApp!',
+        message: result.withButton 
+          ? 'Mensagem com botão [SIM, RENOVAR AGORA] enviada com sucesso no WhatsApp!' 
+          : 'Mensagem de teste enviada com sucesso no WhatsApp!',
         tokenUsed: result.tokenUsed?.slice(0, 10) + '...',
+        withButton: result.withButton ?? false,
       });
     }
 

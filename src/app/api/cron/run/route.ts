@@ -190,12 +190,21 @@ export async function GET(request: Request) {
                                 `Notamos que você tem *${clientGroup.length} assinaturas* com vencimento hoje:\n\n` +
                                 `${subListBullet}\n\n` +
                                 (renewalLink 
-                                    ? `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, use o link oficial abaixo:*\n🔗 ${renewalLink}\n\n_Ao pagar, seu acesso é renovado de imediato!_`
+                                    ? `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, clique no botão oficial abaixo:*\n\n_Ao pagar, seu acesso é renovado de imediato!_`
                                     : `Por favor, responda esta mensagem para renovar seus acessos.`);
                         } else {
-                            const template = (isAutoRenewalActive && settings.renewalBillingMessage?.trim())
+                            let template = (isAutoRenewalActive && settings.renewalBillingMessage?.trim())
                                 ? settings.renewalBillingMessage.trim()
                                 : settings.dueDateMessage!;
+
+                            // Se houver renewalLink e a renovação automática estiver ativa, removemos o link do corpo pois irá no botão interativo
+                            if (isAutoRenewalActive && renewalLink) {
+                                template = template
+                                    .replace(/🔗?\s*{link_renovacao}/gi, '')
+                                    .replace(/🔗?\s*{link}/gi, '')
+                                    .trim();
+                            }
+
                             formattedMessage = template
                                 .replace(/{cliente}/g, primaryClient.name)
                                 .replace(/{telefone}/g, primaryClient.phone)
@@ -213,16 +222,29 @@ export async function GET(request: Request) {
                         }
 
                         try {
-                            await fetch(`${originUrl}/api/send-message`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    message: formattedMessage,
-                                    phoneNumber: primaryClient.phone,
-                                    token: primaryToken,
+                            if (isAutoRenewalActive && renewalLink) {
+                                const { sendWhatsAppButtonWithFallback } = await import('@/lib/renewal-service');
+                                await sendWhatsAppButtonWithFallback({
+                                    number: primaryClient.phone,
+                                    text: formattedMessage,
+                                    footerText: settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
+                                    buttonLabel: settings.renewalButtonText || 'SIM, RENOVAR AGORA',
+                                    buttonUrl: renewalLink,
+                                    primaryToken: primaryToken,
                                     fallbackToken: fallbackToken,
-                                }),
-                            });
+                                });
+                            } else {
+                                await fetch(`${originUrl}/api/send-message`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        message: formattedMessage,
+                                        phoneNumber: primaryClient.phone,
+                                        token: primaryToken,
+                                        fallbackToken: fallbackToken,
+                                    }),
+                                });
+                            }
                         } catch (sendErr) {
                             console.error('[cron:vencimento] Falha ao enviar mensagem de vencimento:', sendErr);
                         }

@@ -253,25 +253,28 @@ export default function TestRenewalPage() {
           `Olá *${clientName || 'Cliente'}*!\n\n` +
           `Notamos que você tem *${products.length} assinaturas* com vencimento hoje:\n\n` +
           `${subListBullet}\n\n` +
-          `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, use o link oficial abaixo:*\n🔗 ${generatedLink}\n\n_Ao pagar, seu acesso é renovado de imediato!_`;
+          `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, clique no botão oficial abaixo:*\n\n_Ao pagar, seu acesso é renovado de imediato!_`;
       } else {
         const defaultTemplate =
           'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
           '📦 *Assinatura(s):* {assinaturas}\n' +
           '📅 *Vencimento:* Hoje\n\n' +
-          '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, acesse o link oficial abaixo:\n' +
-          '🔗 {link_renovacao}';
+          '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
-        const template = settings?.renewalBillingMessage?.trim() || defaultTemplate;
+        let template = settings?.renewalBillingMessage?.trim() || defaultTemplate;
+        // Remove tags de link do texto da mensagem, pois o link vai no botão interativo!
+        template = template
+          .replace(/🔗?\s*{link_renovacao}/gi, '')
+          .replace(/🔗?\s*{link}/gi, '')
+          .trim();
+
         messageText = template
           .replace(/{cliente}/g, clientName || 'Cliente')
           .replace(/{telefone}/g, phone)
           .replace(/{assinatura}/g, products[0]?.name || '')
           .replace(/{assinaturas}/g, products[0]?.name || '')
           .replace(/{vencimento}/g, 'Hoje')
-          .replace(/{valor}/g, products[0]?.value || '0,00')
-          .replace(/{link_renovacao}/g, generatedLink)
-          .replace(/{link}/g, generatedLink);
+          .replace(/{valor}/g, products[0]?.value || '0,00');
       }
 
       const res = await fetch('/api/renewal/test-session', {
@@ -282,6 +285,9 @@ export default function TestRenewalPage() {
           userId: targetUserId,
           targetPhone: phone,
           message: messageText,
+          renewalLink: generatedLink,
+          buttonLabel: settings?.renewalButtonText || 'SIM, RENOVAR AGORA',
+          footerText: settings?.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
           chosenZap: testZapChoice,
         }),
       });
@@ -293,8 +299,8 @@ export default function TestRenewalPage() {
 
       setWhatsAppSuccess(true);
       toast({
-        title: 'Mensagem Enviada!',
-        description: `Cobrança de teste com link enviada para ${phone} ${data.tokenUsed ? `(Token: ${data.tokenUsed})` : ''}`,
+        title: 'Mensagem com Botão Enviada!',
+        description: `Cobrança com botão [SIM, RENOVAR AGORA] enviada para ${phone} ${data.tokenUsed ? `(Token: ${data.tokenUsed})` : ''}`,
       });
     } catch (err: any) {
       toast({
@@ -768,10 +774,10 @@ export default function TestRenewalPage() {
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                        1. Enviar Cobrança no WhatsApp
+                        1. Enviar Cobrança com Botão no WhatsApp
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        Dispara a mensagem real com o link para <strong>{phone}</strong>.
+                        Dispara a mensagem com o botão interativo <strong>[SIM, RENOVAR AGORA]</strong> para <strong>{phone}</strong>.
                       </p>
                     </div>
                   </div>
@@ -790,12 +796,12 @@ export default function TestRenewalPage() {
                     ) : whatsAppSuccess ? (
                       <>
                         <Check className="h-4 w-4 mr-2" />
-                        Reenviar Mensagem WhatsApp
+                        Reenviar com Botão [SIM, RENOVAR AGORA]
                       </>
                     ) : (
                       <>
                         <Send className="h-4 w-4 mr-2" />
-                        Disparar Mensagem para {phone}
+                        Disparar Mensagem com Botão para {phone}
                       </>
                     )}
                   </Button>

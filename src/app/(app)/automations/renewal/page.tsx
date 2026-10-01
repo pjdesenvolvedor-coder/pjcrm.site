@@ -47,8 +47,7 @@ const DEFAULT_BILLING_MESSAGE =
   'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
   '📦 *Assinatura(s):* {assinaturas}\n' +
   '📅 *Vencimento:* {vencimento}\n\n' +
-  '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, acesse o link oficial abaixo:\n' +
-  '🔗 {link_renovacao}';
+  '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
 const DEFAULT_SUPPORT_MESSAGE =
   '🛠️ *SUPORTE PJ CONTAS - CHAMADO ABERTO*\n\n' +
@@ -73,6 +72,8 @@ export default function RenewalAutomationPage() {
   const [successMessage, setSuccessMessage] = useState(DEFAULT_SUCCESS_MESSAGE);
   const [billingMessage, setBillingMessage] = useState(DEFAULT_BILLING_MESSAGE);
   const [supportMessage, setSupportMessage] = useState(DEFAULT_SUPPORT_MESSAGE);
+  const [buttonText, setButtonText] = useState('SIM, RENOVAR AGORA');
+  const [footerText, setFooterText] = useState('Entrega Automática • ⬇️Clique No Botão⬇️');
   const [linkinpayToken, setLinkinpayToken] = useState(DEFAULT_LINKINPAY_TOKEN);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -122,6 +123,8 @@ export default function RenewalAutomationPage() {
       setSuccessMessage(settings.renewalSuccessMessage || DEFAULT_SUCCESS_MESSAGE);
       setBillingMessage(settings.renewalBillingMessage || DEFAULT_BILLING_MESSAGE);
       setSupportMessage(settings.renewalSupportMessage || settings.supportStartedMessage || DEFAULT_SUPPORT_MESSAGE);
+      setButtonText(settings.renewalButtonText || 'SIM, RENOVAR AGORA');
+      setFooterText(settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️');
       setLinkinpayToken(settings.linkinpayToken || DEFAULT_LINKINPAY_TOKEN);
       setRenewalZapInstance(settings.renewalZapInstance || 'auto');
       checkZapStatuses();
@@ -139,6 +142,8 @@ export default function RenewalAutomationPage() {
         renewalSuccessMessage: successMessage.trim(),
         renewalBillingMessage: billingMessage.trim(),
         renewalSupportMessage: supportMessage.trim(),
+        renewalButtonText: buttonText.trim(),
+        renewalFooterText: footerText.trim(),
         linkinpayToken: linkinpayToken.trim(),
         renewalZapInstance,
       },
@@ -515,32 +520,57 @@ export default function RenewalAutomationPage() {
           </CardContent>
         </Card>
 
-        {/* MENSAGEM DE COBRANÇA / AVISO COM LINK */}
+        {/* MENSAGEM DE COBRANÇA COM BOTÃO INTERATIVO */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-blue-600" />
-                  <CardTitle className="text-lg">Mensagem de Cobrança com Link PIX</CardTitle>
+                  <CardTitle className="text-lg">Mensagem de Cobrança com Botão Interativo</CardTitle>
                 </div>
                 <CardDescription>
-                  Modelo utilizado nas cobranças automáticas de vencimento para enviar o link direto.
+                  Enviada com o botão oficial nativo do WhatsApp [SIM, RENOVAR AGORA]. O link não fica visível no texto, abrindo direto no clique do botão.
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                Aviso Vencimento
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-bold">
+                Botão WhatsApp Nativo
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Texto do Botão (Abre o link de renovação)
+                </Label>
+                <Input
+                  value={buttonText}
+                  onChange={(e) => setButtonText(e.target.value)}
+                  placeholder="SIM, RENOVAR AGORA"
+                  className="font-bold text-sm text-emerald-700 dark:text-emerald-400"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Texto de Rodapé (Aparece acima do botão)
+                </Label>
+                <Input
+                  value={footerText}
+                  onChange={(e) => setFooterText(e.target.value)}
+                  placeholder="Entrega Automática • ⬇️Clique No Botão⬇️"
+                  className="text-sm"
+                />
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-1.5">
-              <span className="text-xs font-bold text-muted-foreground self-center mr-1">Tags:</span>
+              <span className="text-xs font-bold text-muted-foreground self-center mr-1">Tags do Texto:</span>
               {[
                 { label: '{cliente}', tag: '{cliente}' },
                 { label: '{assinaturas}', tag: '{assinaturas}' },
                 { label: '{vencimento}', tag: '{vencimento}' },
-                { label: '{link_renovacao}', tag: '{link_renovacao}' },
                 { label: '{valor}', tag: '{valor}' },
               ].map((item) => (
                 <button
@@ -555,12 +585,40 @@ export default function RenewalAutomationPage() {
             </div>
 
             <Textarea
-              rows={8}
+              rows={6}
               value={billingMessage}
               onChange={(e) => setBillingMessage(e.target.value)}
-              placeholder="Digite o modelo de cobrança com o link..."
+              placeholder="Digite o modelo de cobrança..."
               className="font-mono text-sm leading-relaxed"
             />
+
+            {/* PREVIEW DO WHATSAPP COM BOTÃO */}
+            <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/80 border space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Prévia da mensagem no WhatsApp do cliente:
+              </span>
+              <div className="max-w-[360px] bg-[#d9fdd3] dark:bg-[#005c4b] text-zinc-900 dark:text-zinc-100 rounded-2xl rounded-tr-none p-3.5 shadow-sm space-y-2 text-xs leading-relaxed">
+                <div className="whitespace-pre-wrap font-sans">
+                  {billingMessage
+                    .replace(/{cliente}/g, 'João Silva')
+                    .replace(/{assinaturas}/g, 'Netflix 4K Ultra HD')
+                    .replace(/{vencimento}/g, 'Hoje')
+                    .replace(/{valor}/g, '35,00')
+                    .replace(/🔗?\s*{link_renovacao}/gi, '')
+                    .replace(/🔗?\s*{link}/gi, '')
+                    .trim()}
+                </div>
+                <div className="text-[10px] text-zinc-600 dark:text-zinc-300 pt-1 border-t border-black/5 dark:border-white/10 font-medium">
+                  {footerText}
+                </div>
+                <div className="pt-1">
+                  <div className="w-full py-2.5 px-3 rounded-xl bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-bold text-center border border-emerald-200 dark:border-emerald-800/60 shadow-sm flex items-center justify-center gap-1.5 text-xs">
+                    <ExternalLink className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{buttonText || 'SIM, RENOVAR AGORA'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
