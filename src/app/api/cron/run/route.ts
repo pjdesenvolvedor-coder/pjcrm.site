@@ -167,13 +167,16 @@ export async function GET(request: Request) {
 
                     // Se marcou como vencido e tem envio de mensagem configurado
                     if (newlyMarkedClientIds.length > 0 && canSendDueDateMsg) {
+                        const isAutoRenewalActive = Boolean(settings.isAutoRenewalActive);
                         let renewalLink = '';
-                        try {
-                            const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
-                            const { link } = await getOrCreateRenewalSession(userId, clientGroup, originUrl);
-                            renewalLink = link;
-                        } catch (linkErr) {
-                            console.error('[cron:renewal-link] Erro ao gerar link de renovação:', linkErr);
+                        if (isAutoRenewalActive) {
+                            try {
+                                const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
+                                const { link } = await getOrCreateRenewalSession(userId, clientGroup, originUrl);
+                                renewalLink = link;
+                            } catch (linkErr) {
+                                console.error('[cron:renewal-link] Erro ao gerar link de renovação:', linkErr);
+                            }
                         }
 
                         const hasMultiple = clientGroup.length > 1;
@@ -190,7 +193,9 @@ export async function GET(request: Request) {
                                     ? `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, use o link oficial abaixo:*\n🔗 ${renewalLink}\n\n_Ao pagar, seu acesso é renovado de imediato!_`
                                     : `Por favor, responda esta mensagem para renovar seus acessos.`);
                         } else {
-                            const template = settings.renewalBillingMessage?.trim() || settings.dueDateMessage!;
+                            const template = (isAutoRenewalActive && settings.renewalBillingMessage?.trim())
+                                ? settings.renewalBillingMessage.trim()
+                                : settings.dueDateMessage!;
                             formattedMessage = template
                                 .replace(/{cliente}/g, primaryClient.name)
                                 .replace(/{telefone}/g, primaryClient.phone)

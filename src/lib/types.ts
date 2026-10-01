@@ -181,6 +181,8 @@ export type RenewalSession = {
     clientId: string;
     subscriptionName: string;
   }[];
+  supportOpened?: boolean;
+  isTest?: boolean;
   createdAt: any;
   expiresAt: any;
 };

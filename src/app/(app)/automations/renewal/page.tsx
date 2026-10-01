@@ -69,7 +69,7 @@ export default function RenewalAutomationPage() {
 
   const { data: settings, isLoading } = useDoc<Settings>(settingsDocRef);
 
-  const [isActive, setIsActive] = useState(true);
+  const [isActive, setIsActive] = useState(false);
   const [successMessage, setSuccessMessage] = useState(DEFAULT_SUCCESS_MESSAGE);
   const [billingMessage, setBillingMessage] = useState(DEFAULT_BILLING_MESSAGE);
   const [supportMessage, setSupportMessage] = useState(DEFAULT_SUPPORT_MESSAGE);
@@ -118,7 +118,7 @@ export default function RenewalAutomationPage() {
 
   useEffect(() => {
     if (settings) {
-      setIsActive(settings.isAutoRenewalActive !== false);
+      setIsActive(Boolean(settings.isAutoRenewalActive));
       setSuccessMessage(settings.renewalSuccessMessage || DEFAULT_SUCCESS_MESSAGE);
       setBillingMessage(settings.renewalBillingMessage || DEFAULT_BILLING_MESSAGE);
       setSupportMessage(settings.renewalSupportMessage || settings.supportStartedMessage || DEFAULT_SUPPORT_MESSAGE);
@@ -223,18 +223,28 @@ export default function RenewalAutomationPage() {
         </div>
 
         {/* ATIVAR AUTOMAÇÃO */}
-        <Card className="border-2 border-emerald-500/20 bg-emerald-500/5">
+        <Card className={cn(
+          "border-2 transition-all",
+          isActive
+            ? "border-emerald-500/20 bg-emerald-500/5"
+            : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40"
+        )}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <Zap className={cn("h-5 w-5", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")} />
                   <Label className="text-base font-bold text-zinc-900 dark:text-white">
                     Ativar Renovação Automática via PIX
                   </Label>
+                  <Badge variant={isActive ? "default" : "secondary"} className={isActive ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold"}>
+                    {isActive ? "ATIVA" : "DESATIVADA"}
+                  </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Quando ativo, os avisos de vencimento geram um link PIX exclusivo. Ao pagar, o sistema adiciona 1 mês à assinatura e confirma no WhatsApp.
+                  {isActive
+                    ? "Quando ativa, os avisos de vencimento geram links PIX automáticos para clientes reais."
+                    : "🔒 DESATIVADA: Nenhuma mensagem automática será disparada para clientes reais. Apenas a tela de TESTE (/automations/test-renewal) está funcionando para validação segura."}
                 </p>
               </div>
               <Switch checked={isActive} onCheckedChange={setIsActive} />

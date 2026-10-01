@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       }
 
       const origin = req.headers.get('origin') || 'https://pjcrm.site';
-      const { session, link } = await getOrCreateRenewalSession(userId, createdClients, origin, true /* forceNew */);
+      const { session, link } = await getOrCreateRenewalSession(userId, createdClients, origin, true /* forceNew */, true /* isTest */);
 
       return NextResponse.json({
         success: true,

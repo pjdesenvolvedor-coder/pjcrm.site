@@ -130,7 +130,8 @@ export async function getOrCreateRenewalSession(
   userId: string,
   clients: Client[],
   originUrl = 'https://pjcrm.site',
-  forceNew = false
+  forceNew = false,
+  isTest = false
 ): Promise<{ session: RenewalSession; link: string }> {
   if (!clients || clients.length === 0) {
     throw new Error('Nenhum cliente informado para criar a sessão de renovação');
@@ -190,6 +191,7 @@ export async function getOrCreateRenewalSession(
     clientIds: clients.map((c) => c.id),
     subscriptions,
     status: 'pending',
+    isTest: Boolean(isTest),
     createdAt: Timestamp.now(),
     expiresAt: Timestamp.fromMillis(now + 7 * 24 * 60 * 60 * 1000), // 7 dias
   };
@@ -340,6 +342,26 @@ export async function executeRenewalPayment({
     try {
       const configSnap = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
       const settings = configSnap.exists() ? (configSnap.data() as Settings) : {};
+
+      const isTestSession = Boolean(
+        session.isTest ||
+        sessionId.startsWith('ren_test') ||
+        (session.clientName && session.clientName.toLowerCase().includes('teste')) ||
+        (session.subscriptions && session.subscriptions.some(s => s.clientId?.startsWith('test_')))
+      );
+      const isAutoActive = Boolean(settings.isAutoRenewalActive);
+
+      // Trava de segurança: Se a renovação automática estiver desligada e NÃO for sessão de teste, NUNCA dispara WhatsApp
+      const allowSendWhatsApp = isTestSession || isAutoActive;
+
+      if (!allowSendWhatsApp) {
+        console.log(`[RenewalService] Renovação automática desabilitada (isAutoRenewalActive: false). Nenhuma mensagem foi disparada.`);
+        return {
+          success: true,
+          renewedCount: renewedNames.length,
+          messageSent: false,
+        };
+      }
 
       const { primaryToken, fallbackToken } = resolveRenewalWhatsAppTokens(settings);
 
