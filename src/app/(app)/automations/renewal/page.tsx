@@ -200,19 +200,37 @@ export default function RenewalAutomationPage() {
       const snap = await getDocs(clientsRef);
       const allClients = snap.docs.map(d => ({ id: d.id, ...d.data() } as Client));
 
-      const now = new Date();
-      const todayStr = format(now, 'yyyy-MM-dd');
+      // Calcula data de hoje no fuso de Brasília (UTC-3)
+      const offset = -3 * 60 * 60 * 1000;
+      const nowBr = new Date(Date.now() + offset);
+      const todayStr = format(nowBr, 'yyyy-MM-dd');
 
-      const toRebill = allClients.filter(c => {
+      // Clientes com vencimento hoje
+      const todayClients = allClients.filter(c => {
         if (!c.dueDate) return false;
         const due = (c.dueDate as any).toDate ? (c.dueDate as any).toDate() : new Date(c.dueDate);
-        return format(due, 'yyyy-MM-dd') === todayStr && (c.status === 'Ativo' || c.status === 'Vencido');
+        const dueBr = new Date(due.getTime() + offset);
+        const dueLocalStr = format(due, 'yyyy-MM-dd');
+        const dueBrStr = format(dueBr, 'yyyy-MM-dd');
+        return (dueLocalStr === todayStr || dueBrStr === todayStr) && (c.status === 'Ativo' || c.status === 'Vencido');
       });
 
-      if (toRebill.length === 0) {
+      if (todayClients.length === 0) {
         toast({
           title: 'Nenhum cliente para hoje',
           description: 'Não há clientes com vencimento hoje marcados como Ativo ou Vencido.',
+        });
+        setIsLoadingManual(false);
+        return;
+      }
+
+      // Bloqueio anti-duplicidade: filtra apenas clientes que ainda NÃO foram cobrados hoje (nem manual nem automático)
+      const toRebill = todayClients.filter(c => c.lastBilledDate !== todayStr);
+
+      if (toRebill.length === 0) {
+        toast({
+          title: 'Clientes de hoje já cobrados!',
+          description: `Todos os ${todayClients.length} cliente(s) com vencimento hoje já foram cobrados (manual ou automaticamente). O bloqueio anti-duplicidade impede cobrar os mesmos clientes mais de uma vez no mesmo dia.`,
         });
         setIsLoadingManual(false);
         return;
@@ -254,9 +272,10 @@ export default function RenewalAutomationPage() {
 
       window.dispatchEvent(new CustomEvent('START_RENEWAL_DISPATCH', { detail: { job: newJob } }));
 
+      const skippedCount = todayClients.length - toRebill.length;
       toast({
         title: 'Disparo Manual Iniciado!',
-        description: `${items.length} clientes na fila. Acompanhe a barra de progresso no painel flutuante no canto inferior esquerdo.`,
+        description: `${items.length} cliente(s) na fila.${skippedCount > 0 ? ` (${skippedCount} já cobrado(s) hoje foram ignorados pelo bloqueio anti-duplicidade).` : ''} Acompanhe a barra de progresso no painel flutuante.`,
       });
     } catch (err: any) {
       toast({
@@ -492,6 +511,9 @@ export default function RenewalAutomationPage() {
                       <li>
                         <strong>Intervalo Anti-Banimento:</strong> O delay de {renewalDelaySeconds}s entre os envios é respeitado rigorosamente para manter a segurança do número.
                       </li>
+                      <li>
+                        <strong>Bloqueio Anti-Duplicidade:</strong> Clientes já cobrados hoje (manual ou automaticamente) ficam protegidos contra novas cobranças no mesmo dia. O sistema só cobra novamente os clientes do próximo dia.
+                      </li>
                     </ul>
                   </div>
                 </div>
@@ -508,7 +530,7 @@ export default function RenewalAutomationPage() {
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Não quer esperar o horário automático? Você pode disparar manualmente agora para todos os clientes que vencem hoje, ou testar a barra de progresso em modo demonstração.
+                  Não quer esperar o horário automático? Você pode disparar manualmente agora para os clientes que vencem hoje e ainda não foram cobrados. Clientes já cobrados hoje são ignorados automaticamente para evitar duplicatas.
                 </p>
               </div>
 

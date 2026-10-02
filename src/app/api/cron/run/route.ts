@@ -135,14 +135,20 @@ export async function GET(request: Request) {
             const overdueStatusClients = clients.filter(c => c.status === 'Vencido');
 
             /* --- 1. PROCESSAR VENCIMENTOS --- */
-            const dueNowClients = activeClients.filter(c => c.dueDate && c.dueDate.toDate() <= now);
+            const offset = -3 * 60 * 60 * 1000; // Fuso Brasília (UTC-3)
+            const nowBr = new Date(now.getTime() + offset);
+            const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
+            const nowMinutes = nowBr.getUTCHours() * 60 + nowBr.getUTCMinutes();
+
+            // Bloqueio anti-duplicidade: filtra apenas clientes com vencimento até agora e que NÃO foram cobrados hoje (nem manual nem automático)
+            const dueNowClients = activeClients.filter(c => {
+                if (!c.dueDate) return false;
+                const due = (c.dueDate as any).toDate ? (c.dueDate as any).toDate() : new Date(c.dueDate);
+                return due <= now && c.lastBilledDate !== todayDateBrasilia;
+            });
             if (dueNowClients.length > 0) {
                 // 1.1 Configuração de Renovação Automática e Verificação de Horário
                 const isAutoRenewalActive = Boolean(settings.isAutoRenewalActive);
-                const offset = -3 * 60 * 60 * 1000; // Fuso Brasília (UTC-3)
-                const nowBr = new Date(now.getTime() + offset);
-                const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
-                const nowMinutes = nowBr.getUTCHours() * 60 + nowBr.getUTCMinutes();
 
                 let shouldRunAutoRenewalToday = false;
 
@@ -298,6 +304,20 @@ export async function GET(request: Request) {
                                         fallbackToken: fallbackToken,
                                     }),
                                 });
+                            }
+
+                            // Grava lastBilledDate para bloqueio anti-duplicidade em todos os clientes do grupo
+                            for (const client of clientGroup) {
+                                try {
+                                    const ref = doc(db, 'users', userId, 'clients', client.id);
+                                    await runTransaction(db, async (txn) => {
+                                        txn.update(ref, {
+                                            lastBilledDate: todayDateBrasilia,
+                                            lastBilledAt: Timestamp.now(),
+                                            status: 'Vencido',
+                                        });
+                                    });
+                                } catch (e) {}
                             }
                         } catch (sendErr) {
                             console.error('[cron:vencimento] Falha ao enviar mensagem de vencimento:', sendErr);

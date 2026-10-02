@@ -6,6 +6,7 @@ import {
   getDoc,
   collection,
   addDoc,
+  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
@@ -83,6 +84,24 @@ export async function POST(req: NextRequest) {
 
     const primaryClient = clientGroup[0];
     const origin = originUrl || req.nextUrl.origin || 'https://pjcrm.site';
+
+    // Data de hoje em Brasília (UTC-3)
+    const offset = -3 * 60 * 60 * 1000;
+    const nowBr = new Date(Date.now() + offset);
+    const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
+
+    // Bloqueio anti-duplicidade: impede cobrar novamente quem já recebeu cobrança hoje (manual ou automático)
+    const alreadyBilled = clientGroup.some((c) => c.lastBilledDate === todayDateBrasilia);
+    if (alreadyBilled) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        tokenUsed: 'Bloqueio Anti-Duplicata (Já cobrado hoje)',
+        clientName: primaryClient.name,
+        phone: primaryClient.phone,
+        message: `Cliente ${primaryClient.name} já foi cobrado hoje (${todayDateBrasilia}). Disparo ignorado para evitar duplicatas.`,
+      });
+    }
 
     // 4. Cria ou recupera a sessão de renovação
     let renewalLink = '';
@@ -185,6 +204,20 @@ export async function POST(req: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    // 8. Atualiza status para 'Vencido' e grava lastBilledDate de todos os clientes do grupo
+    for (const c of clientGroup) {
+      try {
+        const clientRef = doc(db, 'users', userId, 'clients', c.id);
+        await updateDoc(clientRef, {
+          lastBilledDate: todayDateBrasilia,
+          lastBilledAt: serverTimestamp(),
+          status: 'Vencido',
+        });
+      } catch (clientUpdateErr) {
+        console.warn(`[dispatch-single] Falha ao atualizar lastBilledDate do cliente ${c.id}:`, clientUpdateErr);
+      }
     }
 
     return NextResponse.json({

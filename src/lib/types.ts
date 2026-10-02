@@ -86,6 +86,8 @@ export type Client = {
   sentUpsell2Ids?: string[];
   sentUpsellMenuIds?: string[];
   sentRemarketingIds?: string[];
+  lastBilledDate?: string | null;
+  lastBilledAt?: Timestamp | null;
 
   agentId?: string;
   agentName?: string;

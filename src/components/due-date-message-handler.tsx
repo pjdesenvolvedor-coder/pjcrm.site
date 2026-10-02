@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { collection, query, where, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useFirebase, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import type { Client, Settings, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -178,6 +178,18 @@ export function DueDateMessageHandler() {
                             delayApplied: currentDelay / 1000,
                             timestamp: serverTimestamp(),
                         });
+
+                        const offset = -3 * 60 * 60 * 1000;
+                        const todayDateBrasilia = format(new Date(Date.now() + offset), 'yyyy-MM-dd');
+                        for (const c of clientGroup) {
+                            try {
+                                updateDoc(doc(firestore, 'users', user.uid, 'clients', c.id), {
+                                    lastBilledDate: todayDateBrasilia,
+                                    lastBilledAt: serverTimestamp(),
+                                    status: 'Vencido',
+                                });
+                            } catch (e) {}
+                        }
                         
                         toast({
                             title: "Vencimento Enviado",
