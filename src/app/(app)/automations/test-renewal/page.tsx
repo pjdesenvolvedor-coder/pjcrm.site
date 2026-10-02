@@ -244,43 +244,41 @@ export default function TestRenewalPage() {
     try {
       setIsSendingWhatsApp(true);
 
-      const hasMultiple = products.length > 1;
-      const subNames = products.map((p) => p.name).join(' + ');
-      const subListBullet = products.map((p) => `👉 *${p.name}*`).join('\n');
+      const subNamesComma = products.map((p) => p.name?.trim()).filter(Boolean).join(', ') || 'Assinatura';
+      const totalVal = products.reduce((acc, p) => {
+        const parsed = parseFloat(String(p.value || '0').replace(/\./g, '').replace(',', '.'));
+        return acc + (isNaN(parsed) ? 0 : parsed);
+      }, 0);
+      const formattedValor = totalVal > 0
+        ? totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : (products[0]?.value || '0,00');
 
-      let messageText = '';
-      if (hasMultiple) {
-        messageText =
-          `Olá *${clientName || 'Cliente'}*!\n\n` +
-          `Notamos que você tem *${products.length} assinaturas* com vencimento hoje:\n\n` +
-          `${subListBullet}\n\n` +
-          `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, clique no botão oficial abaixo:*\n\n_Ao pagar, seu acesso é renovado de imediato!_`;
-      } else {
-        const defaultTemplate =
-          'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
-          '📦 *Assinatura(s):* {assinaturas}\n' +
-          '📅 *Vencimento:* {vencimento}\n\n' +
-          '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
+      const defaultTemplate =
+        'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
+        '📦 *Assinatura(s):* {assinaturas}\n' +
+        '📅 *Vencimento:* {vencimento}\n\n' +
+        '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
-        let template = settings?.renewalBillingMessage?.trim() || defaultTemplate;
-        // Remove tags de link do texto da mensagem, pois o link vai no botão interativo!
-        template = template
-          .replace(/🔗?\s*{link_renovacao}/gi, '')
-          .replace(/🔗?\s*{link}/gi, '')
-          .trim();
+      let template = settings?.renewalBillingMessage?.trim() || defaultTemplate;
+      // Remove tags de link do texto da mensagem, pois o link vai no botão interativo!
+      template = template
+        .replace(/🔗?\s*{link_renovacao}/gi, '')
+        .replace(/🔗?\s*{link}/gi, '')
+        .trim();
 
-        const todayFormatted = format(new Date(), 'dd/MM');
-        const dueFormatted = `${todayFormatted} *Hoje*`;
+      const todayFormatted = format(new Date(), 'dd/MM');
+      const dueFormatted = `${todayFormatted} *Hoje*`;
 
-        messageText = template
-          .replace(/{cliente}/g, clientName || 'Cliente')
-          .replace(/{telefone}/g, phone)
-          .replace(/{assinatura}/g, products[0]?.name || '')
-          .replace(/{assinaturas}/g, products[0]?.name || '')
-          .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
-          .replace(/{vencimento}/g, dueFormatted)
-          .replace(/{valor}/g, products[0]?.value || '0,00');
-      }
+      const messageText = template
+        .replace(/{cliente}/g, clientName || 'Cliente')
+        .replace(/{telefone}/g, phone)
+        .replace(/{assinatura}/g, subNamesComma)
+        .replace(/{assinaturas}/g, subNamesComma)
+        .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
+        .replace(/{vencimento}/g, dueFormatted)
+        .replace(/{valor}/g, formattedValor)
+        .replace(/{link_renovacao}/g, '')
+        .replace(/{link}/g, '');
 
       const res = await fetch('/api/renewal/test-session', {
         method: 'POST',

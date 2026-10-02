@@ -110,39 +110,40 @@ export function DueDateMessageHandler() {
                 }
 
                 // 3. Monta a mensagem única
-                const hasMultiple = clientGroup.length > 1;
-                const subNames = clientGroup.map(c => c.subscription || 'Assinatura').join(' + ');
-                const subListBullet = clientGroup.map(c => `👉 *${c.subscription || 'Assinatura'}*`).join('\n');
+                const subNamesComma = clientGroup
+                    .map((c) => c.subscription?.trim() || 'Assinatura')
+                    .filter(Boolean)
+                    .join(', ');
 
-                let formattedMessage = '';
+                const totalVal = clientGroup.reduce((acc, c) => {
+                    const parsed = parseFloat(String(c.amountPaid || '0').replace(/\./g, '').replace(',', '.'));
+                    return acc + (isNaN(parsed) ? 0 : parsed);
+                }, 0);
+                const formattedValor = totalVal > 0
+                    ? totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : (primaryClient.amountPaid || '0,00');
 
-                if (hasMultiple) {
-                    // Quando tiver > 1 assinatura vencendo, mensagem consolidada elegante
-                    formattedMessage = 
-                        `Olá *${primaryClient.name}*!\n\n` +
-                        `Notamos que você tem *${clientGroup.length} assinaturas* com vencimento hoje:\n\n` +
-                        `${subListBullet}\n\n` +
-                        (renewalLink 
-                            ? `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, use o link oficial abaixo:*\n🔗 ${renewalLink}\n\n_Ao pagar, seu acesso é renovado de imediato!_`
-                            : `Por favor, responda esta mensagem para renovar seus acessos.`);
-                } else {
-                    // 1 única assinatura: usa o modelo configurado pelo usuário com substituição de tags
-                    const template = settings.renewalBillingMessage?.trim() || settings.dueDateMessage!;
-                    formattedMessage = template
-                        .replace(/{cliente}/g, primaryClient.name)
-                        .replace(/{telefone}/g, primaryClient.phone)
-                        .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
-                        .replace(/{assinatura}/g, primaryClient.subscription || '')
-                        .replace(/{assinaturas}/g, primaryClient.subscription || '')
-                        .replace(/{vencimento}/g, primaryClient.dueDate ? format(primaryClient.dueDate.toDate(), 'dd/MM/yyyy') : '')
-                        .replace(/{valor}/g, primaryClient.amountPaid || '0,00')
-                        .replace(/{link_renovacao}/g, renewalLink)
-                        .replace(/{link}/g, renewalLink)
-                        .replace(/{senha}/g, primaryClient.password || 'N/A')
-                        .replace(/{tela}/g, primaryClient.screen || 'N/A')
-                        .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
-                        .replace(/{status}/g, 'Vencido');
-                }
+                const defaultTemplate =
+                    'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
+                    '📦 *Assinatura(s):* {assinaturas}\n' +
+                    '📅 *Vencimento:* {vencimento}\n\n' +
+                    '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, use o link oficial abaixo:\n🔗 {link_renovacao}';
+
+                const template = settings.renewalBillingMessage?.trim() || settings.dueDateMessage || defaultTemplate;
+                const formattedMessage = template
+                    .replace(/{cliente}/g, primaryClient.name || 'Cliente')
+                    .replace(/{telefone}/g, primaryClient.phone || '')
+                    .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
+                    .replace(/{assinatura}/g, subNamesComma)
+                    .replace(/{assinaturas}/g, subNamesComma)
+                    .replace(/{vencimento}/g, primaryClient.dueDate ? format(primaryClient.dueDate.toDate(), 'dd/MM/yyyy') : '')
+                    .replace(/{valor}/g, formattedValor)
+                    .replace(/{link_renovacao}/g, renewalLink)
+                    .replace(/{link}/g, renewalLink)
+                    .replace(/{senha}/g, primaryClient.password || 'N/A')
+                    .replace(/{tela}/g, primaryClient.screen || 'N/A')
+                    .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
+                    .replace(/{status}/g, 'Vencido');
 
                 addDocumentNonBlocking(logRef, {
                     userId: user.uid,

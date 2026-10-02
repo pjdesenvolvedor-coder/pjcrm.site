@@ -224,52 +224,56 @@ export async function GET(request: Request) {
                             }
                         }
 
-                        const hasMultiple = clientGroup.length > 1;
-                        const subNames = clientGroup.map(c => c.subscription || 'Assinatura').join(' + ');
-                        const subListBullet = clientGroup.map(c => `👉 *${c.subscription || 'Assinatura'}*`).join('\n');
+                        const subNamesComma = clientGroup
+                            .map((c) => c.subscription?.trim() || 'Assinatura')
+                            .filter(Boolean)
+                            .join(', ');
 
-                        let formattedMessage = '';
-                        if (hasMultiple) {
-                            formattedMessage = 
-                                `Olá *${primaryClient.name}*!\n\n` +
-                                `Notamos que você tem *${clientGroup.length} assinaturas* com vencimento hoje:\n\n` +
-                                `${subListBullet}\n\n` +
-                                (renewalLink 
-                                    ? `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, clique no botão oficial abaixo:*\n\n_Ao pagar, seu acesso é renovado de imediato!_`
-                                    : `Por favor, responda esta mensagem para renovar seus acessos.`);
-                        } else {
-                            let template = (isAutoRenewalActive && settings.renewalBillingMessage?.trim())
-                                ? settings.renewalBillingMessage.trim()
-                                : settings.dueDateMessage!;
+                        const totalVal = clientGroup.reduce((acc, c) => {
+                            const parsed = parseFloat(String(c.amountPaid || '0').replace(/\./g, '').replace(',', '.'));
+                            return acc + (isNaN(parsed) ? 0 : parsed);
+                        }, 0);
+                        const formattedValor = totalVal > 0
+                            ? totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : (primaryClient.amountPaid || '0,00');
 
-                            // Se houver renewalLink e a renovação automática estiver ativa, removemos o link do corpo pois irá no botão interativo
-                            if (isAutoRenewalActive && renewalLink) {
-                                template = template
-                                    .replace(/🔗?\s*{link_renovacao}/gi, '')
-                                    .replace(/🔗?\s*{link}/gi, '')
-                                    .trim();
-                            }
+                        const defaultBillingTemplate =
+                            'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
+                            '📦 *Assinatura(s):* {assinaturas}\n' +
+                            '📅 *Vencimento:* {vencimento}\n\n' +
+                            '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
-                            const clientDueDateMs = primaryClient.dueDate ? getTimestampMs(primaryClient.dueDate) : null;
-                            const clientDueDate = clientDueDateMs ? new Date(clientDueDateMs) : new Date();
-                            const dueFormatted = `${format(clientDueDate, 'dd/MM')} *Hoje*`;
+                        let template = (isAutoRenewalActive && settings.renewalBillingMessage?.trim())
+                            ? settings.renewalBillingMessage.trim()
+                            : (settings.dueDateMessage || defaultBillingTemplate);
 
-                            formattedMessage = template
-                                .replace(/{cliente}/g, primaryClient.name)
-                                .replace(/{telefone}/g, primaryClient.phone)
-                                .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
-                                .replace(/{assinatura}/g, primaryClient.subscription || '')
-                                .replace(/{assinaturas}/g, primaryClient.subscription || '')
-                                .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
-                                .replace(/{vencimento}/g, dueFormatted)
-                                .replace(/{valor}/g, primaryClient.amountPaid || '0,00')
-                                .replace(/{link_renovacao}/g, renewalLink)
-                                .replace(/{link}/g, renewalLink)
-                                .replace(/{senha}/g, primaryClient.password || 'N/A')
-                                .replace(/{tela}/g, primaryClient.screen || 'N/A')
-                                .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
-                                .replace(/{status}/g, 'Vencido');
+                        // Se houver renewalLink e a renovação automática estiver ativa, removemos o link do corpo pois irá no botão interativo
+                        if (isAutoRenewalActive && renewalLink) {
+                            template = template
+                                .replace(/🔗?\s*{link_renovacao}/gi, '')
+                                .replace(/🔗?\s*{link}/gi, '')
+                                .trim();
                         }
+
+                        const clientDueDateMs = primaryClient.dueDate ? getTimestampMs(primaryClient.dueDate) : null;
+                        const clientDueDate = clientDueDateMs ? new Date(clientDueDateMs) : new Date();
+                        const dueFormatted = `${format(clientDueDate, 'dd/MM')} *Hoje*`;
+
+                        const formattedMessage = template
+                            .replace(/{cliente}/g, primaryClient.name || 'Cliente')
+                            .replace(/{telefone}/g, primaryClient.phone || '')
+                            .replace(/{email}/g, Array.isArray(primaryClient.email) ? primaryClient.email.join(', ') : (primaryClient.email || ''))
+                            .replace(/{assinatura}/g, subNamesComma)
+                            .replace(/{assinaturas}/g, subNamesComma)
+                            .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
+                            .replace(/{vencimento}/g, dueFormatted)
+                            .replace(/{valor}/g, formattedValor)
+                            .replace(/{link_renovacao}/g, renewalLink)
+                            .replace(/{link}/g, renewalLink)
+                            .replace(/{senha}/g, primaryClient.password || 'N/A')
+                            .replace(/{tela}/g, primaryClient.screen || 'N/A')
+                            .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
+                            .replace(/{status}/g, 'Vencido');
 
                         try {
                             if (isAutoRenewalActive && renewalLink) {

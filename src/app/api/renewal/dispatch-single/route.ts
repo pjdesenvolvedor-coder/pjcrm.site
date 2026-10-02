@@ -97,55 +97,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Monta a mensagem personalizada
-    const hasMultiple = clientGroup.length > 1;
-    const subNames = clientGroup.map((c) => c.subscription || 'Assinatura').join(' + ');
-    const subListBullet = clientGroup.map((c) => `👉 *${c.subscription || 'Assinatura'}*`).join('\n');
+    // 5. Monta a mensagem personalizada (sempre o modelo oficial de Cobrança com Botão)
+    // Se tiver mais de 1 assinatura, os nomes vão separados por vírgula na tag {assinaturas}
+    const subNamesComma = clientGroup
+      .map((c) => c.subscription?.trim() || 'Assinatura')
+      .filter(Boolean)
+      .join(', ');
 
-    let formattedMessage = '';
-    if (hasMultiple) {
-      formattedMessage =
-        `Olá *${primaryClient.name}*!\n\n` +
-        `Notamos que você tem *${clientGroup.length} assinaturas* com vencimento hoje:\n\n` +
-        `${subListBullet}\n\n` +
-        `👉 *Para renovar com facilidade via PIX e manter seus acessos ativos, clique no botão oficial abaixo:*\n\n_Ao pagar, seu acesso é renovado de imediato!_`;
-    } else {
-      const defaultTemplate =
-        'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
-        '📦 *Assinatura(s):* {assinaturas}\n' +
-        '📅 *Vencimento:* {vencimento}\n\n' +
-        '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
+    const totalVal = clientGroup.reduce((acc, c) => {
+      const parsed = parseFloat(String(c.amountPaid || '0').replace(/\./g, '').replace(',', '.'));
+      return acc + (isNaN(parsed) ? 0 : parsed);
+    }, 0);
+    const formattedValor = totalVal > 0
+      ? totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : (primaryClient.amountPaid || '0,00');
 
-      let template = settings.renewalBillingMessage?.trim() || defaultTemplate;
+    const defaultTemplate =
+      'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
+      '📦 *Assinatura(s):* {assinaturas}\n' +
+      '📅 *Vencimento:* {vencimento}\n\n' +
+      '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
-      // Remove links crus do corpo do texto pois irão no botão interativo nativo
-      template = template
-        .replace(/🔗?\s*{link_renovacao}/gi, '')
-        .replace(/🔗?\s*{link}/gi, '')
-        .trim();
+    let template = settings.renewalBillingMessage?.trim() || defaultTemplate;
 
-      const todayFormatted = format(new Date(), 'dd/MM');
-      const dueFormatted = `${todayFormatted} *Hoje*`;
+    // Remove tags de links crus do corpo do texto pois irão no botão interativo nativo
+    template = template
+      .replace(/🔗?\s*{link_renovacao}/gi, '')
+      .replace(/🔗?\s*{link}/gi, '')
+      .trim();
 
-      formattedMessage = template
-        .replace(/{cliente}/g, primaryClient.name || 'Cliente')
-        .replace(/{telefone}/g, primaryClient.phone || '')
-        .replace(
-          /{email}/g,
-          Array.isArray(primaryClient.email)
-            ? primaryClient.email.join(', ')
-            : primaryClient.email || ''
-        )
-        .replace(/{assinatura}/g, primaryClient.subscription || '')
-        .replace(/{assinaturas}/g, primaryClient.subscription || '')
-        .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
-        .replace(/{vencimento}/g, dueFormatted)
-        .replace(/{valor}/g, primaryClient.amountPaid || '0,00')
-        .replace(/{senha}/g, primaryClient.password || 'N/A')
-        .replace(/{tela}/g, primaryClient.screen || 'N/A')
-        .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
-        .replace(/{status}/g, 'Vencido');
-    }
+    const todayFormatted = format(new Date(), 'dd/MM');
+    const dueFormatted = `${todayFormatted} *Hoje*`;
+
+    const formattedMessage = template
+      .replace(/{cliente}/g, primaryClient.name || 'Cliente')
+      .replace(/{telefone}/g, primaryClient.phone || '')
+      .replace(
+        /{email}/g,
+        Array.isArray(primaryClient.email)
+          ? primaryClient.email.join(', ')
+          : primaryClient.email || ''
+      )
+      .replace(/{assinatura}/g, subNamesComma)
+      .replace(/{assinaturas}/g, subNamesComma)
+      .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
+      .replace(/{vencimento}/g, dueFormatted)
+      .replace(/{valor}/g, formattedValor)
+      .replace(/{senha}/g, primaryClient.password || 'N/A')
+      .replace(/{tela}/g, primaryClient.screen || 'N/A')
+      .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
+      .replace(/{status}/g, 'Vencido');
 
     // 6. Envia via WhatsApp com Botão Interativo
     const buttonLabel = settings.renewalButtonText || 'SIM, RENOVAR AGORA';
