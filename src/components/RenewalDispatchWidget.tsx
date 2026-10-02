@@ -14,7 +14,6 @@ import {
   Sparkles,
   Send,
   Loader2,
-  ExternalLink,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -46,29 +45,48 @@ export interface RenewalJobState {
 
 const STORAGE_KEY_JOB = 'crm_renewal_dispatch_job';
 const STORAGE_KEY_POS = 'crm_renewal_widget_pos';
+const STORAGE_KEY_MINIMIZED = 'crm_renewal_widget_minimized';
 const STORAGE_KEY_LEADER = 'crm_renewal_dispatch_leader';
 const BROADCAST_CHANNEL_NAME = 'crm_renewal_dispatch_channel';
 
-// Gera ID único por aba
-const THIS_TAB_ID = typeof window !== 'undefined'
+// Identificador único desta aba
+const TAB_ID = typeof window !== 'undefined'
   ? 'tab_' + Math.random().toString(36).substring(2, 9)
-  : 'server';
+  : 'srv';
+
+function getStoredJob(): RenewalJobState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_JOB);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function RenewalDispatchWidget() {
   const [job, setJob] = useState<RenewalJobState | null>(null);
-  const [isMinimized, setIsMinimized] = useState(false);
   const [delayCountdown, setDelayCountdown] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isLeader, setIsLeader] = useState(false);
 
-  // Posição flutuante (default: bottom-6, left-6)
+  // Persistência do estado minimizado
+  const [isMinimized, setIsMinimized] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem(STORAGE_KEY_MINIMIZED) === 'true';
+      } catch {}
+    }
+    return false;
+  });
+
+  // Posição flutuante (salva em localStorage)
   const [pos, setPos] = useState<{ x: number; y: number }>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_POS);
         if (saved) return JSON.parse(saved);
       } catch {}
-      return { x: 24, y: window.innerHeight - 320 };
+      return { x: 24, y: Math.max(20, window.innerHeight - 340) };
     }
     return { x: 24, y: 500 };
   });
@@ -82,45 +100,54 @@ export function RenewalDispatchWidget() {
   });
 
   const channelRef = useRef<BroadcastChannel | null>(null);
+  const isLoopRunningRef = useRef(false);
 
-  // Sincroniza estado com localStorage e BroadcastChannel
-  const saveJobState = useCallback((newJob: RenewalJobState | null) => {
-    setJob(newJob);
+  // Salva job no state, localStorage e envia mensagem para outras abas
+  const persistJob = useCallback((updated: RenewalJobState | null) => {
+    setJob(updated);
     if (typeof window !== 'undefined') {
-      if (newJob) {
-        localStorage.setItem(STORAGE_KEY_JOB, JSON.stringify(newJob));
+      if (updated) {
+        localStorage.setItem(STORAGE_KEY_JOB, JSON.stringify(updated));
         try {
-          channelRef.current?.postMessage({ type: 'JOB_UPDATED', job: newJob });
+          channelRef.current?.postMessage({ type: 'JOB_UPDATE', job: updated });
         } catch {}
       } else {
         localStorage.removeItem(STORAGE_KEY_JOB);
         try {
-          channelRef.current?.postMessage({ type: 'JOB_CLEARED' });
+          channelRef.current?.postMessage({ type: 'JOB_CLEAR' });
         } catch {}
       }
     }
   }, []);
 
-  // 1. Carrega trabalho existente no localStorage ao montar
+  // Minimizar / Expandir persistente
+  const setMinimizedWithStorage = useCallback((min: boolean) => {
+    setIsMinimized(min);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_MINIMIZED, min ? 'true' : 'false');
+    }
+  }, []);
+
+  // 1. Inicialização: carrega trabalho do storage e configura ouvintes
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    try {
-      const savedJobStr = localStorage.getItem(STORAGE_KEY_JOB);
-      if (savedJobStr) {
-        const parsed = JSON.parse(savedJobStr) as RenewalJobState;
-        setJob(parsed);
-      }
-    } catch {}
+    // Carrega job salvo ao montar
+    const existing = getStoredJob();
+    if (existing) {
+      setJob(existing);
+    }
 
-    // Canal entre abas
+    // Configura canal de broadcast entre abas
     try {
       channelRef.current = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
       channelRef.current.onmessage = (event) => {
-        if (event.data?.type === 'JOB_UPDATED' && event.data.job) {
+        if (event.data?.type === 'JOB_UPDATE' && event.data.job) {
           setJob(event.data.job);
-        } else if (event.data?.type === 'JOB_CLEARED') {
+        } else if (event.data?.type === 'JOB_CLEAR') {
           setJob(null);
+        } else if (event.data?.type === 'COUNTDOWN_UPDATE') {
+          setDelayCountdown(event.data.seconds || 0);
         }
       };
     } catch {}
@@ -139,12 +166,17 @@ export function RenewalDispatchWidget() {
     };
     window.addEventListener('storage', handleStorage);
 
-    // Ouvinte para novo job disparado via CustomEvent
+    // Ouvinte para novo job disparado via CustomEvent (START_RENEWAL_DISPATCH)
     const handleStartEvent = (e: any) => {
       if (e.detail?.job) {
         const newJob = e.detail.job as RenewalJobState;
-        saveJobState(newJob);
-        setIsMinimized(false);
+        // Assume liderança imediatamente para disparar
+        localStorage.setItem(
+          STORAGE_KEY_LEADER,
+          JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
+        );
+        persistJob(newJob);
+        setMinimizedWithStorage(false);
       }
     };
     window.addEventListener('START_RENEWAL_DISPATCH', handleStartEvent);
@@ -154,141 +186,167 @@ export function RenewalDispatchWidget() {
       window.removeEventListener('START_RENEWAL_DISPATCH', handleStartEvent);
       channelRef.current?.close();
     };
-  }, [saveJobState]);
+  }, [persistJob, setMinimizedWithStorage]);
 
-  // 2. Leader Election: Apenas uma aba executa o loop de fetch e timers
+  // 2. Loop de Execução da Fila (Robusto com ref - nunca aborta em re-renders)
   useEffect(() => {
-    if (!job || job.status !== 'running') return;
+    if (!job || job.status !== 'running') {
+      return;
+    }
 
-    const interval = setInterval(() => {
-      try {
+    // Se já tiver uma execução em andamento nesta aba, não cria outra
+    if (isLoopRunningRef.current) {
+      return;
+    }
+
+    let isTerminated = false;
+
+    const executeQueue = async () => {
+      isLoopRunningRef.current = true;
+
+      while (!isTerminated) {
+        const current = getStoredJob();
+        if (!current || current.status !== 'running') {
+          break;
+        }
+
+        // Verifica liderança da aba (Leader Election)
         const leaderStr = localStorage.getItem(STORAGE_KEY_LEADER);
         const now = Date.now();
         let currentLeader: { tabId: string; heartbeat: number } | null = null;
         if (leaderStr) {
-          currentLeader = JSON.parse(leaderStr);
+          try {
+            currentLeader = JSON.parse(leaderStr);
+          } catch {}
         }
 
-        const isCurrentLeaderDead = !currentLeader || now - currentLeader.heartbeat > 3500;
-        const amILeader = currentLeader?.tabId === THIS_TAB_ID;
+        const isLeaderAlive = currentLeader && (now - currentLeader.heartbeat < 3000);
+        const amILeader = currentLeader?.tabId === TAB_ID;
 
-        if (amILeader || isCurrentLeaderDead) {
-          // Assume ou renova liderança
-          localStorage.setItem(
-            STORAGE_KEY_LEADER,
-            JSON.stringify({ tabId: THIS_TAB_ID, heartbeat: now })
-          );
-          setIsLeader(true);
-        } else {
-          setIsLeader(false);
+        if (isLeaderAlive && !amILeader) {
+          // Outra aba está ativamente executando! Esta aba fica como observadora
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
         }
-      } catch {}
-    }, 1000);
 
-    return () => clearInterval(interval);
-  }, [job]);
+        // Atualiza heartbeat da liderança
+        localStorage.setItem(
+          STORAGE_KEY_LEADER,
+          JSON.stringify({ tabId: TAB_ID, heartbeat: now })
+        );
 
-  // 3. Loop de Execução da Fila (apenas na aba líder!)
-  useEffect(() => {
-    if (!job || job.status !== 'running' || !isLeader) return;
+        const idx = current.currentIndex;
+        if (idx >= current.items.length) {
+          // Concluído!
+          current.status = 'completed';
+          current.updatedAt = Date.now();
+          persistJob(current);
+          break;
+        }
 
-    let isCancelled = false;
+        // 1. Marca item como 'sending'
+        current.items[idx].status = 'sending';
+        current.updatedAt = Date.now();
+        persistJob({ ...current });
 
-    const runNextItem = async () => {
-      const idx = job.currentIndex;
-      if (idx >= job.items.length) {
-        // Concluído
-        saveJobState({
-          ...job,
-          status: 'completed',
-          updatedAt: Date.now(),
-        });
-        return;
-      }
+        const currentItem = current.items[idx];
 
-      // Marca item atual como 'sending'
-      const updatedItems = [...job.items];
-      updatedItems[idx] = { ...updatedItems[idx], status: 'sending' };
-      const sendingJob: RenewalJobState = {
-        ...job,
-        items: updatedItems,
-        updatedAt: Date.now(),
-      };
-      saveJobState(sendingJob);
+        // 2. Executa disparo (Simulação ou Real)
+        if (current.isSimulation) {
+          // Espera 2 segundos no modo demonstração
+          await new Promise((r) => setTimeout(r, 2000));
+          if (isTerminated) break;
 
-      const currentItem = updatedItems[idx];
-
-      // Dispara envio
-      try {
-        if (job.isSimulation) {
-          // Simulação: espera 2.5s para demonstrar
-          await new Promise((r) => setTimeout(r, 2500));
-          if (isCancelled) return;
-          updatedItems[idx] = { ...updatedItems[idx], status: 'sent' };
+          current.items[idx].status = 'sent';
         } else {
-          // Envio real via API
-          const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pjcrm.site';
-          const res = await fetch('/api/renewal/dispatch-single', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: job.userId,
-              clientIds: currentItem.clientIds,
-              originUrl,
-            }),
-          });
+          // Disparo Real via API
+          try {
+            const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pjcrm.site';
+            const res = await fetch('/api/renewal/dispatch-single', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: current.userId,
+                clientIds: currentItem.clientIds,
+                originUrl,
+              }),
+            });
 
-          const data = await res.json();
-          if (isCancelled) return;
+            const data = await res.json();
+            if (isTerminated) break;
 
-          if (res.ok && data.success) {
-            updatedItems[idx] = { ...updatedItems[idx], status: 'sent', tokenUsed: data.tokenUsed };
-          } else {
-            updatedItems[idx] = { ...updatedItems[idx], status: 'error', error: data.error || 'Erro no envio' };
+            if (res.ok && data.success) {
+              current.items[idx].status = 'sent';
+              current.items[idx].tokenUsed = data.tokenUsed;
+            } else {
+              current.items[idx].status = 'error';
+              current.items[idx].error = data.error || 'Erro no disparo';
+            }
+          } catch (err: any) {
+            if (isTerminated) break;
+            current.items[idx].status = 'error';
+            current.items[idx].error = err.message || 'Falha de conexão';
           }
         }
-      } catch (err: any) {
-        if (isCancelled) return;
-        updatedItems[idx] = { ...updatedItems[idx], status: 'error', error: err.message || 'Falha de rede' };
-      }
 
-      const nextIndex = idx + 1;
-      const isFinished = nextIndex >= updatedItems.length;
+        // 3. Avança o índice
+        const nextIdx = idx + 1;
+        current.currentIndex = nextIdx;
+        current.updatedAt = Date.now();
 
-      const progressJob: RenewalJobState = {
-        ...job,
-        currentIndex: nextIndex,
-        items: updatedItems,
-        status: isFinished ? 'completed' : 'running',
-        updatedAt: Date.now(),
-      };
-      saveJobState(progressJob);
-
-      // Se ainda houver itens, aplica o delay anti-ban
-      if (!isFinished && !isCancelled) {
-        const delay = job.delaySeconds || 15;
-        let remaining = delay;
-        setDelayCountdown(remaining);
-
-        while (remaining > 0 && !isCancelled) {
-          await new Promise((r) => setTimeout(r, 1000));
-          remaining -= 1;
-          setDelayCountdown(remaining);
+        if (nextIdx >= current.items.length) {
+          current.status = 'completed';
+          persistJob({ ...current });
+          break;
+        } else {
+          persistJob({ ...current });
         }
+
+        // 4. Intervalo Anti-Banimento (Countdown segundo a segundo)
+        const delay = current.delaySeconds || (current.isSimulation ? 3 : 15);
+        for (let sec = delay; sec > 0; sec--) {
+          if (isTerminated) break;
+
+          // Verifica se o usuário pausou ou cancelou durante a contagem
+          const checkJob = getStoredJob();
+          if (!checkJob || checkJob.status !== 'running') {
+            break;
+          }
+
+          // Mantém heartbeat da aba líder
+          localStorage.setItem(
+            STORAGE_KEY_LEADER,
+            JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
+          );
+
+          setDelayCountdown(sec);
+          try {
+            channelRef.current?.postMessage({ type: 'COUNTDOWN_UPDATE', seconds: sec });
+          } catch {}
+
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+
         setDelayCountdown(0);
+        try {
+          channelRef.current?.postMessage({ type: 'COUNTDOWN_UPDATE', seconds: 0 });
+        } catch {}
       }
+
+      isLoopRunningRef.current = false;
     };
 
-    runNextItem();
+    executeQueue();
 
     return () => {
-      isCancelled = true;
+      isTerminated = true;
+      isLoopRunningRef.current = false;
     };
-  }, [job, isLeader, saveJobState]);
+  }, [job?.status, persistJob]);
 
-  // 4. Arraste (Drag & Drop via Pointer Events)
+  // 3. Arraste (Pointer Events para mouse e touch)
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Ignora se clicou em um botão
+    // Não arrasta se clicou em um botão interativo
     if ((e.target as HTMLElement).closest('button')) return;
 
     setIsDragging(true);
@@ -311,8 +369,8 @@ export function RenewalDispatchWidget() {
     let newY = dragStartRef.current.initialY + deltaY;
 
     // Limites da janela
-    const widgetWidth = isMinimized ? 280 : 360;
-    const widgetHeight = isMinimized ? 52 : 300;
+    const widgetWidth = isMinimized ? 290 : 360;
+    const widgetHeight = isMinimized ? 56 : 320;
     const maxX = Math.max(10, window.innerWidth - widgetWidth - 10);
     const maxY = Math.max(10, window.innerHeight - widgetHeight - 10);
 
@@ -334,7 +392,7 @@ export function RenewalDispatchWidget() {
     }
   };
 
-  // Se não houver trabalho ativo, não renderiza nada
+  // Se não houver trabalho ativo, não renderiza
   if (!job) return null;
 
   const currentItem = job.items[job.currentIndex] || job.items[job.items.length - 1];
@@ -343,10 +401,17 @@ export function RenewalDispatchWidget() {
   const errorCount = job.items.filter((i) => i.status === 'error').length;
 
   // Pausar / Continuar
-  const togglePause = () => {
+  const handleTogglePause = () => {
     if (!job) return;
     const nextStatus = job.status === 'running' ? 'paused' : 'running';
-    saveJobState({ ...job, status: nextStatus, updatedAt: Date.now() });
+    if (nextStatus === 'running') {
+      // Reassume liderança ao continuar
+      localStorage.setItem(
+        STORAGE_KEY_LEADER,
+        JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
+      );
+    }
+    persistJob({ ...job, status: nextStatus, updatedAt: Date.now() });
   };
 
   // Cancelar / Fechar
@@ -356,7 +421,7 @@ export function RenewalDispatchWidget() {
         return;
       }
     }
-    saveJobState(null);
+    persistJob(null);
   };
 
   return (
@@ -369,22 +434,28 @@ export function RenewalDispatchWidget() {
         top: 0,
       }}
       className={cn(
-        'z-[9999] select-none transition-shadow',
+        'z-[99999] select-none transition-shadow',
         isDragging ? 'cursor-grabbing opacity-95' : 'cursor-grab'
       )}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      {/* MODO MINIMIZADO (PILL ELEGANTE) */}
+      {/* ========================================================================= */}
+      {/* MODO MINIMIZADO (PÍLULA COMPACTA E ARRASTÁVEL) */}
+      {/* ========================================================================= */}
       {isMinimized ? (
-        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-md text-white border border-zinc-700/80 shadow-2xl text-xs font-semibold">
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-md text-white border border-zinc-700/80 shadow-2xl text-xs font-semibold">
           <GripHorizontal className="w-3.5 h-3.5 text-zinc-400 cursor-grab shrink-0" />
           <div className="flex items-center gap-1.5">
             <span
               className={cn(
                 'w-2 h-2 rounded-full shrink-0',
-                job.status === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                job.status === 'running'
+                  ? 'bg-emerald-500 animate-pulse'
+                  : job.status === 'completed'
+                  ? 'bg-blue-400'
+                  : 'bg-amber-400'
               )}
             />
             <span>
@@ -392,16 +463,16 @@ export function RenewalDispatchWidget() {
             </span>
           </div>
 
-          {delayCountdown > 0 && (
-            <Badge variant="outline" className="h-5 px-1.5 bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px]">
+          {delayCountdown > 0 && job.status === 'running' && (
+            <Badge variant="outline" className="h-5 px-1.5 bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] font-mono">
               ⏳ {delayCountdown}s
             </Badge>
           )}
 
-          <div className="flex items-center gap-1 ml-1">
+          <div className="flex items-center gap-1 ml-1.5">
             <button
               type="button"
-              onClick={() => setIsMinimized(false)}
+              onClick={() => setMinimizedWithStorage(false)}
               className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
               title="Expandir painel"
             >
@@ -444,16 +515,16 @@ export function RenewalDispatchWidget() {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setIsMinimized(true)}
-                className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                title="Minimizar para cantinho"
+                onClick={() => setMinimizedWithStorage(true)}
+                className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                title="Minimizar (aparece como pílula compacta)"
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
                 onClick={handleClose}
-                className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 text-zinc-400 hover:text-red-600 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 text-zinc-400 hover:text-red-600 transition-colors cursor-pointer"
                 title="Fechar e cancelar"
               >
                 <X className="w-3.5 h-3.5" />
@@ -461,7 +532,7 @@ export function RenewalDispatchWidget() {
             </div>
           </div>
 
-          {/* BADGE DE MODO */}
+          {/* BADGE DE SIMULAÇÃO */}
           {job.isSimulation && (
             <div className="flex items-center justify-between bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 rounded-xl px-2.5 py-1 text-[11px] text-purple-700 dark:text-purple-300 font-semibold">
               <span className="flex items-center gap-1">
@@ -544,7 +615,7 @@ export function RenewalDispatchWidget() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={togglePause}
+                onClick={handleTogglePause}
                 className="flex-1 h-8 text-xs font-bold gap-1.5 rounded-xl cursor-pointer"
               >
                 {job.status === 'running' ? (
