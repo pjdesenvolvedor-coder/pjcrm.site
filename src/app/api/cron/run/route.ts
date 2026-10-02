@@ -184,9 +184,7 @@ export async function GET(request: Request) {
                     }
                 }
 
-                const canSendDueDateMsg = isAutoRenewalActive
-                    ? shouldRunAutoRenewalToday
-                    : Boolean(settings.isDueDateMessageActive && settings.dueDateMessage && billingToken);
+                const canSendDueDateMsg = isAutoRenewalActive && shouldRunAutoRenewalToday;
 
                 // Agrupa clientes com vencimento pelo telefone canônico (para enviar apenas 1 mensagem mesmo com >1 assinaturas)
                 const dueGroupsByPhone = new Map<string, Client[]>();
@@ -249,9 +247,7 @@ export async function GET(request: Request) {
                             '📅 *Vencimento:* {vencimento}\n\n' +
                             '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
-                        let template = (isAutoRenewalActive && settings.renewalBillingMessage?.trim())
-                            ? settings.renewalBillingMessage.trim()
-                            : (settings.dueDateMessage || defaultBillingTemplate);
+                        let template = settings.renewalBillingMessage?.trim() || defaultBillingTemplate;
 
                         // Se houver renewalLink e a renovação automática estiver ativa, removemos o link do corpo pois irá no botão interativo
                         if (isAutoRenewalActive && renewalLink) {

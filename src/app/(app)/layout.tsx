@@ -103,7 +103,6 @@ import type { UserProfile, Settings, Client, Lead } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScheduledMessageHandler } from '@/components/scheduled-message-handler';
-import { DueDateMessageHandler } from '@/components/due-date-message-handler';
 import { UpsellMessageHandler } from '@/components/upsell-message-handler';
 import { RemarketingMessageHandler } from '@/components/remarketing-message-handler';
 import { SubscriptionTimer } from '@/components/SubscriptionTimer';
@@ -679,7 +678,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           <SidebarMenuSub>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/renewal'}><Link href="/automations/renewal" className="text-emerald-600 dark:text-emerald-400 font-bold">Renovação PIX ⚡</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/test-renewal'}><Link href="/automations/test-renewal" className="text-amber-600 dark:text-amber-400 font-bold">Teste Renovação 🧪</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                                <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/due-date'}><Link href="/automations/due-date">Avisos Re-Cobrança</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/remarketing'}><Link href="/automations/remarketing">Remarketing</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell'}><Link href="/automations/upsell" className="text-emerald-600 dark:text-emerald-400 font-bold">Funil Upsell 🚀</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/upsell-menu'}><Link href="/automations/upsell-menu" className="text-violet-600 dark:text-violet-400 font-bold">Upsell com Menu 🎯</Link></SidebarMenuSubButton></SidebarMenuSubItem>
@@ -865,7 +863,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.settings && (
                 <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/settings') && pathname !== '/settings/rebill'}>
+                  <Collapsible defaultOpen={pathname.startsWith('/settings')}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
                               <div className="flex items-center gap-2"><SettingsIcon className="h-4 w-4" /><span className="text-[13px] font-medium">Configurações</span></div>
@@ -888,18 +886,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
               
-              {/* RECOBRAR - Sempre visível para todos os usuários conforme pedido */}
-              <SidebarMenuItem>
-                  <SidebarMenuSubItem className="list-none px-0">
-                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/rebill'}>
-                          <Link href="/settings/rebill" className="flex items-center gap-2">
-                              <RefreshCcw className="h-4 w-4" />
-                              <span>RECOBRAR</span>
-                              <Badge variant="secondary" className="h-4 px-1 bg-red-500/10 text-red-600 text-[9px] border-none font-bold">HOJE</Badge>
-                          </Link>
-                      </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-              </SidebarMenuItem>
 
               {/* COBRAR VENCIDOS - Sempre visível para todos os usuários */}
               <SidebarMenuItem>
