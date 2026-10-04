@@ -25,6 +25,8 @@ import {
     FlowRunnerContext,
     cleanPhone,
     cleanServerUrl,
+    sendUazapiText,
+    formatPhoneWith55,
 } from '@/lib/flow-runner';
 
 export const dynamic = 'force-dynamic';
@@ -53,6 +55,101 @@ function extractRealPhoneNumber(candidates: any[]): string {
     return '';
 }
 
+// Extrator universal e ultra-resiliente para mensagens da UazAPI
+function extractMessageInfo(body: any) {
+    if (!body || typeof body !== 'object') {
+        return { msgId: '', fromMe: false, text: '', contactName: '', phoneCandidates: [] };
+    }
+
+    const candidateObjects: any[] = [];
+    candidateObjects.push(body);
+
+    if (Array.isArray(body.data)) {
+        candidateObjects.push(...body.data);
+    } else if (body.data && typeof body.data === 'object') {
+        candidateObjects.push(body.data);
+        if (body.data.message && typeof body.data.message === 'object') {
+            candidateObjects.push(body.data.message);
+        }
+    }
+
+    if (Array.isArray(body.message)) {
+        candidateObjects.push(...body.message);
+    } else if (body.message && typeof body.message === 'object') {
+        candidateObjects.push(body.message);
+    }
+
+    if (Array.isArray(body.messages)) {
+        candidateObjects.push(...body.messages);
+    }
+
+    if (body.payload && typeof body.payload === 'object') candidateObjects.push(body.payload);
+    if (body.event && typeof body.event === 'object') candidateObjects.push(body.event);
+
+    const phoneCandidates: any[] = [];
+    let text = '';
+    let msgId = '';
+    let fromMe = false;
+    let contactName = '';
+
+    for (const obj of candidateObjects) {
+        if (!obj || typeof obj !== 'object') continue;
+
+        if (!msgId) {
+            msgId = obj.id || obj.messageid || obj.messageId || obj.key?.id || '';
+        }
+
+        if (obj.fromMe === true || obj.key?.fromMe === true) {
+            fromMe = true;
+        }
+
+        if (!contactName) {
+            contactName = obj.senderName || obj.pushName || obj.pushname || obj.name || obj.notifyName || '';
+        }
+
+        phoneCandidates.push(
+            obj.chatid,
+            obj.chatId,
+            obj.chat,
+            obj.remoteJid,
+            obj.key?.remoteJid,
+            obj.sender,
+            obj.from,
+            obj.number,
+            obj.phone,
+            obj.user
+        );
+
+        if (!text) {
+            if (typeof obj.text === 'string' && obj.text.trim()) {
+                text = obj.text;
+            } else if (typeof obj.content?.text === 'string' && obj.content.text.trim()) {
+                text = obj.content.text;
+            } else if (typeof obj.body === 'string' && obj.body.trim()) {
+                text = obj.body;
+            } else if (typeof obj.message === 'string' && obj.message.trim()) {
+                text = obj.message;
+            } else if (typeof obj.conversation === 'string' && obj.conversation.trim()) {
+                text = obj.conversation;
+            } else if (typeof obj.extendedTextMessage?.text === 'string') {
+                text = obj.extendedTextMessage.text;
+            } else if (typeof obj.listResponseMessage?.singleSelectReply?.selectedRowId === 'string') {
+                text = obj.listResponseMessage.singleSelectReply.selectedRowId;
+            } else if (typeof obj.listResponseMessage?.title === 'string') {
+                text = obj.listResponseMessage.title;
+            } else if (typeof obj.buttonsResponseMessage?.selectedButtonId === 'string') {
+                text = obj.buttonsResponseMessage.selectedButtonId;
+            } else if (typeof obj.buttonsResponseMessage?.selectedDisplayText === 'string') {
+                text = obj.buttonsResponseMessage.selectedDisplayText;
+            } else if (typeof obj.templateButtonReplyMessage?.selectedId === 'string') {
+                text = obj.templateButtonReplyMessage.selectedId;
+            }
+        }
+    }
+
+    return { msgId, fromMe, text, contactName, phoneCandidates };
+}
+
 export async function GET(req: NextRequest) {
     return NextResponse.json({ status: 'ok', service: 'flows-webhook' });
 }
@@ -79,86 +176,15 @@ export async function POST(req: NextRequest) {
             body.instance?.token ||
             '';
 
-        // 1. Extração da mensagem e remetente do payload UazAPI
-        let msgId = '';
-        let fromMe = false;
-        let text = '';
-        let contactName = '';
-        const phoneCandidates: any[] = [];
-
-        // Formato 1: Evento messages padrão da UazAPI
-        if (body.data && typeof body.data === 'object') {
-            const d = body.data;
-            msgId = d.id || d.messageid || d.key?.id || '';
-            fromMe = d.fromMe === true || d.key?.fromMe === true;
-            contactName = d.senderName || d.pushName || '';
-
-            phoneCandidates.push(d.chatid, d.key?.remoteJid, d.sender, d.from);
-
-            const m = d.message || {};
-            text =
-                d.text ||
-                d.content?.text ||
-                m.conversation ||
-                m.extendedTextMessage?.text ||
-                m.listResponseMessage?.singleSelectReply?.selectedRowId ||
-                m.listResponseMessage?.title ||
-                m.buttonsResponseMessage?.selectedButtonId ||
-                m.buttonsResponseMessage?.selectedDisplayText ||
-                m.templateButtonReplyMessage?.selectedId ||
-                '';
-        } else if (body.message && typeof body.message === 'object') {
-            msgId = body.id || body.messageid || body.key?.id || '';
-            fromMe = body.fromMe === true || body.key?.fromMe === true;
-            contactName = body.senderName || body.pushName || '';
-
-            phoneCandidates.push(body.chatid, body.key?.remoteJid, body.remoteJid, body.sender, body.from);
-
-            text =
-                body.text ||
-                body.content?.text ||
-                body.message.conversation ||
-                body.message.extendedTextMessage?.text ||
-                body.message.text ||
-                '';
-        } else {
-            // Formato direto
-            msgId = body.id || body.messageid || '';
-            fromMe = body.fromMe === true;
-            contactName = body.senderName || body.pushName || '';
-            phoneCandidates.push(body.chatid, body.chat, body.remoteJid, body.sender, body.number, body.from);
-            text = body.text || body.body || body.content?.text || '';
-        }
-
-        // Adiciona candidatos de raiz caso não tenham sido capturados
-        phoneCandidates.push(
-            body.chatid,
-            body.chat,
-            body.remoteJid,
-            body.sender,
-            body.from,
-            body.key?.remoteJid,
-            body.data?.chatid,
-            body.data?.chat,
-            body.data?.remoteJid,
-            body.data?.key?.remoteJid,
-            body.data?.sender,
-            body.data?.from
-        );
-
-        if (!text) {
-            if (typeof body.data?.message === 'string') text = body.data.message;
-            else if (typeof body.message === 'string') text = body.message;
-            else if (body.text) text = body.text;
-            else if (body.body) text = body.body;
-            else if (body.content?.text) text = body.content.text;
-        }
+        // 1. Extração universal e resiliente da mensagem e remetente
+        const { msgId, fromMe, text, contactName, phoneCandidates } = extractMessageInfo(body);
 
         const phoneNumber = extractRealPhoneNumber(phoneCandidates);
         const userText = (text || '').trim();
         const normalizedText = userText.toLowerCase();
 
         if (!phoneNumber) {
+            console.warn('[Flow Webhook] Nenhum telefone válido identificado no payload:', JSON.stringify(body));
             return NextResponse.json({ ignored: 'no_phone' }, { status: 200 });
         }
 
@@ -285,14 +311,7 @@ export async function POST(req: NextRequest) {
             await deleteDoc(sessionDocRef).catch(() => {});
 
             // Notifica o WhatsApp
-            await fetch(`${cleanServerUrl(userServerUrl)}/send/text`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', token: userInstanceToken, apikey: userInstanceToken },
-                body: JSON.stringify({
-                    number: phoneNumber,
-                    text: '🔄 *Chat resetado com sucesso!*\nIniciando fluxo...',
-                }),
-            }).catch(() => {});
+            await sendUazapiText(runnerCtx, '🔄 *Chat resetado com sucesso!*\nIniciando fluxo...').catch(() => {});
 
             // Imediatamente busca o fluxo e dispara do início
             let flowToRestartId = flowConfig.defaultFlowId;
