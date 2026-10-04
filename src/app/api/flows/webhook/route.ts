@@ -126,8 +126,32 @@ export async function POST(req: NextRequest) {
             msgId = body.id || body.messageid || '';
             fromMe = body.fromMe === true;
             contactName = body.senderName || body.pushName || '';
-            phoneCandidates.push(body.chatid, body.remoteJid, body.sender, body.number, body.from);
+            phoneCandidates.push(body.chatid, body.chat, body.remoteJid, body.sender, body.number, body.from);
             text = body.text || body.body || body.content?.text || '';
+        }
+
+        // Adiciona candidatos de raiz caso não tenham sido capturados
+        phoneCandidates.push(
+            body.chatid,
+            body.chat,
+            body.remoteJid,
+            body.sender,
+            body.from,
+            body.key?.remoteJid,
+            body.data?.chatid,
+            body.data?.chat,
+            body.data?.remoteJid,
+            body.data?.key?.remoteJid,
+            body.data?.sender,
+            body.data?.from
+        );
+
+        if (!text) {
+            if (typeof body.data?.message === 'string') text = body.data.message;
+            else if (typeof body.message === 'string') text = body.message;
+            else if (body.text) text = body.text;
+            else if (body.body) text = body.body;
+            else if (body.content?.text) text = body.content.text;
         }
 
         const phoneNumber = extractRealPhoneNumber(phoneCandidates);

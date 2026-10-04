@@ -130,6 +130,8 @@ export async function POST(request: Request) {
             url: targetUrl,
             events: ['messages'],
             excludeMessages: ['wasSentByApi'],
+            addUrlEvents: false,
+            addUrlTypesMessages: false,
           }),
         });
 

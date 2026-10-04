@@ -135,7 +135,23 @@ export default function FlowConnectionPage() {
                 updatedAt: new Date().toISOString(),
             }, { merge: true });
 
-            toast({ title: 'Configurações salvas!', description: 'Conexão do WhatsApp atualizada com sucesso.' });
+            // Registra automaticamente o webhook na UazAPI
+            try {
+                await fetch('/api/flows/uazapi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'set_webhook',
+                        serverUrl: serverUrl.trim(),
+                        instanceToken: instanceToken.trim(),
+                        webhookUrl: webhookUrl,
+                    }),
+                });
+            } catch (wErr) {
+                console.warn('Registro automático de webhook falhou:', wErr);
+            }
+
+            toast({ title: 'Configurações salvas e Webhook registrado!', description: 'Conexão e Webhook do WhatsApp configurados com sucesso.' });
             checkStatus(instanceToken.trim(), serverUrl.trim());
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Erro ao salvar', description: err.message });
@@ -173,6 +189,17 @@ export default function FlowConnectionPage() {
             } else if (data.data?.status?.connected || data.data?.response === 'Connected') {
                 setConnectionStatus('connected');
                 toast({ title: 'WhatsApp Conectado!' });
+                // Registra automaticamente o webhook
+                fetch('/api/flows/uazapi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'set_webhook',
+                        serverUrl: serverUrl.trim(),
+                        instanceToken: instanceToken.trim(),
+                        webhookUrl: webhookUrl,
+                    }),
+                }).catch(() => {});
                 checkStatus();
             } else {
                 setConnectionStatus('connecting');
