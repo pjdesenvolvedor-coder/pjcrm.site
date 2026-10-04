@@ -22,6 +22,8 @@ import {
     executeFlowNode,
     handleUserMenuResponse,
     FlowRunnerContext,
+    cleanPhone,
+    cleanServerUrl,
 } from '@/lib/flow-runner';
 
 export const dynamic = 'force-dynamic';
@@ -33,25 +35,30 @@ const db = getFirestore(app);
 // Cache em memória para deduplicação rápida de IDs de mensagens
 const processedMessageIds = new Set<string>();
 
-function cleanPhone(raw: string): string {
-    if (!raw) return '';
-    return raw.replace(/\D/g, '');
+export async function GET(req: NextRequest) {
+    return NextResponse.json({ status: 'ok', service: 'flows-webhook' });
 }
 
 export async function POST(req: NextRequest) {
     try {
+        const queryUserId = req.nextUrl.searchParams.get('userId');
+        const queryToken = req.nextUrl.searchParams.get('token');
+
         const body = await req.json().catch(() => null);
         if (!body) {
             return NextResponse.json({ received: true }, { status: 200 });
         }
 
-        // Token da instância no header ou no payload
+        // Token da instância no header, query ou no payload
         const headerToken =
+            queryToken ||
             req.headers.get('token') ||
             req.headers.get('apikey') ||
             req.headers.get('x-api-key') ||
             body.token ||
             body.instanceToken ||
+            body.data?.token ||
+            body.instance?.token ||
             '';
 
         // 1. Extração da mensagem e remetente do payload UazAPI
@@ -64,12 +71,14 @@ export async function POST(req: NextRequest) {
         // { event: "messages", data: { key: { id, remoteJid, fromMe }, message: { conversation, ... } } }
         if (body.data && typeof body.data === 'object') {
             const d = body.data;
-            msgId = d.key?.id || '';
-            remoteJid = d.key?.remoteJid || '';
-            fromMe = d.key?.fromMe === true;
+            msgId = d.id || d.messageid || d.key?.id || '';
+            remoteJid = d.chatid || d.sender || d.from || d.key?.remoteJid || '';
+            fromMe = d.fromMe === true || d.key?.fromMe === true;
 
             const m = d.message || {};
             text =
+                d.text ||
+                d.content?.text ||
                 m.conversation ||
                 m.extendedTextMessage?.text ||
                 m.listResponseMessage?.singleSelectReply?.selectedRowId ||
@@ -79,20 +88,22 @@ export async function POST(req: NextRequest) {
                 m.templateButtonReplyMessage?.selectedId ||
                 '';
         } else if (body.message && typeof body.message === 'object') {
-            msgId = body.id || body.key?.id || '';
-            remoteJid = body.remoteJid || body.sender || body.from || '';
-            fromMe = body.fromMe === true;
+            msgId = body.id || body.messageid || body.key?.id || '';
+            remoteJid = body.chatid || body.remoteJid || body.sender || body.from || '';
+            fromMe = body.fromMe === true || body.key?.fromMe === true;
             text =
-                body.message.conversation ||
-                body.message.text ||
                 body.text ||
+                body.content?.text ||
+                body.message.conversation ||
+                body.message.extendedTextMessage?.text ||
+                body.message.text ||
                 '';
         } else {
             // Outro formato direto
-            msgId = body.id || '';
-            remoteJid = body.remoteJid || body.sender || body.number || '';
+            msgId = body.id || body.messageid || '';
+            remoteJid = body.chatid || body.remoteJid || body.sender || body.number || body.from || '';
             fromMe = body.fromMe === true;
-            text = body.text || body.body || '';
+            text = body.text || body.body || body.content?.text || '';
         }
 
         // Ignora mensagens enviadas pelo próprio bot/usuário para não gerar loops
@@ -112,7 +123,6 @@ export async function POST(req: NextRequest) {
             }
             processedMessageIds.add(msgId);
             if (processedMessageIds.size > 2000) {
-                // Limpeza do cache
                 const first = processedMessageIds.values().next().value;
                 if (first) processedMessageIds.delete(first);
             }
@@ -125,45 +135,31 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ignored: 'no_phone' }, { status: 200 });
         }
 
+        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber}: "${userText}"`);
+
         // 2. Localizar o usuário dono desta instância UazAPI
-        let targetUserId: string | null = null;
+        let targetUserId: string | null = queryUserId;
         let userServerUrl = 'https://travelflow.uazapi.com';
         let userInstanceToken = headerToken;
 
-        // Procura primeiro pelo token informado
-        if (headerToken) {
-            const usersSnap = await getDocs(collection(db, 'users'));
-            for (const userDoc of usersSnap.docs) {
-                const uid = userDoc.id;
-                // Checa uazapi_flow
-                const flowConnRef = doc(db, 'users', uid, 'settings', 'uazapi_flow');
-                const flowConnSnap = await getDoc(flowConnRef);
-                if (flowConnSnap.exists()) {
-                    const data = flowConnSnap.data() as UazapiConnectionConfig;
-                    if (data.instanceToken === headerToken) {
-                        targetUserId = uid;
-                        userServerUrl = data.serverUrl || userServerUrl;
-                        userInstanceToken = data.instanceToken;
-                        break;
-                    }
-                }
-
-                // Checa settings/config (Hub Principal)
-                const mainConfigRef = doc(db, 'users', uid, 'settings', 'config');
+        if (targetUserId) {
+            // Carrega credenciais do usuário direto
+            const flowConnRef = doc(db, 'users', targetUserId, 'settings', 'uazapi_flow');
+            const flowConnSnap = await getDoc(flowConnRef);
+            if (flowConnSnap.exists()) {
+                const data = flowConnSnap.data() as UazapiConnectionConfig;
+                userServerUrl = data.serverUrl || userServerUrl;
+                if (data.instanceToken) userInstanceToken = data.instanceToken;
+            } else {
+                const mainConfigRef = doc(db, 'users', targetUserId, 'settings', 'config');
                 const mainConfigSnap = await getDoc(mainConfigRef);
                 if (mainConfigSnap.exists()) {
                     const mainData = mainConfigSnap.data() as Settings;
-                    if (mainData.webhookToken === headerToken) {
-                        targetUserId = uid;
-                        userInstanceToken = mainData.webhookToken;
-                        break;
-                    }
+                    if (mainData.webhookToken) userInstanceToken = mainData.webhookToken;
                 }
             }
-        }
-
-        // Se não achou pelo token ou não veio token no header, tenta encontrar o primeiro usuário com uazapi_flow ativo
-        if (!targetUserId) {
+        } else {
+            // Tenta encontrar por token
             const usersSnap = await getDocs(collection(db, 'users'));
             for (const userDoc of usersSnap.docs) {
                 const uid = userDoc.id;
@@ -171,11 +167,30 @@ export async function POST(req: NextRequest) {
                 const flowConnSnap = await getDoc(flowConnRef);
                 if (flowConnSnap.exists()) {
                     const data = flowConnSnap.data() as UazapiConnectionConfig;
-                    if (data.instanceToken) {
+                    if (headerToken && data.instanceToken === headerToken) {
                         targetUserId = uid;
                         userServerUrl = data.serverUrl || userServerUrl;
                         userInstanceToken = data.instanceToken;
                         break;
+                    } else if (!headerToken && data.instanceToken) {
+                        // Fallback para primeiro usuário configurado
+                        targetUserId = uid;
+                        userServerUrl = data.serverUrl || userServerUrl;
+                        userInstanceToken = data.instanceToken;
+                        break;
+                    }
+                }
+
+                if (!targetUserId && headerToken) {
+                    const mainConfigRef = doc(db, 'users', uid, 'settings', 'config');
+                    const mainConfigSnap = await getDoc(mainConfigRef);
+                    if (mainConfigSnap.exists()) {
+                        const mainData = mainConfigSnap.data() as Settings;
+                        if (mainData.webhookToken === headerToken) {
+                            targetUserId = uid;
+                            userInstanceToken = mainData.webhookToken;
+                            break;
+                        }
                     }
                 }
             }
@@ -189,7 +204,7 @@ export async function POST(req: NextRequest) {
         const runnerCtx: FlowRunnerContext = {
             db,
             userId: targetUserId,
-            serverUrl: userServerUrl,
+            serverUrl: cleanServerUrl(userServerUrl),
             instanceToken: userInstanceToken,
             phoneNumber,
         };
@@ -199,7 +214,7 @@ export async function POST(req: NextRequest) {
         const configSnap = await getDoc(configDocRef);
         const flowConfig: FlowTriggerSettings = configSnap.exists()
             ? (configSnap.data() as FlowTriggerSettings)
-            : { triggerMode: 'keywords', keywords: [], ignoreIfActiveFlow: true };
+            : { triggerMode: 'all_messages', keywords: [], ignoreIfActiveFlow: false };
 
         // 4. Checar sessão atual do contato (`flow_sessions/{phoneNumber}`)
         const sessionDocRef = doc(db, 'users', targetUserId, 'flow_sessions', phoneNumber);
@@ -217,36 +232,42 @@ export async function POST(req: NextRequest) {
         const isRestart = restartKeywords.includes(normalizedText);
 
         if (isRestart && currentSession) {
-            // Limpa sessão ativa
             await setDoc(sessionDocRef, {
                 status: 'completed',
                 lastInteractionAt: new Date().toISOString(),
             }, { merge: true });
         }
 
-        // 6. Se está em sessão aguardando input do menu e NÃO pediu reinício
+        // 6. Se está em sessão aguardando resposta de um menu:
         if (currentSession && currentSession.status === 'waiting_user_input' && !isRestart) {
+            // Tenta processar como escolha de uma das opções do menu
             const handled = await handleUserMenuResponse(runnerCtx, currentSession, userText);
             if (handled) {
+                console.log(`[Flow Webhook] Opção de menu selecionada por ${phoneNumber}`);
                 return NextResponse.json({ handled: 'user_menu_response' }, { status: 200 });
             }
+            // Se NÃO bateu com nenhuma opção do menu:
+            // A mensagem do usuário é tratada como novo gatilho, permitindo iniciar o fluxo!
+            console.log(`[Flow Webhook] Texto "${userText}" não era opção de menu. Reiniciando fluxo para ${phoneNumber}.`);
         }
 
-        // 7. Se ignora se já tiver fluxo ativo e ainda não terminou
-        if (
-            flowConfig.ignoreIfActiveFlow &&
-            currentSession &&
-            currentSession.status === 'active' &&
-            !isRestart
-        ) {
-            return NextResponse.json({ ignored: 'already_active_flow' }, { status: 200 });
-        }
-
-        // 8. Determinar qual fluxo disparar
+        // 7. Determinar qual fluxo disparar
         let flowToTriggerId: string | null = null;
+        const triggerMode = flowConfig.triggerMode || 'all_messages';
 
-        if (flowConfig.triggerMode === 'all_messages') {
+        if (triggerMode === 'all_messages') {
             flowToTriggerId = flowConfig.defaultFlowId || null;
+
+            // Se defaultFlowId não estiver salvo, busca automaticamente o fluxo ativo do usuário
+            if (!flowToTriggerId) {
+                const flowsSnap = await getDocs(collection(db, 'users', targetUserId, 'flows'));
+                const active = flowsSnap.docs
+                    .map((d) => ({ id: d.id, ...d.data() } as FlowDefinition))
+                    .find((f) => f.isActive !== false);
+                if (active) {
+                    flowToTriggerId = active.id;
+                }
+            }
         } else {
             // Modo palavras-chave
             const triggers = flowConfig.keywords || [];
@@ -270,11 +291,11 @@ export async function POST(req: NextRequest) {
         }
 
         if (!flowToTriggerId) {
-            // Nenhuma palavra-chave bateu
+            console.log(`[Flow Webhook] Nenhuma correspondência de fluxo para: "${userText}"`);
             return NextResponse.json({ ignored: 'no_keyword_match' }, { status: 200 });
         }
 
-        // Carrega o fluxo e inicia
+        // 8. Carrega o fluxo e inicia a execução
         const flowRef = doc(db, 'users', targetUserId, 'flows', flowToTriggerId);
         const flowDocSnap = await getDoc(flowRef);
         if (!flowDocSnap.exists()) {
@@ -291,10 +312,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ignored: 'flow_has_no_nodes' }, { status: 200 });
         }
 
-        // Encontra o nó inicial (nó que não possui nenhuma aresta apontando para ele, ou o primeiro nó)
+        // Identifica o nó raiz (sem aresta de entrada) ou o primeiro nó
         const edges = flow.edges || [];
         const targetNodeIds = new Set(edges.map((e: any) => e.target));
         const rootNode = nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
+
+        console.log(`[Flow Webhook] Disparando fluxo "${flow.name}" (nó raiz: ${rootNode.id}) para ${phoneNumber}`);
 
         // Atualiza a sessão
         await setDoc(sessionDocRef, {
@@ -305,7 +328,7 @@ export async function POST(req: NextRequest) {
             lastInteractionAt: new Date().toISOString(),
         });
 
-        // Executa o primeiro nó
+        // Executa o primeiro nó do fluxo
         await executeFlowNode(runnerCtx, flow, rootNode.id);
 
         return NextResponse.json({ success: true, startedFlow: flow.name }, { status: 200 });

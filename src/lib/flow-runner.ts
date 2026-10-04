@@ -1,9 +1,16 @@
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import type { FlowDefinition, FlowNodeData, FlowContactSession, UazapiConnectionConfig, Settings } from './types';
 
-function formatPhoneWith55(phone: string): string {
+export function cleanPhone(raw: string): string {
+    if (!raw) return '';
+    const withoutDomain = raw.split('@')[0];
+    const withoutDevice = withoutDomain.split(':')[0];
+    return withoutDevice.replace(/\D/g, '');
+}
+
+export function formatPhoneWith55(phone: string): string {
     if (!phone) return '';
-    let digits = phone.replace(/\D/g, '');
+    let digits = cleanPhone(phone);
     if (!digits) return '';
     if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
         digits = '55' + digits;
@@ -11,9 +18,12 @@ function formatPhoneWith55(phone: string): string {
     return digits;
 }
 
-function cleanServerUrl(url?: string): string {
+export function cleanServerUrl(url?: string): string {
     let cleaned = (url || '').trim();
     if (!cleaned) cleaned = 'https://travelflow.uazapi.com';
+    if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+        cleaned = `https://${cleaned}`;
+    }
     if (cleaned.endsWith('/')) {
         cleaned = cleaned.slice(0, -1);
     }
@@ -239,7 +249,8 @@ export async function executeFlowNode(
         // Encontrar próximo nó conectado na saída padrão
         const nextEdge = edges.find((e: any) => e.source === nodeId);
         if (nextEdge && nextEdge.target) {
-            // Executa o próximo nó sequencialmente
+            // Pequeno delay para garantir entrega sequencial no WhatsApp
+            await new Promise((resolve) => setTimeout(resolve, 1000));
             await executeFlowNode(ctx, flow, nextEdge.target);
         } else {
             // Fim do caminho do fluxo
@@ -409,11 +420,7 @@ export async function handleUserMenuResponse(
         return true;
     }
 
-    // Se o cliente digitou algo inválido que não correspondeu a nenhuma opção do menu:
-    let retryMsg = 'Opção não reconhecida. Por favor, escolha uma das opções válidas:\n\n';
-    options.forEach((opt, idx) => {
-        retryMsg += `*${idx + 1}* - ${opt.label}\n`;
-    });
-    await sendUazapiText(ctx, retryMsg.trim());
-    return true;
+    // Se o cliente não digitou uma opção válida do menu, retorna false
+    // para permitir que o webhook trate a mensagem como novo gatilho ou reinício de fluxo
+    return false;
 }

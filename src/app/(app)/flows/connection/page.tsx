@@ -31,8 +31,8 @@ export default function FlowConnectionPage() {
     const [isRegisteringWebhook, setIsRegisteringWebhook] = useState(false);
 
     const webhookUrl = typeof window !== 'undefined' 
-        ? `${window.location.origin}/api/flows/webhook` 
-        : 'https://www.pjcrm.site/api/flows/webhook';
+        ? `${window.location.origin}/api/flows/webhook${effectiveUserId ? `?userId=${effectiveUserId}` : ''}` 
+        : `https://www.pjcrm.site/api/flows/webhook${effectiveUserId ? `?userId=${effectiveUserId}` : ''}`;
 
     // Settings do Hub Principal (caso queira importar o token)
     const settingsDocRef = useMemoFirebase(() => {

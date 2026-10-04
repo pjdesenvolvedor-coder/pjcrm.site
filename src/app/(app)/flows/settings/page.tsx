@@ -60,7 +60,7 @@ export default function FlowSettingsPage() {
 
     useEffect(() => {
         if (savedConfig) {
-            setTriggerMode(savedConfig.triggerMode || 'keywords');
+            setTriggerMode(savedConfig.triggerMode || 'all_messages');
             setDefaultFlowId(savedConfig.defaultFlowId || '');
             setKeywords(savedConfig.keywords || []);
             setIgnoreIfActiveFlow(savedConfig.ignoreIfActiveFlow !== false);
@@ -69,6 +69,13 @@ export default function FlowSettingsPage() {
             }
         }
     }, [savedConfig]);
+
+    useEffect(() => {
+        if (flows && flows.length > 0 && !defaultFlowId) {
+            const firstActive = flows.find(f => f.isActive !== false) || flows[0];
+            if (firstActive) setDefaultFlowId(firstActive.id);
+        }
+    }, [flows, defaultFlowId]);
 
     // Adicionar palavra-chave
     const handleAddKeyword = () => {
