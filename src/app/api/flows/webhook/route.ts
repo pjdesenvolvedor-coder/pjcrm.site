@@ -9,6 +9,7 @@ import {
     doc,
     getDoc,
     setDoc,
+    deleteDoc,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import type {
@@ -34,6 +35,23 @@ const db = getFirestore(app);
 
 // Cache em memória para deduplicação rápida de IDs de mensagens
 const processedMessageIds = new Set<string>();
+
+// Helper que prioriza JID com @s.whatsapp.net ou @c.us e ignora @lid
+function extractRealPhoneNumber(candidates: any[]): string {
+    for (const c of candidates) {
+        if (typeof c === 'string' && (c.includes('@s.whatsapp.net') || c.includes('@c.us'))) {
+            const num = cleanPhone(c);
+            if (num.length >= 10 && num.length <= 15) return num;
+        }
+    }
+    for (const c of candidates) {
+        if (typeof c === 'string' && !c.includes('@lid') && !c.includes('@g.us') && !c.includes('@broadcast')) {
+            const num = cleanPhone(c);
+            if (num.length >= 10 && num.length <= 15) return num;
+        }
+    }
+    return '';
+}
 
 export async function GET(req: NextRequest) {
     return NextResponse.json({ status: 'ok', service: 'flows-webhook' });
@@ -63,17 +81,19 @@ export async function POST(req: NextRequest) {
 
         // 1. Extração da mensagem e remetente do payload UazAPI
         let msgId = '';
-        let remoteJid = '';
         let fromMe = false;
         let text = '';
+        let contactName = '';
+        const phoneCandidates: any[] = [];
 
         // Formato 1: Evento messages padrão da UazAPI
-        // { event: "messages", data: { key: { id, remoteJid, fromMe }, message: { conversation, ... } } }
         if (body.data && typeof body.data === 'object') {
             const d = body.data;
             msgId = d.id || d.messageid || d.key?.id || '';
-            remoteJid = d.chatid || d.sender || d.from || d.key?.remoteJid || '';
             fromMe = d.fromMe === true || d.key?.fromMe === true;
+            contactName = d.senderName || d.pushName || '';
+
+            phoneCandidates.push(d.chatid, d.key?.remoteJid, d.sender, d.from);
 
             const m = d.message || {};
             text =
@@ -89,8 +109,11 @@ export async function POST(req: NextRequest) {
                 '';
         } else if (body.message && typeof body.message === 'object') {
             msgId = body.id || body.messageid || body.key?.id || '';
-            remoteJid = body.chatid || body.remoteJid || body.sender || body.from || '';
             fromMe = body.fromMe === true || body.key?.fromMe === true;
+            contactName = body.senderName || body.pushName || '';
+
+            phoneCandidates.push(body.chatid, body.key?.remoteJid, body.remoteJid, body.sender, body.from);
+
             text =
                 body.text ||
                 body.content?.text ||
@@ -99,21 +122,27 @@ export async function POST(req: NextRequest) {
                 body.message.text ||
                 '';
         } else {
-            // Outro formato direto
+            // Formato direto
             msgId = body.id || body.messageid || '';
-            remoteJid = body.chatid || body.remoteJid || body.sender || body.number || body.from || '';
             fromMe = body.fromMe === true;
+            contactName = body.senderName || body.pushName || '';
+            phoneCandidates.push(body.chatid, body.remoteJid, body.sender, body.number, body.from);
             text = body.text || body.body || body.content?.text || '';
         }
 
-        // Ignora mensagens enviadas pelo próprio bot/usuário para não gerar loops
-        if (fromMe) {
-            return NextResponse.json({ ignored: 'fromMe' }, { status: 200 });
+        const phoneNumber = extractRealPhoneNumber(phoneCandidates);
+        const userText = (text || '').trim();
+        const normalizedText = userText.toLowerCase();
+
+        if (!phoneNumber) {
+            return NextResponse.json({ ignored: 'no_phone' }, { status: 200 });
         }
 
         // Ignora mensagens de grupos (@g.us) e status (@broadcast)
-        if (remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) {
-            return NextResponse.json({ ignored: 'group_or_broadcast' }, { status: 200 });
+        for (const c of phoneCandidates) {
+            if (typeof c === 'string' && (c.includes('@g.us') || c.includes('@broadcast'))) {
+                return NextResponse.json({ ignored: 'group_or_broadcast' }, { status: 200 });
+            }
         }
 
         // Deduplicação de mensagens
@@ -128,14 +157,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const phoneNumber = cleanPhone(remoteJid);
-        const userText = (text || '').trim();
-
-        if (!phoneNumber) {
-            return NextResponse.json({ ignored: 'no_phone' }, { status: 200 });
-        }
-
-        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber}: "${userText}"`);
+        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | fromMe=${fromMe}`);
 
         // 2. Localizar o usuário dono desta instância UazAPI
         let targetUserId: string | null = queryUserId;
@@ -173,7 +195,6 @@ export async function POST(req: NextRequest) {
                         userInstanceToken = data.instanceToken;
                         break;
                     } else if (!headerToken && data.instanceToken) {
-                        // Fallback para primeiro usuário configurado
                         targetUserId = uid;
                         userServerUrl = data.serverUrl || userServerUrl;
                         userInstanceToken = data.instanceToken;
@@ -207,6 +228,7 @@ export async function POST(req: NextRequest) {
             serverUrl: cleanServerUrl(userServerUrl),
             instanceToken: userInstanceToken,
             phoneNumber,
+            contactName,
         };
 
         // 3. Checar configurações de gatilho do usuário (`flow_config`)
@@ -216,6 +238,14 @@ export async function POST(req: NextRequest) {
             ? (configSnap.data() as FlowTriggerSettings)
             : { triggerMode: 'all_messages', keywords: [], ignoreIfActiveFlow: false };
 
+        const resetWord = (flowConfig.resetKeyword || 'reset').toLowerCase().trim();
+        const isReset = normalizedText === resetWord || normalizedText === 'reset';
+
+        // Se a mensagem NÃO for de reset e for fromMe, ignora para não causar loop
+        if (fromMe && !isReset) {
+            return NextResponse.json({ ignored: 'fromMe' }, { status: 200 });
+        }
+
         // 4. Checar sessão atual do contato (`flow_sessions/{phoneNumber}`)
         const sessionDocRef = doc(db, 'users', targetUserId, 'flow_sessions', phoneNumber);
         const sessionSnap = await getDoc(sessionDocRef);
@@ -223,9 +253,64 @@ export async function POST(req: NextRequest) {
             ? (sessionSnap.data() as FlowContactSession)
             : null;
 
-        const normalizedText = userText.toLowerCase();
+        // 5. PALAVRA DE RESET DO CHAT (Solicitado pelo usuário: comando reset personalizável)
+        if (isReset) {
+            console.log(`[Flow Webhook] Palavra de reset "${resetWord}" recebida de ${phoneNumber}. Resetando sessão do chat...`);
 
-        // 5. Palavras para forçar reinício
+            // Remove ou limpa a sessão
+            await deleteDoc(sessionDocRef).catch(() => {});
+
+            // Notifica o WhatsApp
+            await fetch(`${cleanServerUrl(userServerUrl)}/send/text`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', token: userInstanceToken, apikey: userInstanceToken },
+                body: JSON.stringify({
+                    number: phoneNumber,
+                    text: '🔄 *Chat resetado com sucesso!*\nIniciando fluxo...',
+                }),
+            }).catch(() => {});
+
+            // Imediatamente busca o fluxo e dispara do início
+            let flowToRestartId = flowConfig.defaultFlowId;
+            if (!flowToRestartId) {
+                const flowsSnap = await getDocs(collection(db, 'users', targetUserId, 'flows'));
+                const active = flowsSnap.docs
+                    .map((d) => ({ id: d.id, ...d.data() } as FlowDefinition))
+                    .find((f) => f.isActive !== false);
+                if (active) flowToRestartId = active.id;
+            }
+
+            if (flowToRestartId) {
+                const flowSnap = await getDoc(doc(db, 'users', targetUserId, 'flows', flowToRestartId));
+                if (flowSnap.exists()) {
+                    const flow = flowSnap.data() as FlowDefinition;
+                    const edges = flow.edges || [];
+                    const targetNodeIds = new Set(edges.map((e: any) => e.target));
+                    const rootNode = flow.nodes?.find((n: any) => !targetNodeIds.has(n.id)) || flow.nodes?.[0];
+
+                    if (rootNode) {
+                        await setDoc(sessionDocRef, {
+                            userId: targetUserId,
+                            flowId: flow.id,
+                            flowName: flow.name,
+                            phoneNumber,
+                            contactName: contactName || 'Cliente WhatsApp',
+                            currentNodeId: rootNode.id,
+                            currentNodeLabel: rootNode.data?.label || 'Início',
+                            lastMessageText: userText,
+                            status: 'active',
+                            lastInteractionAt: new Date().toISOString(),
+                        });
+                        await executeFlowNode(runnerCtx, flow, rootNode.id);
+                        return NextResponse.json({ success: true, reset: true, startedFlow: flow.name }, { status: 200 });
+                    }
+                }
+            }
+
+            return NextResponse.json({ success: true, reset: true }, { status: 200 });
+        }
+
+        // 6. Palavras de forçar reinício do menu
         const restartKeywords = (flowConfig.restartKeywords || ['menu', 'reiniciar', 'voltar', 'sair']).map((k) =>
             k.toLowerCase().trim()
         );
@@ -238,20 +323,25 @@ export async function POST(req: NextRequest) {
             }, { merge: true });
         }
 
-        // 6. Se está em sessão aguardando resposta de um menu:
+        // 7. Se está em sessão aguardando resposta de um menu:
         if (currentSession && currentSession.status === 'waiting_user_input' && !isRestart) {
             // Tenta processar como escolha de uma das opções do menu
             const handled = await handleUserMenuResponse(runnerCtx, currentSession, userText);
             if (handled) {
                 console.log(`[Flow Webhook] Opção de menu selecionada por ${phoneNumber}`);
+                // Atualiza última mensagem na sessão
+                await updateDoc(sessionDocRef, {
+                    lastMessageText: userText,
+                    lastInteractionAt: new Date().toISOString(),
+                }).catch(() => {});
                 return NextResponse.json({ handled: 'user_menu_response' }, { status: 200 });
             }
             // Se NÃO bateu com nenhuma opção do menu:
-            // A mensagem do usuário é tratada como novo gatilho, permitindo iniciar o fluxo!
+            // A mensagem do usuário é tratada como novo gatilho, reiniciando o fluxo!
             console.log(`[Flow Webhook] Texto "${userText}" não era opção de menu. Reiniciando fluxo para ${phoneNumber}.`);
         }
 
-        // 7. Determinar qual fluxo disparar
+        // 8. Determinar qual fluxo disparar
         let flowToTriggerId: string | null = null;
         const triggerMode = flowConfig.triggerMode || 'all_messages';
 
@@ -295,7 +385,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ignored: 'no_keyword_match' }, { status: 200 });
         }
 
-        // 8. Carrega o fluxo e inicia a execução
+        // 9. Carrega o fluxo e inicia a execução
         const flowRef = doc(db, 'users', targetUserId, 'flows', flowToTriggerId);
         const flowDocSnap = await getDoc(flowRef);
         if (!flowDocSnap.exists()) {
@@ -319,11 +409,16 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Flow Webhook] Disparando fluxo "${flow.name}" (nó raiz: ${rootNode.id}) para ${phoneNumber}`);
 
-        // Atualiza a sessão
+        // Atualiza a sessão para o Kanban
         await setDoc(sessionDocRef, {
             userId: targetUserId,
             flowId: flow.id,
+            flowName: flow.name,
+            phoneNumber,
+            contactName: contactName || 'Cliente WhatsApp',
             currentNodeId: rootNode.id,
+            currentNodeLabel: rootNode.data?.label || 'Início',
+            lastMessageText: userText,
             status: 'active',
             lastInteractionAt: new Date().toISOString(),
         });

@@ -382,6 +382,7 @@ export type FlowTriggerSettings = {
   keywords: FlowKeywordTrigger[];
   ignoreIfActiveFlow?: boolean;
   restartKeywords?: string[];
+  resetKeyword?: string;
   updatedAt?: any;
 };
 
@@ -432,8 +433,13 @@ export type FlowContactSession = {
   id: string;
   userId: string;
   flowId: string;
+  flowName?: string;
+  phoneNumber?: string;
+  contactName?: string;
   currentNodeId: string;
-  status: 'active' | 'waiting_user_input' | 'completed' | 'paused';
+  currentNodeLabel?: string;
+  lastMessageText?: string;
+  status: 'active' | 'waiting_user_input' | 'support' | 'completed' | 'paused';
   variables?: Record<string, any>;
   lastInteractionAt?: any;
   history?: Array<{ nodeId: string; timestamp: number; input?: string }>;

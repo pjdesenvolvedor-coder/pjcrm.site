@@ -24,7 +24,8 @@ import {
     Sparkles, 
     CheckCircle2, 
     HelpCircle,
-    Info
+    Info,
+    RotateCcw
 } from 'lucide-react';
 
 export default function FlowSettingsPage() {
@@ -51,6 +52,7 @@ export default function FlowSettingsPage() {
     const [keywords, setKeywords] = useState<FlowKeywordTrigger[]>([]);
     const [ignoreIfActiveFlow, setIgnoreIfActiveFlow] = useState<boolean>(true);
     const [restartKeywordsInput, setRestartKeywordsInput] = useState<string>('menu, reiniciar, voltar');
+    const [resetKeyword, setResetKeyword] = useState<string>('reset');
     const [isSaving, setIsSaving] = useState(false);
 
     // Novo item de palavra-chave
@@ -66,6 +68,9 @@ export default function FlowSettingsPage() {
             setIgnoreIfActiveFlow(savedConfig.ignoreIfActiveFlow !== false);
             if (savedConfig.restartKeywords) {
                 setRestartKeywordsInput(savedConfig.restartKeywords.join(', '));
+            }
+            if (savedConfig.resetKeyword) {
+                setResetKeyword(savedConfig.resetKeyword);
             }
         }
     }, [savedConfig]);
@@ -123,6 +128,7 @@ export default function FlowSettingsPage() {
             keywords,
             ignoreIfActiveFlow,
             restartKeywords: restartKeywordsList,
+            resetKeyword: resetKeyword.trim().toLowerCase() || 'reset',
             updatedAt: new Date().toISOString(),
         };
 
@@ -392,6 +398,25 @@ export default function FlowSettingsPage() {
                             />
                             <p className="text-xs text-muted-foreground">
                                 Separadas por vírgula. Se o cliente digitar qualquer uma dessas palavras, o fluxo atual é cancelado e ele volta ao menu principal.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm font-semibold flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400">
+                                    <RotateCcw className="h-4 w-4" />
+                                    Palavra de Reset do Chat (Para Testes)
+                                </Label>
+                                <Badge variant="secondary" className="font-mono text-[10px]">Reinicia sessão na hora</Badge>
+                            </div>
+                            <Input
+                                value={resetKeyword}
+                                onChange={(e) => setResetKeyword(e.target.value)}
+                                placeholder="reset"
+                                className="font-mono text-sm max-w-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Quando você (ou o cliente) mandar essa palavra no WhatsApp (padrão: <code>reset</code>), o chat é completamente resetado e o fluxo recomeça imediatamente do início para novos testes.
                             </p>
                         </div>
                     </CardContent>

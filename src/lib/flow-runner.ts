@@ -277,6 +277,7 @@ export async function executeFlowNode(
             userId: ctx.userId,
             flowId: flow.id,
             currentNodeId: nodeId,
+            currentNodeLabel: nodeData.label || 'Menu de Opções',
             status: 'waiting_user_input',
             lastInteractionAt: new Date().toISOString(),
         }, { merge: true });
@@ -318,6 +319,14 @@ export async function executeFlowNode(
             } catch (err) {
                 console.error('[FlowRunner] Erro ao marcar suporte:', err);
             }
+
+            // Atualiza sessão no Kanban como Em Atendimento Humano
+            await setDoc(sessionDocRef, {
+                status: 'support',
+                currentNodeId: nodeId,
+                currentNodeLabel: nodeData.label || 'Suporte Humano',
+                lastInteractionAt: new Date().toISOString(),
+            }, { merge: true });
 
             if (nodeData.text) {
                 await sendUazapiText(ctx, replaceVars(nodeData.text));
