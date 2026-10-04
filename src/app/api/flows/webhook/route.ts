@@ -151,7 +151,7 @@ function extractMessageInfo(body: any) {
 }
 
 export async function GET(req: NextRequest) {
-    return NextResponse.json({ status: 'ok', service: 'flows-webhook' });
+    return NextResponse.json({ status: 'ok', service: 'flows-webhook', version: 'v3_extractMessageInfo' });
 }
 
 export async function POST(req: NextRequest) {
