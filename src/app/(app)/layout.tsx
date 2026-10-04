@@ -55,6 +55,7 @@ import {
   Bug,
   Copy,
   Key,
+  Workflow,
 } from 'lucide-react';
 import Image from 'next/image';
 import { Upsell2MessageHandler } from '@/components/upsell-2-message-handler';
@@ -248,6 +249,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         calendario: true,
         linksClaro: true,
         sendMessage: true,
+        flows: true,
     };
 
     if (userProfile?.role === 'Admin') {
@@ -685,6 +687,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/delivery-link'}><Link href="/automations/delivery-link">Envio Acesso (Link)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/support'}><Link href="/automations/support">Msg Suporte</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                 <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/automations/leads'}><Link href="/automations/leads">Msg Leads</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                          </SidebarMenuSub>
+                      </CollapsibleContent>
+                  </Collapsible>
+                </SidebarMenuItem>
+              )}
+
+              {/* FLUXO (BotConversa style) */}
+              {(permissions.flows ?? true) && (
+                <SidebarMenuItem>
+                  <Collapsible defaultOpen={pathname.startsWith('/flows')}>
+                      <CollapsibleTrigger asChild>
+                          <SidebarMenuButton className="w-full justify-between" tooltip="Fluxo">
+                              <div className="flex items-center gap-2">
+                                <Workflow className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                <span className="text-[13px] font-bold text-indigo-700 dark:text-indigo-400">Fluxo</span>
+                              </div>
+                              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                          </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                          <SidebarMenuSub>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows/connection'}>
+                                        <Link href="/flows/connection">Conectar WhatsApp</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows' || (pathname.startsWith('/flows/') && pathname !== '/flows/connection' && pathname !== '/flows/settings')}>
+                                        <Link href="/flows">Canva (Criador)</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows/settings'}>
+                                        <Link href="/flows/settings">Configurações</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>

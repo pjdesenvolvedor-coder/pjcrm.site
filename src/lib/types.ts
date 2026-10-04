@@ -21,6 +21,7 @@ export type UserPermissions = {
   zapVendas: boolean;
   calendario: boolean;
   linksClaro: boolean;
+  flows?: boolean;
 };
 
 export type UserProfile = {
@@ -358,4 +359,84 @@ export type AutomatedMessageWorkflow = {
   trigger?: string;
   status?: string;
 };
+
+export type UazapiConnectionConfig = {
+  serverUrl: string;
+  instanceToken: string;
+  instanceName?: string;
+  owner?: string;
+  status: 'connected' | 'disconnected' | 'connecting' | 'hibernated' | 'unknown';
+  updatedAt?: any;
+};
+
+export type FlowKeywordTrigger = {
+  id: string;
+  keyword: string;
+  matchType: 'exact' | 'contains';
+  flowId: string;
+};
+
+export type FlowTriggerSettings = {
+  triggerMode: 'all_messages' | 'keywords';
+  defaultFlowId?: string;
+  keywords: FlowKeywordTrigger[];
+  ignoreIfActiveFlow?: boolean;
+  restartKeywords?: string[];
+  updatedAt?: any;
+};
+
+export type FlowNodeData = {
+  label?: string;
+  nodeType: 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'randomizer';
+  // Conteúdo
+  contentType?: 'text' | 'image' | 'audio' | 'video' | 'document';
+  text?: string;
+  mediaUrl?: string;
+  mediaCaption?: string;
+  // Menu
+  menuType?: 'list' | 'button' | 'numeric';
+  menuQuestionText?: string;
+  menuButtonTitle?: string;
+  menuFooterText?: string;
+  menuOptions?: Array<{ id: string; label: string; description?: string }>;
+  // Atraso inteligente
+  delaySeconds?: number;
+  delayPresence?: 'composing' | 'recording' | 'none';
+  // Ação
+  actionType?: 'add_tag' | 'remove_tag' | 'change_status' | 'open_support' | 'notify_attendant';
+  actionValue?: string;
+  // Condição
+  conditionType?: 'has_tag' | 'client_status' | 'custom_field';
+  conditionField?: string;
+  conditionValue?: string;
+  // Conexão de fluxo
+  targetFlowId?: string;
+  // Randomizador
+  randomAWeight?: number;
+};
+
+export type FlowDefinition = {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  isDefault?: boolean;
+  nodes: any[];
+  edges: any[];
+  createdAt?: any;
+  updatedAt?: any;
+};
+
+export type FlowContactSession = {
+  id: string;
+  userId: string;
+  flowId: string;
+  currentNodeId: string;
+  status: 'active' | 'waiting_user_input' | 'completed' | 'paused';
+  variables?: Record<string, any>;
+  lastInteractionAt?: any;
+  history?: Array<{ nodeId: string; timestamp: number; input?: string }>;
+};
+
 
