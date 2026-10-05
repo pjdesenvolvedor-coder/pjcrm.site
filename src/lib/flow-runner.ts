@@ -347,8 +347,22 @@ export async function executeFlowNode(
             const targetSnap = await getDoc(targetFlowRef);
             if (targetSnap.exists()) {
                 const targetFlow = targetSnap.data() as FlowDefinition;
-                const startNode = (targetFlow.nodes || [])[0];
+                const targetNodes = targetFlow.nodes || [];
+                const targetEdges = targetFlow.edges || [];
+
+                // Identifica nó inicial do fluxo de destino (nó sem entrada ou primeiro nó)
+                const targetNodeIds = new Set(targetEdges.map((e: any) => e.target));
+                const startNode = targetNodes.find((n: any) => !targetNodeIds.has(n.id)) || targetNodes[0];
+
                 if (startNode) {
+                    await setDoc(sessionDocRef, {
+                        flowId: nodeData.targetFlowId,
+                        flowName: targetFlow.name || 'Fluxo Conectado',
+                        currentNodeId: startNode.id,
+                        currentNodeLabel: (startNode.data as any)?.label || 'Início',
+                        lastInteractionAt: new Date().toISOString(),
+                    }, { merge: true });
+
                     await executeFlowNode(ctx, targetFlow, startNode.id);
                 }
             }

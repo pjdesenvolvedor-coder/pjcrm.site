@@ -6,9 +6,7 @@ import {
     Star,
     Grid,
     Zap,
-    Filter,
     Rocket,
-    Shuffle,
     Clock,
     MoreHorizontal,
     MoreVertical,
@@ -78,15 +76,6 @@ const nodeTypeConfigs: Record<
         badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
         iconClass: 'text-amber-500',
     },
-    condition: {
-        title: 'Condição',
-        icon: Filter,
-        color: '#60a5fa',
-        borderClass: 'border-blue-300 dark:border-blue-900',
-        bgClass: 'bg-blue-50/30 dark:bg-blue-950/20',
-        badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
-        iconClass: 'text-blue-500',
-    },
     flow_connect: {
         title: 'Conexão de Fluxo',
         icon: Rocket,
@@ -95,15 +84,6 @@ const nodeTypeConfigs: Record<
         bgClass: 'bg-emerald-50/30 dark:bg-emerald-950/20',
         badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
         iconClass: 'text-emerald-500',
-    },
-    randomizer: {
-        title: 'Randomizador',
-        icon: Shuffle,
-        color: '#22d3ee',
-        borderClass: 'border-cyan-300 dark:border-cyan-900',
-        bgClass: 'bg-cyan-50/30 dark:bg-cyan-950/20',
-        badgeClass: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300',
-        iconClass: 'text-cyan-500',
     },
 };
 
@@ -260,36 +240,13 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                     </div>
                 )}
 
-                {/* 5. NÓ DE CONDIÇÃO */}
-                {nodeData?.nodeType === 'condition' && (
-                    <div className="space-y-2">
-                        <p className="text-[11px] text-muted-foreground">
-                            {nodeData.conditionValue ? `Verificar: ${nodeData.conditionValue}` : 'Condição de desvio'}
-                        </p>
-                        <div className="flex justify-between items-center text-[10px] font-bold pt-1">
-                            <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Sim (Verdadeiro)</span>
-                            <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded">Não (Falso)</span>
-                        </div>
-                    </div>
-                )}
-
-                {/* 6. NÓ DE CONEXÃO DE FLUXO */}
+                {/* 5. NÓ DE CONEXÃO DE FLUXO */}
                 {nodeData?.nodeType === 'flow_connect' && (
                     <div className="p-2 bg-emerald-50/50 dark:bg-emerald-950/20 rounded border border-emerald-100 dark:border-emerald-900/50 flex items-center gap-2">
-                        <Rocket className="h-4 w-4 text-emerald-500" />
+                        <Rocket className="h-4 w-4 text-emerald-500 shrink-0" />
                         <span className="font-semibold text-xs text-emerald-800 dark:text-emerald-300">
-                            Pular para outro fluxo
+                            {nodeData.targetFlowId ? 'Transferir para outro fluxo' : 'Configurar fluxo de destino'}
                         </span>
-                    </div>
-                )}
-
-                {/* 7. NÓ RANDOMIZADOR */}
-                {nodeData?.nodeType === 'randomizer' && (
-                    <div className="space-y-1.5 p-2 bg-cyan-50/50 dark:bg-cyan-950/20 rounded border border-cyan-100 dark:border-cyan-900/50 text-[11px]">
-                        <div className="flex justify-between text-cyan-800 dark:text-cyan-300 font-bold">
-                            <span>Caminho A (50%)</span>
-                            <span>Caminho B (50%)</span>
-                        </div>
                     </div>
                 )}
             </div>

@@ -47,9 +47,7 @@ import {
     Grid,
     Clock,
     Zap,
-    Filter,
     Rocket,
-    Shuffle,
     Plus,
     CheckCircle2,
     Sparkles,
@@ -96,7 +94,24 @@ export default function FlowCanvasEditorPage() {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [isSaving, setIsSaving] = useState(false);
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+
+    // Refs para controle do salvamento automático em segundo plano sem travar o canva
+    const isInitialLoadedRef = useRef(false);
+    const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isSavingRef = useRef(false);
+    const pendingSaveRef = useRef(false);
+    const stateRef = useRef({
+        nodes,
+        edges,
+        flowName,
+        isActive,
+    });
+
+    // Manter stateRef sempre atualizado de forma síncrona com os valores mais recentes
+    useEffect(() => {
+        stateRef.current = { nodes, edges, flowName, isActive };
+    }, [nodes, edges, flowName, isActive]);
 
     // Controle da paleta de blocos (minimizar / expandir)
     const [isPaletteMinimized, setIsPaletteMinimized] = useState(false);
@@ -113,9 +128,10 @@ export default function FlowCanvasEditorPage() {
     const [testPhone, setTestPhone] = useState('');
     const [isTesting, setIsTesting] = useState(false);
 
-    // Carregar nós e arestas iniciais
+    // Carregar nós e arestas iniciais (somente uma vez, para não resetar o canva nem interromper o usuário)
     useEffect(() => {
-        if (flowData) {
+        if (flowData && !isInitialLoadedRef.current) {
+            isInitialLoadedRef.current = true;
             setFlowName(flowData.name || 'Fluxo sem nome');
             setIsActive(flowData.isActive !== false);
             if (Array.isArray(flowData.nodes) && flowData.nodes.length > 0) {
@@ -124,8 +140,94 @@ export default function FlowCanvasEditorPage() {
             if (Array.isArray(flowData.edges)) {
                 setEdges(flowData.edges);
             }
+            setSaveStatus('saved');
         }
     }, [flowData, setNodes, setEdges]);
+
+    // Execução assíncrona do salvamento em segundo plano sem congelar a UI
+    const executeAutoSave = useCallback(async () => {
+        if (!effectiveUserId || !flowDocRef || !isInitialLoadedRef.current) return;
+        if (isSavingRef.current) {
+            pendingSaveRef.current = true;
+            return;
+        }
+
+        isSavingRef.current = true;
+        setSaveStatus('saving');
+
+        const snapshot = stateRef.current;
+
+        try {
+            await updateDoc(flowDocRef, {
+                name: snapshot.flowName.trim() || 'Fluxo sem nome',
+                isActive: snapshot.isActive,
+                nodes: snapshot.nodes,
+                edges: snapshot.edges,
+                updatedAt: new Date().toISOString(),
+            });
+            setSaveStatus('saved');
+        } catch (err: any) {
+            console.error('[FlowAutoSave] Erro ao salvar fluxo:', err);
+            setSaveStatus('unsaved');
+        } finally {
+            isSavingRef.current = false;
+            if (pendingSaveRef.current) {
+                pendingSaveRef.current = false;
+                scheduleAutoSave(1000);
+            }
+        }
+    }, [effectiveUserId, flowDocRef]);
+
+    // Agendador de salvamento com debounce inteligente
+    const scheduleAutoSave = useCallback(
+        (delayMs = 1200) => {
+            if (!isInitialLoadedRef.current) return;
+            setSaveStatus('unsaved');
+
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+
+            autoSaveTimerRef.current = setTimeout(() => {
+                executeAutoSave();
+            }, delayMs);
+        },
+        [executeAutoSave]
+    );
+
+    // Limpar timer pendente ao desmontar o componente
+    useEffect(() => {
+        return () => {
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+        };
+    }, []);
+
+    // Interceptar mudanças de nós (ex: arrastar, selecionar) sem travar
+    const handleNodesChange = useCallback(
+        (changes: any) => {
+            onNodesChange(changes);
+            // Salvar apenas se houver movimentação de posição, dimensão ou remoção (ignorar simples clique/seleção)
+            const hasStructuralChange = changes.some((c: any) => c.type !== 'select');
+            if (hasStructuralChange) {
+                scheduleAutoSave(1200); // 1.2s após parar de arrastar
+            }
+        },
+        [onNodesChange, scheduleAutoSave]
+    );
+
+    // Interceptar mudanças de arestas
+    const handleEdgesChange = useCallback(
+        (changes: any) => {
+            onEdgesChange(changes);
+            const hasStructuralChange = changes.some((c: any) => c.type !== 'select');
+            if (hasStructuralChange) {
+                scheduleAutoSave(800);
+            }
+        },
+        [onEdgesChange, scheduleAutoSave]
+    );
 
     // Conectar nós (ligando bolinha com bolinha)
     const onConnect = useCallback(
@@ -140,9 +242,9 @@ export default function FlowCanvasEditorPage() {
                     eds
                 )
             );
-            setHasUnsavedChanges(true);
+            scheduleAutoSave(500);
         },
-        [setEdges]
+        [setEdges, scheduleAutoSave]
     );
 
     // Seleção de aresta ao clicar (fica vermelho para identificar no fluxo)
@@ -155,13 +257,13 @@ export default function FlowCanvasEditorPage() {
         (_: React.MouseEvent, edge: Edge) => {
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
             setSelectedEdgeId((current) => (current === edge.id ? null : current));
-            setHasUnsavedChanges(true);
+            scheduleAutoSave(500);
             toast({
                 title: 'Conexão removida',
                 description: 'A ligação entre os blocos foi excluída.',
             });
         },
-        [setEdges, toast]
+        [setEdges, scheduleAutoSave, toast]
     );
 
     // Desmarcar aresta selecionada ao clicar no fundo
@@ -192,7 +294,7 @@ export default function FlowCanvasEditorPage() {
         setIsConfigOpen(true);
     }, []);
 
-    // Adicionar novo bloco através da paleta flutuante
+    // Adicionar novo bloco através da paleta flutuante (sem Condição e sem Randomizador)
     const handleAddBlock = (type: FlowNodeData['nodeType']) => {
         const id = `node_${Date.now()}`;
         // Posição no centro da tela ou escalonada
@@ -242,27 +344,14 @@ export default function FlowCanvasEditorPage() {
                     text: 'Transferido para atendimento humano',
                 };
                 break;
-            case 'condition':
-                initialData = {
-                    nodeType: 'condition',
-                    label: 'Condição',
-                    conditionType: 'has_tag',
-                    conditionValue: 'vip',
-                };
-                break;
             case 'flow_connect':
                 initialData = {
                     nodeType: 'flow_connect',
                     label: 'Conectar Fluxo',
                 };
                 break;
-            case 'randomizer':
-                initialData = {
-                    nodeType: 'randomizer',
-                    label: 'Randomizador (50/50)',
-                    randomAWeight: 50,
-                };
-                break;
+            default:
+                return;
         }
 
         const newNode: Node = {
@@ -273,8 +362,8 @@ export default function FlowCanvasEditorPage() {
         };
 
         setNodes((nds) => [...nds, newNode]);
-        setHasUnsavedChanges(true);
-        toast({ title: 'Bloco adicionado!', description: 'Clique duas vezes no bloco para configurar.' });
+        scheduleAutoSave(500);
+        toast({ title: 'Bloco adicionado!', description: 'Clique no bloco para configurar.' });
     };
 
     // Atualizar dados do nó configurado
@@ -290,28 +379,23 @@ export default function FlowCanvasEditorPage() {
                 return node;
             })
         );
-        setHasUnsavedChanges(true);
+        scheduleAutoSave(300);
         toast({ title: 'Bloco atualizado!' });
     };
 
-    // Salvar o fluxo no Firestore
+    // Salvar manualmente (se o usuário clicar no botão Salvar)
     const handleSaveFlow = async () => {
         if (!effectiveUserId || !flowDocRef) return;
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
         setIsSaving(true);
 
         try {
-            await updateDoc(flowDocRef, {
-                name: flowName.trim() || 'Fluxo sem nome',
-                isActive,
-                nodes,
-                edges,
-                updatedAt: new Date().toISOString(),
-            });
-
-            setHasUnsavedChanges(false);
+            await executeAutoSave();
             toast({
                 title: 'Fluxo salvo com sucesso!',
-                description: `${nodes.length} blocos e ${edges.length} conexões salvas.`,
+                description: 'Todas as alterações foram salvas.',
             });
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Erro ao salvar fluxo', description: err.message });
@@ -384,7 +468,7 @@ export default function FlowCanvasEditorPage() {
                             value={flowName}
                             onChange={(e) => {
                                 setFlowName(e.target.value);
-                                setHasUnsavedChanges(true);
+                                scheduleAutoSave(1000);
                             }}
                             className="font-bold text-sm h-8 max-w-[260px] bg-transparent border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-background"
                         />
@@ -397,7 +481,7 @@ export default function FlowCanvasEditorPage() {
                             }`}
                             onClick={() => {
                                 setIsActive(!isActive);
-                                setHasUnsavedChanges(true);
+                                scheduleAutoSave(300);
                             }}
                         >
                             {isActive ? '🟢 Ativo' : '⚪ Pausado'}
@@ -406,11 +490,27 @@ export default function FlowCanvasEditorPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {hasUnsavedChanges && (
-                        <span className="text-xs text-amber-600 font-medium animate-pulse hidden sm:inline">
-                            Alterações não salvas
-                        </span>
-                    )}
+                    {/* INDICADOR DE STATUS DO SALVAMENTO AUTOMÁTICO */}
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors bg-slate-100 dark:bg-slate-800">
+                        {saveStatus === 'saved' && (
+                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span className="font-medium text-[11px] hidden sm:inline">Salvo automaticamente</span>
+                            </div>
+                        )}
+                        {saveStatus === 'saving' && (
+                            <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <span className="font-medium text-[11px] hidden sm:inline">Salvando alterações...</span>
+                            </div>
+                        )}
+                        {saveStatus === 'unsaved' && (
+                            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                <span className="font-medium text-[11px] hidden sm:inline">Alterações pendentes...</span>
+                            </div>
+                        )}
+                    </div>
 
                     <Button
                         variant="outline"
@@ -424,11 +524,15 @@ export default function FlowCanvasEditorPage() {
 
                     <Button
                         onClick={handleSaveFlow}
-                        disabled={isSaving}
+                        disabled={isSaving || saveStatus === 'saving'}
                         size="sm"
                         className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5 h-8 shadow-sm"
                     >
-                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                        {isSaving || saveStatus === 'saving' ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <Save className="h-3.5 w-3.5" />
+                        )}
                         Salvar
                     </Button>
                 </div>
@@ -504,19 +608,7 @@ export default function FlowCanvasEditorPage() {
                             <span>Ação</span>
                         </button>
 
-                        {/* 4. CONDIÇÃO */}
-                        <button
-                            type="button"
-                            onClick={() => handleAddBlock('condition')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all text-left group"
-                        >
-                            <div className="p-1 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-500 group-hover:scale-110 transition-transform">
-                                <Filter className="h-3.5 w-3.5" />
-                            </div>
-                            <span>Condição</span>
-                        </button>
-
-                        {/* 5. CONEXÃO DE FLUXO */}
+                        {/* 4. CONEXÃO DE FLUXO */}
                         <button
                             type="button"
                             onClick={() => handleAddBlock('flow_connect')}
@@ -528,19 +620,7 @@ export default function FlowCanvasEditorPage() {
                             <span>Conexão de fluxo</span>
                         </button>
 
-                        {/* 6. RANDOMIZADOR */}
-                        <button
-                            type="button"
-                            onClick={() => handleAddBlock('randomizer')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-all text-left group"
-                        >
-                            <div className="p-1 rounded-md bg-cyan-100 dark:bg-cyan-950 text-cyan-500 group-hover:scale-110 transition-transform">
-                                <Shuffle className="h-3.5 w-3.5" />
-                            </div>
-                            <span>Randomizador</span>
-                        </button>
-
-                        {/* 7. ATRASO INTELIGENTE */}
+                        {/* 5. ATRASO INTELIGENTE */}
                         <button
                             type="button"
                             onClick={() => handleAddBlock('delay')}
@@ -558,14 +638,8 @@ export default function FlowCanvasEditorPage() {
                 <ReactFlow
                     nodes={nodes}
                     edges={displayEdges}
-                    onNodesChange={(changes) => {
-                        onNodesChange(changes);
-                        setHasUnsavedChanges(true);
-                    }}
-                    onEdgesChange={(changes) => {
-                        onEdgesChange(changes);
-                        setHasUnsavedChanges(true);
-                    }}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={handleEdgesChange}
                     onConnect={onConnect}
                     onNodeClick={onNodeClick}
                     onEdgeClick={onEdgeClick}
@@ -594,6 +668,7 @@ export default function FlowCanvasEditorPage() {
                             if (type === 'content') return '#f87171';
                             if (type === 'delay') return '#fb923c';
                             if (type === 'action') return '#facc15';
+                            if (type === 'flow_connect') return '#4ade80';
                             return '#94a3b8';
                         }}
                     />

@@ -20,9 +20,7 @@ import {
     Star,
     Clock,
     Zap,
-    Filter,
     Rocket,
-    Shuffle,
     X,
     Plus,
     Trash2,
@@ -165,17 +163,13 @@ export function NodeConfigDialog({
                         {formData.nodeType === 'content' && <Star className="h-5 w-5 text-rose-500" />}
                         {formData.nodeType === 'delay' && <Clock className="h-5 w-5 text-orange-500" />}
                         {formData.nodeType === 'action' && <Zap className="h-5 w-5 text-amber-500" />}
-                        {formData.nodeType === 'condition' && <Filter className="h-5 w-5 text-blue-500" />}
                         {formData.nodeType === 'flow_connect' && <Rocket className="h-5 w-5 text-emerald-500" />}
-                        {formData.nodeType === 'randomizer' && <Shuffle className="h-5 w-5 text-cyan-500" />}
                         <span>
                             {formData.nodeType === 'menu' && 'Menu'}
                             {formData.nodeType === 'content' && 'Conteúdo'}
                             {formData.nodeType === 'delay' && 'Atraso Inteligente'}
                             {formData.nodeType === 'action' && 'Ação'}
-                            {formData.nodeType === 'condition' && 'Condição'}
                             {formData.nodeType === 'flow_connect' && 'Conexão de Fluxo'}
-                            {formData.nodeType === 'randomizer' && 'Randomizador'}
                         </span>
                     </DialogTitle>
                 </DialogHeader>
