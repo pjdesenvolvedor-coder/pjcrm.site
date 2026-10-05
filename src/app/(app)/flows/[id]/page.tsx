@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { FlowCustomNode } from '@/components/flows/FlowCustomNode';
 import { NodeConfigDialog } from '@/components/flows/NodeConfigDialog';
 import { FlowNodeActionsContext } from '@/components/flows/FlowNodeActionsContext';
+import { FlowWhatsAppSimulator } from '@/components/flows/FlowWhatsAppSimulator';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -124,10 +125,13 @@ export default function FlowCanvasEditorPage() {
     const [selectedNode, setSelectedNode] = useState<any | null>(null);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
 
-    // Modal de teste
+    // Modal de teste real
     const [isTestOpen, setIsTestOpen] = useState(false);
     const [testPhone, setTestPhone] = useState('');
     const [isTesting, setIsTesting] = useState(false);
+
+    // Simulador interativo do WhatsApp no canvas
+    const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
 
     // Carregar nós e arestas iniciais (somente uma vez, para não resetar o canva nem interromper o usuário)
     useEffect(() => {
@@ -537,10 +541,15 @@ export default function FlowCanvasEditorPage() {
                     </div>
 
                     <Button
-                        variant="outline"
+                        variant={isSimulatorOpen ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => setIsTestOpen(true)}
-                        className="text-xs gap-1.5 h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                        onClick={() => setIsSimulatorOpen(!isSimulatorOpen)}
+                        className={`text-xs gap-1.5 h-8 transition-all ${
+                            isSimulatorOpen
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400/40'
+                                : 'border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300'
+                        }`}
+                        title="Simular e testar fluxo no WhatsApp interativo"
                     >
                         <Play className="h-3.5 w-3.5 fill-current" />
                         Testar Fluxo
@@ -564,6 +573,16 @@ export default function FlowCanvasEditorPage() {
 
             {/* ÁREA CENTRAL DO CANVA COM PALETA FLUTUANTE */}
             <div className="relative flex-1 w-full h-full">
+                {/* SIMULADOR CLONADO DO WHATSAPP (DROPDOWN NO CANTO DIREITO SOB O BOTÃO) */}
+                <FlowWhatsAppSimulator
+                    open={isSimulatorOpen}
+                    onClose={() => setIsSimulatorOpen(false)}
+                    nodes={nodes}
+                    edges={edges}
+                    flowName={flowName}
+                    onOpenRealTest={() => setIsTestOpen(true)}
+                />
+
                 {/* PALETA LATERAL FLUTUANTE (MINIMIZÁVEL E COMPACTA) */}
                 {isPaletteMinimized ? (
                     <div className="absolute top-4 left-4 z-20 animate-in fade-in-50 slide-in-from-left-2">
