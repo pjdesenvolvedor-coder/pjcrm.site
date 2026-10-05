@@ -44,6 +44,31 @@ interface NodeConfigDialogProps {
     onDelete?: (nodeId: string) => void;
 }
 
+function normalizeMenuOptions(options: any): Array<{ id: string; label: string; description?: string }> {
+    if (!options) return [];
+    let list: any[] = [];
+    if (Array.isArray(options)) {
+        list = options;
+    } else if (typeof options === 'object') {
+        list = Object.values(options);
+    }
+    return list
+        .filter((item) => item !== null && item !== undefined)
+        .map((item, idx) => {
+            if (typeof item === 'string') {
+                return { id: `opt_${idx + 1}`, label: item, description: '' };
+            }
+            if (typeof item === 'object') {
+                return {
+                    id: String(item.id || `opt_${idx + 1}`),
+                    label: String(item.label || item.text || item.title || `Opção ${idx + 1}`),
+                    description: item.description ? String(item.description) : '',
+                };
+            }
+            return { id: `opt_${idx + 1}`, label: String(item), description: '' };
+        });
+}
+
 export function NodeConfigDialog({
     open,
     onOpenChange,
@@ -57,16 +82,18 @@ export function NodeConfigDialog({
     });
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+    // Arrastar e soltar para mudar a ordem das respostas do menu
+    const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
     useEffect(() => {
         if (node?.data) {
             setFormData({
                 ...node.data,
-                menuOptions: node.data.menuOptions ? [...node.data.menuOptions] : [],
+                menuOptions: normalizeMenuOptions(node.data.menuOptions),
             });
         }
     }, [node]);
-
-    if (!node) return null;
 
     const handleInsertVariable = (field: 'text' | 'menuQuestionText' | 'menuButtonTitle', variable: string) => {
         setFormData((prev) => ({
@@ -77,7 +104,7 @@ export function NodeConfigDialog({
 
     const handleAddMenuOption = () => {
         const newId = 'opt_' + Date.now();
-        const currentOptions = formData.menuOptions || [];
+        const currentOptions = normalizeMenuOptions(formData.menuOptions);
         setFormData((prev) => ({
             ...prev,
             menuOptions: [
@@ -88,7 +115,7 @@ export function NodeConfigDialog({
     };
 
     const handleUpdateMenuOption = (index: number, key: 'label' | 'description', value: string) => {
-        const updated = [...(formData.menuOptions || [])];
+        const updated = [...normalizeMenuOptions(formData.menuOptions)];
         if (updated[index]) {
             updated[index] = { ...updated[index], [key]: value };
             setFormData((prev) => ({ ...prev, menuOptions: updated }));
@@ -96,14 +123,10 @@ export function NodeConfigDialog({
     };
 
     const handleRemoveMenuOption = (index: number) => {
-        const updated = [...(formData.menuOptions || [])];
+        const updated = [...normalizeMenuOptions(formData.menuOptions)];
         updated.splice(index, 1);
         setFormData((prev) => ({ ...prev, menuOptions: updated }));
     };
-
-    // Arrastar e soltar para mudar a ordem das respostas do menu
-    const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
-    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
         setDraggedOptionIndex(index);
@@ -133,7 +156,7 @@ export function NodeConfigDialog({
             return;
         }
 
-        const currentOptions = [...(formData.menuOptions || [])];
+        const currentOptions = [...normalizeMenuOptions(formData.menuOptions)];
         const [movedItem] = currentOptions.splice(draggedOptionIndex, 1);
         currentOptions.splice(targetIndex, 0, movedItem);
 
@@ -152,13 +175,15 @@ export function NodeConfigDialog({
     };
 
     const handleSave = () => {
+        if (!node?.id) return;
         onSave(node.id, formData);
         onOpenChange(false);
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <>
+            <Dialog open={open && !!node} onOpenChange={onOpenChange}>
+                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="border-b pb-3">
                     <DialogTitle className="flex items-center gap-2 text-lg">
                         {formData.nodeType === 'menu' && <Grid className="h-5 w-5 text-indigo-600" />}
@@ -318,18 +343,18 @@ export function NodeConfigDialog({
                                         <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1 w-12" />
                                     </div>
                                     <Badge variant="outline" className="text-[11px]">
-                                        {formData.menuOptions?.length || 0} opção(ões)
+                                        {normalizeMenuOptions(formData.menuOptions).length} opção(ões)
                                     </Badge>
                                 </div>
 
                                 <div className="space-y-2.5">
-                                    {(formData.menuOptions || []).map((opt, idx) => {
+                                    {normalizeMenuOptions(formData.menuOptions).map((opt, idx) => {
                                         const isDragging = draggedOptionIndex === idx;
                                         const isDragOver = dragOverIndex === idx && draggedOptionIndex !== idx;
 
                                         return (
                                             <div
-                                                key={opt.id || idx}
+                                                key={opt.id || `opt_${idx}`}
                                                 draggable
                                                 onDragStart={(e) => handleDragStart(e, idx)}
                                                 onDragOver={(e) => handleDragOver(e, idx)}
@@ -359,7 +384,7 @@ export function NodeConfigDialog({
 
                                                     <Input
                                                         placeholder="Título da opção (Ex: Renovar Assinatura)"
-                                                        value={opt.label}
+                                                        value={opt.label || ''}
                                                         draggable={false}
                                                         onDragStart={(e) => e.stopPropagation()}
                                                         onChange={(e) =>
@@ -570,18 +595,21 @@ export function NodeConfigDialog({
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold">Conectar a Outro Fluxo</Label>
                                 <Select
-                                    value={formData.targetFlowId || ''}
+                                    value={formData.targetFlowId || undefined}
                                     onValueChange={(val) => setFormData({ ...formData, targetFlowId: val })}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Selecione o fluxo de destino..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {flowsList.map((f) => (
-                                            <SelectItem key={f.id} value={f.id}>
-                                                {f.name}
-                                            </SelectItem>
-                                        ))}
+                                        {Array.isArray(flowsList) &&
+                                            flowsList
+                                                .filter((f) => Boolean(f?.id))
+                                                .map((f) => (
+                                                    <SelectItem key={f.id} value={f.id}>
+                                                        {f.name || 'Fluxo sem nome'}
+                                                    </SelectItem>
+                                                ))}
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-muted-foreground">
@@ -631,13 +659,14 @@ export function NodeConfigDialog({
                     </div>
                 </DialogFooter>
             </DialogContent>
-
-            {/* MODAL DE PRÉ-VISUALIZAÇÃO NO WHATSAPP */}
-            <WhatsAppMenuPreviewDialog
-                open={isPreviewOpen}
-                onOpenChange={setIsPreviewOpen}
-                data={formData}
-            />
         </Dialog>
+
+        {/* MODAL DE PRÉ-VISUALIZAÇÃO NO WHATSAPP (FORA DO DIALOG PRINCIPAL) */}
+        <WhatsAppMenuPreviewDialog
+            open={isPreviewOpen}
+            onOpenChange={setIsPreviewOpen}
+            data={formData}
+        />
+    </>
     );
 }

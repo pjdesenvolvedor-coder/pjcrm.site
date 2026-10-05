@@ -97,8 +97,30 @@ export function WhatsAppMenuPreviewDialog({
 
     if (!open) return null;
 
-    const options = data.menuOptions && data.menuOptions.length > 0
-        ? data.menuOptions
+    const rawOptions = data.menuOptions;
+    let normalizedOptions: Array<{ id: string; label: string; description?: string }> = [];
+    if (Array.isArray(rawOptions)) {
+        normalizedOptions = rawOptions.filter(Boolean).map((opt: any, idx: number) => {
+            if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '' };
+            return {
+                id: String(opt.id || idx + 1),
+                label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+                description: opt.description ? String(opt.description) : '',
+            };
+        });
+    } else if (typeof rawOptions === 'object' && rawOptions !== null) {
+        normalizedOptions = Object.values(rawOptions).filter(Boolean).map((opt: any, idx: number) => {
+            if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '' };
+            return {
+                id: String(opt.id || idx + 1),
+                label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+                description: opt.description ? String(opt.description) : '',
+            };
+        });
+    }
+
+    const options = normalizedOptions.length > 0
+        ? normalizedOptions
         : [
               { id: '1', label: 'Opção 1', description: 'Detalhes da primeira opção' },
               { id: '2', label: 'Opção 2', description: 'Detalhes da segunda opção' },

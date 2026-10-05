@@ -910,8 +910,11 @@ export default function FlowCanvasEditorPage() {
 
             {/* MODAL DE CONFIGURAÇÃO DO NÓ (media_1791138953499.png) */}
             <NodeConfigDialog
-                open={isConfigOpen}
-                onOpenChange={setIsConfigOpen}
+                open={isConfigOpen && !!selectedNode}
+                onOpenChange={(isOpen) => {
+                    setIsConfigOpen(isOpen);
+                    if (!isOpen) setSelectedNode(null);
+                }}
                 node={selectedNode}
                 flowsList={allFlows || []}
                 onSave={handleSaveNodeData}

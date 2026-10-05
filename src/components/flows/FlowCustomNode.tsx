@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import {
     Star,
@@ -95,6 +95,26 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
     const Icon = config.icon;
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const { onDeleteNode } = useFlowNodeActions();
+
+    const menuOptions = useMemo(() => {
+        const raw = nodeData?.menuOptions;
+        if (!raw) return [];
+        const list = Array.isArray(raw)
+            ? raw
+            : typeof raw === 'object'
+            ? Object.values(raw)
+            : [];
+        return list.filter(Boolean).map((opt: any, idx: number) => {
+            if (typeof opt === 'string') {
+                return { id: `opt_${idx + 1}`, label: opt, description: '' };
+            }
+            return {
+                id: String(opt.id || `opt_${idx + 1}`),
+                label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+                description: opt.description ? String(opt.description) : '',
+            };
+        });
+    }, [nodeData?.menuOptions]);
 
     return (
         <div
@@ -216,9 +236,9 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                         )}
 
                         <div className="space-y-1.5 pt-1">
-                            {(nodeData.menuOptions || []).map((opt, idx) => (
+                            {menuOptions.map((opt, idx) => (
                                 <div
-                                    key={opt.id || idx}
+                                    key={opt.id || `opt_${idx}`}
                                     className="relative flex items-center justify-between p-1.5 px-2.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium border border-slate-200 dark:border-slate-700"
                                 >
                                     <span className="truncate pr-3">{opt.label}</span>

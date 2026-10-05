@@ -125,11 +125,26 @@ export async function sendUazapiMenu(
         const base = cleanServerUrl(ctx.serverUrl);
         const phone = formatPhoneWith55(ctx.phoneNumber);
 
+        const rawOptions = menuData.menuOptions;
+        const optionsList = Array.isArray(rawOptions)
+            ? rawOptions
+            : typeof rawOptions === 'object' && rawOptions !== null
+            ? Object.values(rawOptions)
+            : [];
+        const menuOptions = optionsList.filter(Boolean).map((opt: any, idx: number) => {
+            if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '' };
+            return {
+                id: String(opt.id || `opt_${idx + 1}`),
+                label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+                description: opt.description ? String(opt.description) : '',
+            };
+        });
+
         // Se for menu numérico ou lista simples:
         if (menuData.menuType === 'numeric') {
             let msg = menuData.menuQuestionText || 'Selecione uma opção:\n';
             msg += '\n\n';
-            (menuData.menuOptions || []).forEach((opt, idx) => {
+            menuOptions.forEach((opt, idx) => {
                 msg += `*${idx + 1}* - ${opt.label}${opt.description ? ` (${opt.description})` : ''}\n`;
             });
             return await sendUazapiText(ctx, msg.trim());
@@ -137,7 +152,7 @@ export async function sendUazapiMenu(
 
         // Se for lista nativa do WhatsApp UazAPI
         if (menuData.menuType === 'list') {
-            const choices = (menuData.menuOptions || []).map((opt) => {
+            const choices = menuOptions.map((opt) => {
                 if (opt.description) {
                     return `${opt.label}|${opt.id}|${opt.description}`;
                 }
@@ -163,7 +178,7 @@ export async function sendUazapiMenu(
             // Se falhar ou a instância não suportar lista nativa, fallback para menu texto
             if (!res.ok) {
                 let msg = `*${menuData.menuQuestionText || 'Escolha uma opção:'}*\n\n`;
-                (menuData.menuOptions || []).forEach((opt, idx) => {
+                menuOptions.forEach((opt, idx) => {
                     msg += `*${idx + 1}* - ${opt.label}\n`;
                 });
                 return await sendUazapiText(ctx, msg.trim());
@@ -174,7 +189,7 @@ export async function sendUazapiMenu(
 
         // Se for botões rápidos (type: button)
         if (menuData.menuType === 'button') {
-            const choices = (menuData.menuOptions || []).slice(0, 3).map((opt) => `${opt.label}|${opt.id}`);
+            const choices = menuOptions.slice(0, 3).map((opt) => `${opt.label}|${opt.id}`);
             const res = await fetch(`${base}/send/menu`, {
                 method: 'POST',
                 headers: {
@@ -192,7 +207,7 @@ export async function sendUazapiMenu(
 
             if (!res.ok) {
                 let msg = `*${menuData.menuQuestionText || 'Escolha uma opção:'}*\n\n`;
-                (menuData.menuOptions || []).forEach((opt, idx) => {
+                menuOptions.forEach((opt, idx) => {
                     msg += `*${idx + 1}* - ${opt.label}\n`;
                 });
                 return await sendUazapiText(ctx, msg.trim());
@@ -396,7 +411,20 @@ export async function handleUserMenuResponse(
     if (!currentNode || currentNode.data?.nodeType !== 'menu') return false;
 
     const menuData = currentNode.data as FlowNodeData;
-    const options = menuData.menuOptions || [];
+    const rawOptions = menuData.menuOptions;
+    const optionsList = Array.isArray(rawOptions)
+        ? rawOptions
+        : typeof rawOptions === 'object' && rawOptions !== null
+        ? Object.values(rawOptions)
+        : [];
+    const options = optionsList.filter(Boolean).map((opt: any, idx: number) => {
+        if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '' };
+        return {
+            id: String(opt.id || `opt_${idx + 1}`),
+            label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+            description: opt.description ? String(opt.description) : '',
+        };
+    });
     const normalizedInput = userText.trim().toLowerCase();
 
     // 1. Tenta correspondência exata por ID ou pelo número digitado (ex: "1", "2")

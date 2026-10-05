@@ -66,6 +66,22 @@ function getCurrentTime() {
     const d = new Date();
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+function normalizeMenuOptions(options: any): Array<{ id: string; label: string; description?: string }> {
+    if (!options) return [];
+    const list = Array.isArray(options)
+        ? options
+        : typeof options === 'object' && options !== null
+        ? Object.values(options)
+        : [];
+    return list.filter(Boolean).map((opt: any, idx: number) => {
+        if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '' };
+        return {
+            id: String(opt.id || idx + 1),
+            label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+            description: opt.description ? String(opt.description) : '',
+        };
+    });
+}
 
 export function FlowWhatsAppSimulator({
     open,
@@ -234,7 +250,7 @@ export function FlowWhatsAppSimulator({
                         menuType: data.menuType || 'list',
                         menuQuestionText: formatText(data.menuQuestionText) || 'Escolha uma opção:',
                         menuButtonTitle: data.menuButtonTitle || 'VER OPÇÕES',
-                        menuOptions: data.menuOptions || [],
+                        menuOptions: normalizeMenuOptions(data.menuOptions),
                     },
                     time: getCurrentTime(),
                 };
@@ -591,9 +607,9 @@ export function FlowWhatsAppSimulator({
                                         {/* 2. MODO BOTÕES: LISTA DE BOTÕES DO WHATSAPP */}
                                         {msg.menuData.menuType === 'button' && (
                                             <div className="space-y-1 pt-1">
-                                                {(msg.menuData.menuOptions || []).map((opt) => (
+                                                {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => (
                                                     <button
-                                                        key={opt.id}
+                                                        key={opt.id || `btn_${idx}`}
                                                         type="button"
                                                         disabled={activeMenuNodeId !== msg.nodeId}
                                                         onClick={() => msg.nodeId && handleSelectOption(opt, msg.nodeId)}
@@ -608,9 +624,9 @@ export function FlowWhatsAppSimulator({
                                         {/* 3. MODO NUMÉRICO: OPÇÕES CLICÁVEIS */}
                                         {msg.menuData.menuType === 'numeric' && (
                                             <div className="space-y-1.5 pt-1 font-medium">
-                                                {(msg.menuData.menuOptions || []).map((opt, idx) => (
+                                                {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => (
                                                     <button
-                                                        key={opt.id}
+                                                        key={opt.id || `num_${idx}`}
                                                         type="button"
                                                         disabled={activeMenuNodeId !== msg.nodeId}
                                                         onClick={() => msg.nodeId && handleSelectOption(opt, msg.nodeId)}
