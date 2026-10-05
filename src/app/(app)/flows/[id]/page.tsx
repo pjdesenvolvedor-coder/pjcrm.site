@@ -600,7 +600,7 @@ export default function FlowCanvasEditorPage() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col h-screen max-h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-950">
             {/* BARRA SUPERIOR DO CANVA */}
             <div className="h-14 border-b bg-card px-4 flex items-center justify-between z-10 shadow-sm shrink-0">
                 <div className="flex items-center gap-3">
@@ -722,7 +722,7 @@ export default function FlowCanvasEditorPage() {
             </div>
 
             {/* ÁREA CENTRAL DO CANVA COM PALETA FLUTUANTE */}
-            <div className="relative flex-1 w-full h-full">
+            <div className="relative flex-1 w-full min-h-0 overflow-hidden">
                 {/* SIMULADOR CLONADO DO WHATSAPP (DROPDOWN NO CANTO DIREITO SOB O BOTÃO) */}
                 <FlowWhatsAppSimulator
                     open={isSimulatorOpen}
@@ -852,7 +852,7 @@ export default function FlowCanvasEditorPage() {
                             style: { stroke: '#6366f1', strokeWidth: 2.5 },
                         }}
                         proOptions={{ hideAttribution: true }}
-                        className="bg-slate-50 dark:bg-slate-950"
+                        className="bg-slate-50 dark:bg-slate-950 w-full h-full"
                     >
                         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#94a3b8" />
                         <Controls className="!bg-card !border-border !shadow-md">
