@@ -18,6 +18,8 @@ import {
     BackgroundVariant,
     ConnectionMode,
     ConnectionLineType,
+    ReactFlowProvider,
+    useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -64,16 +66,18 @@ import {
     Eye,
     EyeOff,
     UserCheck,
+    GripVertical,
 } from 'lucide-react';
 
 const nodeTypes = {
     customFlow: FlowCustomNode,
 };
 
-export default function FlowCanvasEditorPage() {
+function FlowCanvasEditorContent() {
     const params = useParams();
     const router = useRouter();
     const flowId = params?.id as string;
+    const { screenToFlowPosition } = useReactFlow();
 
     const { firestore, effectiveUserId } = useFirebase();
     const { toast } = useToast();
@@ -453,85 +457,135 @@ export default function FlowCanvasEditorPage() {
         setIsConfigOpen(true);
     }, []);
 
-    // Adicionar novo bloco através da paleta flutuante
-    const handleAddBlock = (type: FlowNodeData['nodeType']) => {
-        pushHistory();
-        const id = `node_${Date.now()}`;
-        // Posição no centro da tela ou escalonada
-        const xOffset = 250 + Math.random() * 80;
-        const yOffset = 180 + Math.random() * 80;
+    // Criar novo bloco em posição informada ou padrão
+    const createNodeAtPosition = useCallback(
+        (type: FlowNodeData['nodeType'], position?: { x: number; y: number }) => {
+            pushHistory();
+            const id = `node_${Date.now()}`;
+            // Posição informada (drag and drop) ou centralizada/escalonada padrão (clique)
+            const targetPos = position || {
+                x: 250 + Math.random() * 80,
+                y: 180 + Math.random() * 80,
+            };
 
-        let initialData: FlowNodeData = {
-            nodeType: type,
-            label: '',
-        };
+            let initialData: FlowNodeData = {
+                nodeType: type,
+                label: '',
+            };
 
-        switch (type) {
-            case 'condition':
-                initialData = {
-                    nodeType: 'condition',
-                    label: 'Verificar Cliente CRM',
-                    conditionType: 'is_client',
-                };
-                break;
-            case 'content':
-                initialData = {
-                    nodeType: 'content',
-                    contentType: 'text',
-                    label: 'Mensagem',
-                    text: 'Olá! Como posso ajudar você hoje?',
-                };
-                break;
-            case 'menu':
-                initialData = {
-                    nodeType: 'menu',
-                    label: 'Menu',
-                    menuType: 'list',
-                    menuButtonTitle: 'VER OPÇÕES',
-                    menuQuestionText: 'Escolha uma das opções abaixo:',
-                    menuOptions: [
-                        { id: 'opt_1', label: 'Opção 1', description: 'Detalhes da opção 1' },
-                        { id: 'opt_2', label: 'Opção 2', description: 'Detalhes da opção 2' },
-                    ],
-                };
-                break;
-            case 'delay':
-                initialData = {
-                    nodeType: 'delay',
-                    label: 'Atraso Inteligente',
-                    delaySeconds: 3,
-                    delayPresence: 'composing',
-                };
-                break;
-            case 'action':
-                initialData = {
-                    nodeType: 'action',
-                    label: 'Ação',
-                    actionType: 'open_support',
-                    text: 'Transferido para atendimento humano',
-                };
-                break;
-            case 'flow_connect':
-                initialData = {
-                    nodeType: 'flow_connect',
-                    label: 'Conectar Fluxo',
-                };
-                break;
-            default:
-                return;
-        }
+            switch (type) {
+                case 'condition':
+                    initialData = {
+                        nodeType: 'condition',
+                        label: 'Verificar Cliente CRM',
+                        conditionType: 'is_client',
+                    };
+                    break;
+                case 'content':
+                    initialData = {
+                        nodeType: 'content',
+                        contentType: 'text',
+                        label: 'Mensagem',
+                        text: 'Olá! Como posso ajudar você hoje?',
+                    };
+                    break;
+                case 'menu':
+                    initialData = {
+                        nodeType: 'menu',
+                        label: 'Menu',
+                        menuType: 'list',
+                        menuButtonTitle: 'VER OPÇÕES',
+                        menuQuestionText: 'Escolha uma das opções abaixo:',
+                        menuOptions: [
+                            { id: 'opt_1', label: 'Opção 1', description: 'Detalhes da opção 1' },
+                            { id: 'opt_2', label: 'Opção 2', description: 'Detalhes da opção 2' },
+                        ],
+                    };
+                    break;
+                case 'delay':
+                    initialData = {
+                        nodeType: 'delay',
+                        label: 'Atraso Inteligente',
+                        delaySeconds: 3,
+                        delayPresence: 'composing',
+                    };
+                    break;
+                case 'action':
+                    initialData = {
+                        nodeType: 'action',
+                        label: 'Ação',
+                        actionType: 'open_support',
+                        text: 'Transferido para atendimento humano',
+                    };
+                    break;
+                case 'flow_connect':
+                    initialData = {
+                        nodeType: 'flow_connect',
+                        label: 'Conectar Fluxo',
+                    };
+                    break;
+                default:
+                    return;
+            }
 
-        const newNode: Node = {
-            id,
-            type: 'customFlow',
-            position: { x: xOffset, y: yOffset },
-            data: initialData,
-        };
+            const newNode: Node = {
+                id,
+                type: 'customFlow',
+                position: targetPos,
+                data: initialData,
+            };
 
-        setNodes((nds) => [...nds, newNode]);
-        scheduleAutoSave(500);
-        toast({ title: 'Bloco adicionado!', description: 'Clique no bloco para configurar.' });
+            setNodes((nds) => [...nds, newNode]);
+            scheduleAutoSave(500);
+            toast({ title: 'Bloco adicionado!', description: 'Clique no bloco para configurar.' });
+        },
+        [pushHistory, setNodes, scheduleAutoSave, toast]
+    );
+
+    // Adicionar novo bloco através do clique na paleta flutuante
+    const handleAddBlock = useCallback(
+        (type: FlowNodeData['nodeType']) => {
+            createNodeAtPosition(type);
+        },
+        [createNodeAtPosition]
+    );
+
+    // Handlers para Arrastar e Soltar (Drag and Drop) da paleta para o Canva
+    const onDragStart = (event: React.DragEvent, nodeType: FlowNodeData['nodeType']) => {
+        event.dataTransfer.setData('application/reactflow', nodeType);
+        event.dataTransfer.effectAllowed = 'move';
     };
+
+    const onDragOver = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+    }, []);
+
+    const onDrop = useCallback(
+        (event: React.DragEvent) => {
+            event.preventDefault();
+
+            const type = event.dataTransfer.getData('application/reactflow') as FlowNodeData['nodeType'];
+            if (!type) {
+                return;
+            }
+
+            // Converter a coordenada do mouse da tela para a coordenada interna do canva (com zoom/pan)
+            const position = screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY,
+            });
+
+            // Centralizar o nó no cursor do mouse (cards medem aprox 260px de largura e 70px de cabeçalho)
+            const centeredPosition = {
+                x: Math.round(position.x - 130),
+                y: Math.round(position.y - 35),
+            };
+
+            createNodeAtPosition(type, centeredPosition);
+        },
+        [screenToFlowPosition, createNodeAtPosition]
+    );
 
     // Atualizar dados do nó configurado
     const handleSaveNodeData = (nodeId: string, updatedData: FlowNodeData) => {
@@ -740,7 +794,11 @@ export default function FlowCanvasEditorPage() {
             </div>
 
             {/* ÁREA CENTRAL DO CANVA COM PALETA FLUTUANTE */}
-            <div className="relative flex-1 w-full min-h-0 overflow-hidden">
+            <div
+                className="relative flex-1 w-full min-h-0 overflow-hidden"
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+            >
                 {/* SIMULADOR CLONADO DO WHATSAPP (DROPDOWN NO CANTO DIREITO SOB O BOTÃO) */}
                 <FlowWhatsAppSimulator
                     open={isSimulatorOpen}
@@ -751,7 +809,7 @@ export default function FlowCanvasEditorPage() {
                     onOpenRealTest={() => setIsTestOpen(true)}
                 />
 
-                {/* PALETA LATERAL FLUTUANTE (MINIMIZÁVEL E COMPACTA) */}
+                {/* PALETA LATERAL FLUTUANTE (MINIMIZÁVEL E COMPACTA COM ARRASTAR E SOLTAR) */}
                 {isPaletteMinimized ? (
                     <div className="absolute top-4 left-4 z-20 animate-in fade-in-50 slide-in-from-left-2">
                         <button
@@ -768,7 +826,7 @@ export default function FlowCanvasEditorPage() {
                         </button>
                     </div>
                 ) : (
-                    <div className="absolute top-4 left-4 z-20 bg-card/95 backdrop-blur-md rounded-2xl border-2 border-slate-200/80 dark:border-slate-800 shadow-xl p-2 py-2.5 w-[204px] space-y-0.5 select-none animate-in fade-in-50 slide-in-from-left-4">
+                    <div className="absolute top-4 left-4 z-20 bg-card/95 backdrop-blur-md rounded-2xl border-2 border-slate-200/80 dark:border-slate-800 shadow-xl p-2 py-2.5 w-[218px] space-y-0.5 select-none animate-in fade-in-50 slide-in-from-left-4">
                         <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5 border-b border-border/50 mb-1">
                             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
                                 Adicionar Bloco
@@ -786,73 +844,97 @@ export default function FlowCanvasEditorPage() {
                         {/* 0. VERIFICAR CLIENTE CRM (CONDIÇÃO) */}
                         <button
                             type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'condition')}
                             onClick={() => handleAddBlock('condition')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-all text-left group"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
                         >
-                            <div className="p-1 rounded-md bg-sky-100 dark:bg-sky-950 text-sky-600 group-hover:scale-110 transition-transform">
+                            <div className="p-1 rounded-md bg-sky-100 dark:bg-sky-950 text-sky-600 group-hover:scale-110 transition-transform shrink-0">
                                 <UserCheck className="h-3.5 w-3.5" />
                             </div>
-                            <span>Verificar Cliente CRM</span>
+                            <span className="flex-1 truncate">Verificar Cliente CRM</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
 
                         {/* 1. CONTEÚDO */}
                         <button
                             type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'content')}
                             onClick={() => handleAddBlock('content')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all text-left group"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
                         >
-                            <div className="p-1 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-500 group-hover:scale-110 transition-transform">
+                            <div className="p-1 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-500 group-hover:scale-110 transition-transform shrink-0">
                                 <Star className="h-3.5 w-3.5 fill-current" />
                             </div>
-                            <span>Conteúdo</span>
+                            <span className="flex-1 truncate">Conteúdo</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
 
                         {/* 2. MENU */}
                         <button
                             type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'menu')}
                             onClick={() => handleAddBlock('menu')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all text-left group"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
                         >
-                            <div className="p-1 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-600 group-hover:scale-110 transition-transform">
+                            <div className="p-1 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-600 group-hover:scale-110 transition-transform shrink-0">
                                 <Grid className="h-3.5 w-3.5" />
                             </div>
-                            <span>Menu</span>
+                            <span className="flex-1 truncate">Menu</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
 
                         {/* 3. AÇÃO */}
                         <button
                             type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'action')}
                             onClick={() => handleAddBlock('action')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all text-left group"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
                         >
-                            <div className="p-1 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-500 group-hover:scale-110 transition-transform">
+                            <div className="p-1 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-500 group-hover:scale-110 transition-transform shrink-0">
                                 <Zap className="h-3.5 w-3.5 fill-current" />
                             </div>
-                            <span>Ação</span>
+                            <span className="flex-1 truncate">Ação</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
 
                         {/* 4. CONEXÃO DE FLUXO */}
                         <button
                             type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'flow_connect')}
                             onClick={() => handleAddBlock('flow_connect')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all text-left group"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
                         >
-                            <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-500 group-hover:scale-110 transition-transform">
+                            <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-500 group-hover:scale-110 transition-transform shrink-0">
                                 <Rocket className="h-3.5 w-3.5" />
                             </div>
-                            <span>Conexão de fluxo</span>
+                            <span className="flex-1 truncate">Conexão de fluxo</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
 
                         {/* 5. ATRASO INTELIGENTE */}
                         <button
                             type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'delay')}
                             onClick={() => handleAddBlock('delay')}
-                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-all text-left group"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
                         >
-                            <div className="p-1 rounded-md bg-orange-100 dark:bg-orange-950 text-orange-500 group-hover:scale-110 transition-transform">
+                            <div className="p-1 rounded-md bg-orange-100 dark:bg-orange-950 text-orange-500 group-hover:scale-110 transition-transform shrink-0">
                                 <Clock className="h-3.5 w-3.5" />
                             </div>
-                            <span>Atraso inteligente</span>
+                            <span className="flex-1 truncate">Atraso inteligente</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
                     </div>
                 )}
@@ -869,6 +951,8 @@ export default function FlowCanvasEditorPage() {
                         onEdgeClick={onEdgeClick}
                         onEdgeDoubleClick={onEdgeDoubleClick}
                         onPaneClick={onPaneClick}
+                        onDragOver={onDragOver}
+                        onDrop={onDrop}
                         deleteKeyCode={null}
                         connectionMode={ConnectionMode.Loose}
                         connectionLineType={ConnectionLineType.SmoothStep}
@@ -901,6 +985,7 @@ export default function FlowCanvasEditorPage() {
                                 className="!bg-card !border !border-border !rounded-xl !shadow-lg"
                                 nodeColor={(n: any) => {
                                     const type = n.data?.nodeType;
+                                    if (type === 'condition') return '#0284c7';
                                     if (type === 'menu') return '#818cf8';
                                     if (type === 'content') return '#f87171';
                                     if (type === 'delay') return '#fb923c';
@@ -1038,3 +1123,12 @@ export default function FlowCanvasEditorPage() {
         </div>
     );
 }
+
+export default function FlowCanvasEditorPage() {
+    return (
+        <ReactFlowProvider>
+            <FlowCanvasEditorContent />
+        </ReactFlowProvider>
+    );
+}
+
