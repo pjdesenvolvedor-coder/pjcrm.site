@@ -388,7 +388,7 @@ export type FlowTriggerSettings = {
 
 export type FlowNodeData = {
   label?: string;
-  nodeType: 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'randomizer';
+  nodeType: 'start' | 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'randomizer';
   // Conteúdo
   contentType?: 'text' | 'image' | 'audio' | 'video' | 'document';
   text?: string;

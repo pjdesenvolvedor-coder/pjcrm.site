@@ -65,10 +65,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'O fluxo não possui blocos para executar.' }, { status: 400 });
         }
 
-        // Identifica o nó inicial
+        // Identifica o nó inicial (prioriza o bloco de início 'start', depois nó sem entrada ou primeiro nó)
         const edges = flow.edges || [];
+        const explicitStartNode = nodes.find((n: any) => n.data?.nodeType === 'start');
         const targetNodeIds = new Set(edges.map((e: any) => e.target));
-        const rootNode = nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
+        const rootNode = explicitStartNode || nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
 
         const cleanNumber = phoneNumber.replace(/\D/g, '');
 

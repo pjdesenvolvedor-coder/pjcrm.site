@@ -20,6 +20,7 @@ import {
     CheckCircle2,
     UserCheck,
     UserX,
+    PlayCircle,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -43,6 +44,15 @@ const nodeTypeConfigs: Record<
         iconClass: string;
     }
 > = {
+    start: {
+        title: 'Início',
+        icon: PlayCircle,
+        color: '#10b981',
+        borderClass: 'border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-400/20',
+        bgClass: 'bg-emerald-50/60 dark:bg-emerald-950/30',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold',
+        iconClass: 'text-emerald-600 dark:text-emerald-400',
+    },
     content: {
         title: 'Conteúdo',
         icon: Star,
@@ -132,14 +142,16 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                 config.borderClass
             } ${selected ? 'ring-2 ring-indigo-500 ring-offset-2 shadow-lg scale-[1.02]' : 'hover:shadow-lg'}`}
         >
-            {/* ENTRADA (Target Handle) */}
-            <Handle
-                type="target"
-                position={Position.Left}
-                id="target"
-                className="!w-4 !h-4 !bg-slate-400 hover:!bg-indigo-500 !border-2 !border-white dark:!border-slate-900 !rounded-full -ml-[8px] cursor-crosshair shadow-sm z-10"
-                title="Ponto de entrada: solte a conexão aqui"
-            />
+            {/* ENTRADA (Target Handle - Oculto no nó de Início) */}
+            {nodeData?.nodeType !== 'start' && (
+                <Handle
+                    type="target"
+                    position={Position.Left}
+                    id="target"
+                    className="!w-4 !h-4 !bg-slate-400 hover:!bg-indigo-500 !border-2 !border-white dark:!border-slate-900 !rounded-full -ml-[8px] cursor-crosshair shadow-sm z-10"
+                    title="Ponto de entrada: solte a conexão aqui"
+                />
+            )}
 
             {/* CABEÇALHO DO NÓ */}
             <div className={`flex items-center justify-between p-2.5 px-3 border-b rounded-t-[10px] ${config.bgClass}`}>
@@ -216,6 +228,19 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
 
             {/* CORPO DO NÓ */}
             <div className="p-3 text-xs space-y-2">
+                {/* 0. NÓ DE INÍCIO DO FLUXO (START) */}
+                {nodeData?.nodeType === 'start' && (
+                    <div className="space-y-2 p-0.5">
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800 shadow-2xs">
+                            <PlayCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span className="font-semibold text-xs">Ponto de Partida</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
+                            O fluxo inicia a partir deste bloco. Conecte a saída à direita para o primeiro passo (ex: Verificar Cliente CRM, Mensagem ou Menu).
+                        </p>
+                    </div>
+                )}
+
                 {/* 1. NÓ DE CONTEÚDO */}
                 {nodeData?.nodeType === 'content' && (
                     <div className="space-y-1.5">
@@ -359,8 +384,8 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                     type="source"
                     position={Position.Right}
                     id="source"
-                    className="!w-4 !h-4 !bg-indigo-500 hover:!bg-indigo-600 !border-2 !border-white dark:!border-slate-900 !rounded-full -mr-[8px] cursor-crosshair shadow-sm z-10"
-                    title="Ponto de saída: clique e arraste para ligar a outro bloco"
+                    className={`!w-4 !h-4 ${nodeData?.nodeType === 'start' ? '!bg-emerald-500 hover:!bg-emerald-600' : '!bg-indigo-500 hover:!bg-indigo-600'} !border-2 !border-white dark:!border-slate-900 !rounded-full -mr-[8px] cursor-crosshair shadow-sm z-10`}
+                    title={nodeData?.nodeType === 'start' ? "Início: clique e arraste para ligar ao primeiro bloco" : "Ponto de saída: clique e arraste para ligar a outro bloco"}
                 />
             )}
 

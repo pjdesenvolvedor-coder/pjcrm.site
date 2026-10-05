@@ -445,10 +445,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ignored: 'flow_has_no_nodes' }, { status: 200 });
         }
 
-        // Identifica o nó raiz (sem aresta de entrada) ou o primeiro nó
+        // Identifica o nó raiz (prioriza o bloco de início 'start', depois nó sem entrada ou primeiro nó)
         const edges = flow.edges || [];
+        const explicitStartNode = nodes.find((n: any) => n.data?.nodeType === 'start');
         const targetNodeIds = new Set(edges.map((e: any) => e.target));
-        const rootNode = nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
+        const rootNode = explicitStartNode || nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
 
         console.log(`[Flow Webhook] Disparando fluxo "${flow.name}" (nó raiz: ${rootNode.id}) para ${phoneNumber}`);
 

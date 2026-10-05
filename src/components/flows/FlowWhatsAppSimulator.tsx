@@ -208,6 +208,17 @@ export function FlowWhatsAppSimulator({
                     .replace(/\{observacoes\}/gi, cNotes);
             };
 
+            // 0. START (Ponto de Partida / Início do Fluxo)
+            if (data.nodeType === 'start') {
+                const nextEdge = edges.find((e) => e.source === nodeId);
+                if (nextEdge && nextEdge.target) {
+                    await executeNode(nextEdge.target);
+                } else {
+                    setCurrentNotice('Início do fluxo: Conecte a saída deste bloco ao próximo passo para simular.');
+                }
+                return;
+            }
+
             // 1. CONTEÚDO
             if (data.nodeType === 'content') {
                 setIsTyping(true);
@@ -398,9 +409,10 @@ export function FlowWhatsAppSimulator({
             return;
         }
 
-        // Identifica o nó de início (nó que não recebe aresta de nenhum outro nó)
+        // Identifica o nó de início (prioriza o bloco de início 'start', ou nó sem entrada / primeiro nó)
+        const explicitStartNode = nodes.find((n) => (n.data as any)?.nodeType === 'start');
         const targetNodeIds = new Set(edges.map((e) => e.target));
-        const rootNode = nodes.find((n) => !targetNodeIds.has(n.id)) || nodes[0];
+        const rootNode = explicitStartNode || nodes.find((n) => !targetNodeIds.has(n.id)) || nodes[0];
 
         if (rootNode) {
             // Executa com leve atraso inicial para efeito realista

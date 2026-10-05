@@ -67,6 +67,7 @@ import {
     EyeOff,
     UserCheck,
     GripVertical,
+    PlayCircle,
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -481,6 +482,12 @@ function FlowCanvasEditorContent() {
             };
 
             switch (type) {
+                case 'start':
+                    initialData = {
+                        nodeType: 'start',
+                        label: 'Início do Fluxo',
+                    };
+                    break;
                 case 'condition':
                     initialData = {
                         nodeType: 'condition',
@@ -849,7 +856,23 @@ function FlowCanvasEditorContent() {
                             </button>
                         </div>
 
-                        {/* 0. VERIFICAR CLIENTE CRM (CONDIÇÃO) */}
+                        {/* 0. INÍCIO DO FLUXO (START) */}
+                        <button
+                            type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'start')}
+                            onClick={() => handleAddBlock('start')}
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
+                        >
+                            <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-600 group-hover:scale-110 transition-transform shrink-0">
+                                <PlayCircle className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="flex-1 truncate">Início do Fluxo</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
+                        </button>
+
+                        {/* 1. VERIFICAR CLIENTE CRM (CONDIÇÃO) */}
                         <button
                             type="button"
                             draggable
@@ -993,6 +1016,7 @@ function FlowCanvasEditorContent() {
                                 className="!bg-card !border !border-border !rounded-xl !shadow-lg"
                                 nodeColor={(n: any) => {
                                     const type = n.data?.nodeType;
+                                    if (type === 'start') return '#10b981';
                                     if (type === 'condition') return '#0284c7';
                                     if (type === 'menu') return '#818cf8';
                                     if (type === 'content') return '#f87171';

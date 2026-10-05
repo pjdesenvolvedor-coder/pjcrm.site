@@ -38,6 +38,7 @@ import {
     KeyRound,
     Tv,
     CreditCard,
+    PlayCircle,
 } from 'lucide-react';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
@@ -218,6 +219,7 @@ export function NodeConfigDialog({
                 <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="border-b pb-3">
                     <DialogTitle className="flex items-center gap-2 text-lg">
+                        {formData.nodeType === 'start' && <PlayCircle className="h-5 w-5 text-emerald-500" />}
                         {formData.nodeType === 'menu' && <Grid className="h-5 w-5 text-indigo-600" />}
                         {formData.nodeType === 'content' && <Star className="h-5 w-5 text-rose-500" />}
                         {formData.nodeType === 'delay' && <Clock className="h-5 w-5 text-orange-500" />}
@@ -225,6 +227,7 @@ export function NodeConfigDialog({
                         {formData.nodeType === 'flow_connect' && <Rocket className="h-5 w-5 text-emerald-500" />}
                         {formData.nodeType === 'condition' && <UserCheck className="h-5 w-5 text-sky-500" />}
                         <span>
+                            {formData.nodeType === 'start' && 'Início do Fluxo'}
                             {formData.nodeType === 'menu' && 'Menu'}
                             {formData.nodeType === 'content' && 'Conteúdo'}
                             {formData.nodeType === 'delay' && 'Atraso Inteligente'}
@@ -240,11 +243,32 @@ export function NodeConfigDialog({
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold">Identificação do Bloco</Label>
                         <Input
-                            placeholder="Ex: Menu Principal, Boas-vindas..."
+                            placeholder="Ex: Ponto de Partida, Início..."
                             value={formData.label || ''}
                             onChange={(e) => setFormData({ ...formData, label: e.target.value })}
                         />
                     </div>
+
+                    {/* ---------------- 0. CONFIGURAÇÃO DE START (INÍCIO DO FLUXO) ---------------- */}
+                    {formData.nodeType === 'start' && (
+                        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 space-y-3">
+                            <div className="flex items-start gap-3">
+                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
+                                    <PlayCircle className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-semibold text-emerald-950 dark:text-emerald-200">Ponto de Entrada do Fluxo</h4>
+                                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                                        Este bloco define exatamente onde a conversa é iniciada quando acionada via WhatsApp, webhook ou teste.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-xs text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900 space-y-1">
+                                <p className="font-medium text-emerald-800 dark:text-emerald-300">💡 Como conectar:</p>
+                                <p>Conecte o ponto verde à direita deste bloco ao primeiro elemento que deseja executar (por exemplo: <strong>Verificar Cliente CRM</strong>, uma <strong>Mensagem</strong> ou um <strong>Menu</strong>).</p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ---------------- 1. CONFIGURAÇÃO DE MENU (BOTCONVERSA STYLE) ---------------- */}
                     {formData.nodeType === 'menu' && (

@@ -659,6 +659,17 @@ export async function executeFlowNode(
             .replace(/\{numero\}/gi, ctx.phoneNumber);
     };
 
+    // 0. START (Ponto de Partida / Início do Fluxo)
+    if (nodeData.nodeType === 'start') {
+        const nextEdge = edges.find((e: any) => e.source === nodeId);
+        if (nextEdge && nextEdge.target) {
+            await executeFlowNode(ctx, flow, nextEdge.target);
+        } else {
+            console.log(`[FlowRunner] Nó de início ${nodeId} não possui saída conectada.`);
+        }
+        return;
+    }
+
     // 1. CONTEÚDO
     if (nodeData.nodeType === 'content') {
         const text = replaceVars(nodeData.text);
@@ -773,9 +784,10 @@ export async function executeFlowNode(
                 const targetNodes = targetFlow.nodes || [];
                 const targetEdges = targetFlow.edges || [];
 
-                // Identifica nó inicial do fluxo de destino (nó sem entrada ou primeiro nó)
+                // Identifica nó inicial do fluxo de destino (prioriza nó start, depois nó sem entrada ou primeiro nó)
+                const explicitStartNode = targetNodes.find((n: any) => n.data?.nodeType === 'start');
                 const targetNodeIds = new Set(targetEdges.map((e: any) => e.target));
-                const startNode = targetNodes.find((n: any) => !targetNodeIds.has(n.id)) || targetNodes[0];
+                const startNode = explicitStartNode || targetNodes.find((n: any) => !targetNodeIds.has(n.id)) || targetNodes[0];
 
                 if (startNode) {
                     await setDoc(sessionDocRef, {
