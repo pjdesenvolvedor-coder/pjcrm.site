@@ -95,6 +95,12 @@ export function NodeConfigDialog({
         }
     }, [node]);
 
+    useEffect(() => {
+        if (!open) {
+            setIsPreviewOpen(false);
+        }
+    }, [open]);
+
     const handleInsertVariable = (field: 'text' | 'menuQuestionText' | 'menuButtonTitle', variable: string) => {
         setFormData((prev) => ({
             ...prev,
