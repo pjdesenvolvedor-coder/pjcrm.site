@@ -31,6 +31,7 @@ import {
     Strikethrough,
     Code,
     Sparkles,
+    GripVertical,
 } from 'lucide-react';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
 
@@ -95,6 +96,56 @@ export function NodeConfigDialog({
         const updated = [...(formData.menuOptions || [])];
         updated.splice(index, 1);
         setFormData((prev) => ({ ...prev, menuOptions: updated }));
+    };
+
+    // Arrastar e soltar para mudar a ordem das respostas do menu
+    const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+    const handleDragStart = (e: React.DragEvent, index: number) => {
+        setDraggedOptionIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', index.toString());
+    };
+
+    const handleDragOver = (e: React.DragEvent, index: number) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragOverIndex !== index) {
+            setDragOverIndex(index);
+        }
+    };
+
+    const handleDragLeave = (index: number) => {
+        if (dragOverIndex === index) {
+            setDragOverIndex(null);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+        e.preventDefault();
+        if (draggedOptionIndex === null || draggedOptionIndex === targetIndex) {
+            setDraggedOptionIndex(null);
+            setDragOverIndex(null);
+            return;
+        }
+
+        const currentOptions = [...(formData.menuOptions || [])];
+        const [movedItem] = currentOptions.splice(draggedOptionIndex, 1);
+        currentOptions.splice(targetIndex, 0, movedItem);
+
+        setFormData((prev) => ({
+            ...prev,
+            menuOptions: currentOptions,
+        }));
+
+        setDraggedOptionIndex(null);
+        setDragOverIndex(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedOptionIndex(null);
+        setDragOverIndex(null);
     };
 
     const handleSave = () => {
@@ -273,43 +324,76 @@ export function NodeConfigDialog({
                                 </div>
 
                                 <div className="space-y-2.5">
-                                    {(formData.menuOptions || []).map((opt, idx) => (
-                                        <div
-                                            key={opt.id || idx}
-                                            className="p-3 rounded-xl border bg-slate-50/50 dark:bg-slate-900/40 space-y-2 relative group"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <Badge className="bg-indigo-100 text-indigo-800 text-[10px] h-5 px-1.5">
-                                                    #{idx + 1}
-                                                </Badge>
+                                    {(formData.menuOptions || []).map((opt, idx) => {
+                                        const isDragging = draggedOptionIndex === idx;
+                                        const isDragOver = dragOverIndex === idx && draggedOptionIndex !== idx;
+
+                                        return (
+                                            <div
+                                                key={opt.id || idx}
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, idx)}
+                                                onDragOver={(e) => handleDragOver(e, idx)}
+                                                onDragLeave={() => handleDragLeave(idx)}
+                                                onDrop={(e) => handleDrop(e, idx)}
+                                                onDragEnd={handleDragEnd}
+                                                className={`p-3 rounded-xl border transition-all duration-150 space-y-2 relative group ${
+                                                    isDragging
+                                                        ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20 scale-[0.98]'
+                                                        : isDragOver
+                                                        ? 'border-2 border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 shadow-md scale-[1.01]'
+                                                        : 'bg-slate-50/50 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-700'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    {/* Ícone de arrastar para mudar a ordem */}
+                                                    <div
+                                                        className="cursor-grab active:cursor-grabbing p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors shrink-0"
+                                                        title="Clique e arraste para mudar a ordem"
+                                                    >
+                                                        <GripVertical className="h-4 w-4" />
+                                                    </div>
+
+                                                    <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] h-5 px-1.5 shrink-0 select-none">
+                                                        #{idx + 1}
+                                                    </Badge>
+
+                                                    <Input
+                                                        placeholder="Título da opção (Ex: Renovar Assinatura)"
+                                                        value={opt.label}
+                                                        draggable={false}
+                                                        onDragStart={(e) => e.stopPropagation()}
+                                                        onChange={(e) =>
+                                                            handleUpdateMenuOption(idx, 'label', e.target.value)
+                                                        }
+                                                        className="bg-white dark:bg-slate-950 font-medium text-xs h-8"
+                                                    />
+
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleRemoveMenuOption(idx)}
+                                                        className="text-destructive h-8 w-8 hover:bg-destructive/10 shrink-0"
+                                                        title="Excluir resposta"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+
                                                 <Input
-                                                    placeholder="Título da opção (Ex: Renovar Assinatura)"
-                                                    value={opt.label}
+                                                    placeholder="Descrição (opcional, aparece embaixo no menu lista)"
+                                                    value={opt.description || ''}
+                                                    draggable={false}
+                                                    onDragStart={(e) => e.stopPropagation()}
                                                     onChange={(e) =>
-                                                        handleUpdateMenuOption(idx, 'label', e.target.value)
+                                                        handleUpdateMenuOption(idx, 'description', e.target.value)
                                                     }
-                                                    className="bg-white dark:bg-slate-950 font-medium text-xs h-8"
+                                                    className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground ml-6"
                                                 />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => handleRemoveMenuOption(idx)}
-                                                    className="text-destructive h-8 w-8 hover:bg-destructive/10"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
                                             </div>
-                                            <Input
-                                                placeholder="Descrição (opcional, aparece embaixo no menu lista)"
-                                                value={opt.description || ''}
-                                                onChange={(e) =>
-                                                    handleUpdateMenuOption(idx, 'description', e.target.value)
-                                                }
-                                                className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground"
-                                            />
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
                                 <Button
