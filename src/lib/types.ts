@@ -407,7 +407,7 @@ export type FlowNodeData = {
   actionType?: 'add_tag' | 'remove_tag' | 'change_status' | 'open_support' | 'notify_attendant';
   actionValue?: string;
   // Condição
-  conditionType?: 'has_tag' | 'client_status' | 'custom_field';
+  conditionType?: 'is_client' | 'has_tag' | 'client_status' | 'custom_field';
   conditionField?: string;
   conditionValue?: string;
   // Conexão de fluxo

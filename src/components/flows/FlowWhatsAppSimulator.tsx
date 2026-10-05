@@ -128,8 +128,22 @@ export function FlowWhatsAppSimulator({
             const formatText = (txt?: string) => {
                 if (!txt) return '';
                 return txt
-                    .replace(/\{nome\}/gi, 'Pedro')
-                    .replace(/\{telefone\}/gi, '5511999999999');
+                    .replace(/\{nome\}/gi, 'Pedro Henrique')
+                    .replace(/\{cliente\}/gi, 'Pedro Henrique')
+                    .replace(/\{primeiro_nome\}/gi, 'Pedro')
+                    .replace(/\{telefone\}/gi, '5511999999999')
+                    .replace(/\{numero\}/gi, '5511999999999')
+                    .replace(/\{vencimento\}/gi, '15/10/2026')
+                    .replace(/\{dias_restantes\}/gi, '5 dias restantes')
+                    .replace(/\{status\}/gi, 'Ativo')
+                    .replace(/\{plano\}/gi, 'Plano Mensal VIP')
+                    .replace(/\{assinatura\}/gi, 'Plano Mensal VIP')
+                    .replace(/\{email\}/gi, 'pedro@gmail.com')
+                    .replace(/\{senha\}/gi, '123456')
+                    .replace(/\{tela\}/gi, 'Tela 1')
+                    .replace(/\{pin_tela\}/gi, '8888')
+                    .replace(/\{link\}/gi, 'https://pjcrm.site/acesso')
+                    .replace(/\{link_acesso\}/gi, 'https://pjcrm.site/acesso');
             };
 
             // 1. CONTEÚDO
@@ -271,6 +285,36 @@ export function FlowWhatsAppSimulator({
                     },
                 ]);
                 setCurrentNotice('Transição de fluxo concluída.');
+            }
+            // 6. CONDIÇÃO: VERIFICAR CLIENTE NO CRM
+            else if (data.nodeType === 'condition') {
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `sys_${Date.now()}`,
+                        sender: 'system',
+                        text: '🔍 *Simulação:* Contato verificado no CRM como *Cliente Cadastrado* (Pedro Henrique - Plano VIP). Seguindo rota verde...',
+                        time: getCurrentTime(),
+                    },
+                ]);
+                await sleep(700);
+                if (executionRef.current.isCancelled) return;
+
+                // Segue a saída 'is_client' (Cliente Cadastrado) se existir, ou fallback
+                const clientEdge =
+                    edges.find((e) => e.source === nodeId && e.sourceHandle === 'is_client') ||
+                    edges.find((e) => e.source === nodeId);
+
+                if (clientEdge && clientEdge.target) {
+                    await executeNode(clientEdge.target);
+                } else {
+                    const notClientEdge = edges.find((e) => e.source === nodeId && e.sourceHandle === 'not_client');
+                    if (notClientEdge && notClientEdge.target) {
+                        await executeNode(notClientEdge.target);
+                    } else {
+                        setCurrentNotice('Fim do fluxo após a verificação de cliente CRM.');
+                    }
+                }
             }
         },
         [nodes, edges]

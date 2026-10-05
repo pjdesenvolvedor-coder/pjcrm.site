@@ -17,8 +17,9 @@ import {
     Volume2,
     Video,
     File,
-    HelpCircle,
     CheckCircle2,
+    UserCheck,
+    UserX,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -86,6 +87,15 @@ const nodeTypeConfigs: Record<
         bgClass: 'bg-emerald-50/30 dark:bg-emerald-950/20',
         badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
         iconClass: 'text-emerald-500',
+    },
+    condition: {
+        title: 'Verificar Cliente CRM',
+        icon: UserCheck,
+        color: '#0284c7',
+        borderClass: 'border-sky-300 dark:border-sky-800',
+        bgClass: 'bg-sky-50/40 dark:bg-sky-950/20',
+        badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
+        iconClass: 'text-sky-600 dark:text-sky-400',
     },
 };
 
@@ -301,10 +311,50 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                         </span>
                     </div>
                 )}
+
+                {/* 6. NÓ DE CONDIÇÃO CRM (Verificar se é cliente) */}
+                {nodeData?.nodeType === 'condition' && (
+                    <div className="space-y-2.5 p-1">
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            Verifica o número no CRM e separa em 2 saídas automáticas:
+                        </p>
+                        <div className="space-y-2">
+                            {/* Saída 1: Cliente Cadastrado */}
+                            <div className="relative flex items-center justify-between p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+                                <div className="flex items-center gap-1.5 min-w-0 pr-4">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                    <span className="truncate">Cliente Cadastrado</span>
+                                </div>
+                                <Handle
+                                    type="source"
+                                    position={Position.Right}
+                                    id="is_client"
+                                    className="!w-4 !h-4 !bg-emerald-500 hover:!bg-emerald-600 !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[21px] cursor-crosshair shadow-sm z-10"
+                                    title="Saída para quem é cliente cadastrado no CRM (libera variáveis como {nome}, {vencimento}, {plano}, etc.)"
+                                />
+                            </div>
+
+                            {/* Saída 2: Não Cadastrado (Novo Lead) */}
+                            <div className="relative flex items-center justify-between p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-[11px] font-semibold text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 shadow-2xs">
+                                <div className="flex items-center gap-1.5 min-w-0 pr-4">
+                                    <UserX className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                                    <span className="truncate">Não Cadastrado (Novo)</span>
+                                </div>
+                                <Handle
+                                    type="source"
+                                    position={Position.Right}
+                                    id="not_client"
+                                    className="!w-4 !h-4 !bg-rose-500 hover:!bg-rose-600 !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[21px] cursor-crosshair shadow-sm z-10"
+                                    title="Saída para novo contato ou número não encontrado no CRM"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* SAÍDA PADRÃO (Source Handle para nós que não são menu com múltiplas saídas) */}
-            {nodeData?.nodeType !== 'menu' && (
+            {/* SAÍDA PADRÃO (Source Handle para nós que não possuem múltiplas saídas) */}
+            {nodeData?.nodeType !== 'menu' && nodeData?.nodeType !== 'condition' && (
                 <Handle
                     type="source"
                     position={Position.Right}

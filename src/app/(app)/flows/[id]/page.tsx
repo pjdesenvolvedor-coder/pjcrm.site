@@ -63,6 +63,7 @@ import {
     Trash2,
     Eye,
     EyeOff,
+    UserCheck,
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -419,17 +420,27 @@ export default function FlowCanvasEditorPage() {
         setSelectedEdgeId(null);
     }, []);
 
-    // Mapear arestas com destaque em vermelho para a selecionada
+    // Mapear arestas com destaque em vermelho para a selecionada e cores para saídas de condição
     const displayEdges = useMemo(() => {
         return edges.map((edge) => {
             const isSelected = edge.id === selectedEdgeId;
+            let strokeColor = '#6366f1';
+            let edgeLabel = edge.label;
+            if (edge.sourceHandle === 'is_client') {
+                strokeColor = '#10b981'; // Emerald para Cliente Cadastrado
+                if (!edgeLabel) edgeLabel = 'Cliente';
+            } else if (edge.sourceHandle === 'not_client') {
+                strokeColor = '#f43f5e'; // Rose para Não Cadastrado
+                if (!edgeLabel) edgeLabel = 'Novo Lead';
+            }
             return {
                 ...edge,
+                label: edgeLabel,
                 selected: isSelected,
                 animated: true,
                 style: {
                     ...edge.style,
-                    stroke: isSelected ? '#ef4444' : '#6366f1',
+                    stroke: isSelected ? '#ef4444' : strokeColor,
                     strokeWidth: isSelected ? 3.5 : 2.5,
                 },
             };
@@ -442,7 +453,7 @@ export default function FlowCanvasEditorPage() {
         setIsConfigOpen(true);
     }, []);
 
-    // Adicionar novo bloco através da paleta flutuante (sem Condição e sem Randomizador)
+    // Adicionar novo bloco através da paleta flutuante
     const handleAddBlock = (type: FlowNodeData['nodeType']) => {
         pushHistory();
         const id = `node_${Date.now()}`;
@@ -456,6 +467,13 @@ export default function FlowCanvasEditorPage() {
         };
 
         switch (type) {
+            case 'condition':
+                initialData = {
+                    nodeType: 'condition',
+                    label: 'Verificar Cliente CRM',
+                    conditionType: 'is_client',
+                };
+                break;
             case 'content':
                 initialData = {
                     nodeType: 'content',
@@ -764,6 +782,18 @@ export default function FlowCanvasEditorPage() {
                                 <ChevronLeft className="h-3.5 w-3.5" />
                             </button>
                         </div>
+
+                        {/* 0. VERIFICAR CLIENTE CRM (CONDIÇÃO) */}
+                        <button
+                            type="button"
+                            onClick={() => handleAddBlock('condition')}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-all text-left group"
+                        >
+                            <div className="p-1 rounded-md bg-sky-100 dark:bg-sky-950 text-sky-600 group-hover:scale-110 transition-transform">
+                                <UserCheck className="h-3.5 w-3.5" />
+                            </div>
+                            <span>Verificar Cliente CRM</span>
+                        </button>
 
                         {/* 1. CONTEÚDO */}
                         <button

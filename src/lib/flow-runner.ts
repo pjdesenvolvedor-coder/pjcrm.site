@@ -37,6 +37,153 @@ export interface FlowRunnerContext {
     instanceToken: string;
     phoneNumber: string;
     contactName?: string;
+    clientData?: any | null;
+    clientVariables?: Record<string, string> | null;
+}
+
+export function getCanonicalPhone(phone: string): string {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    if (!digits) return '';
+    let local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+    if (local.length === 11 && local[2] === '9') {
+        local = local.slice(0, 2) + local.slice(3);
+    }
+    if (local.length === 10) return '55' + local;
+    return digits;
+}
+
+function getTimestampMs(val: any): number | null {
+    if (!val) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+        const parsed = Date.parse(val);
+        return isNaN(parsed) ? null : parsed;
+    }
+    if (typeof val === 'object') {
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (val.seconds !== undefined) return val.seconds * 1000;
+    }
+    return null;
+}
+
+function formatDateSafe(val: any): string {
+    const ms = getTimestampMs(val);
+    if (!ms) return '';
+    try {
+        const d = new Date(ms);
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    } catch {
+        return '';
+    }
+}
+
+function formatDaysRemaining(val: any): string {
+    const ms = getTimestampMs(val);
+    if (!ms) return '';
+    const now = new Date();
+    const diffMs = ms - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays > 1) return `${diffDays} dias restantes`;
+    if (diffDays === 1) return 'Vence amanhã';
+    if (diffDays === 0) return 'Vence hoje';
+    if (diffDays === -1) return 'Venceu ontem';
+    return `Vencido há ${Math.abs(diffDays)} dias`;
+}
+
+export async function findClientByPhone(db: any, userId: string, rawPhone: string): Promise<any | null> {
+    if (!rawPhone || !userId) return null;
+    const digits = cleanPhone(rawPhone);
+    if (!digits) return null;
+
+    const candidates = [
+        rawPhone,
+        digits,
+        formatPhoneWith55(digits),
+        digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : `55${digits}`,
+    ];
+    const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean)));
+
+    const clientsCol = collection(db, 'users', userId, 'clients');
+
+    // 1. Busca direta por telefone exato
+    for (const cand of uniqueCandidates) {
+        try {
+            const q = query(clientsCol, where('phone', '==', cand));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+                return { id: snap.docs[0].id, ...snap.docs[0].data() };
+            }
+        } catch {}
+    }
+
+    // 2. Busca fallback com canonical phone
+    try {
+        const allSnap = await getDocs(clientsCol);
+        const targetCanonical = getCanonicalPhone(digits);
+        for (const d of allSnap.docs) {
+            const cData: any = d.data();
+            if (cData.phone) {
+                const cDigits = cleanPhone(cData.phone);
+                if (uniqueCandidates.includes(cDigits) || (targetCanonical && getCanonicalPhone(cDigits) === targetCanonical)) {
+                    return { id: d.id, ...cData };
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[findClientByPhone] erro ao consultar clientes:', err);
+    }
+
+    return null;
+}
+
+export function formatClientVariables(client: any, fallbackName?: string, fallbackPhone?: string): Record<string, string> {
+    if (!client) {
+        const name = fallbackName || 'Amigo(a)';
+        return {
+            nome: name,
+            cliente: name,
+            primeiro_nome: name.split(' ')[0] || name,
+            telefone: fallbackPhone || '',
+            numero: fallbackPhone || '',
+            status: 'Não cadastrado',
+            plano: '',
+            assinatura: '',
+            vencimento: '',
+            dias_restantes: '',
+            email: '',
+            senha: '',
+            tela: '',
+            pin_tela: '',
+            link: '',
+            link_acesso: '',
+        };
+    }
+
+    const fullName = client.name || fallbackName || 'Cliente';
+    const firstName = fullName.split(' ')[0] || fullName;
+    const phone = client.phone || fallbackPhone || '';
+    const email = Array.isArray(client.email) ? client.email.join(', ') : (client.email || '');
+
+    return {
+        nome: fullName,
+        cliente: fullName,
+        primeiro_nome: firstName,
+        telefone: phone,
+        numero: phone,
+        status: client.status || 'Ativo',
+        plano: client.subscription || '',
+        assinatura: client.subscription || '',
+        vencimento: formatDateSafe(client.dueDate),
+        dias_restantes: formatDaysRemaining(client.dueDate),
+        email,
+        senha: client.password || '',
+        tela: client.screen || '',
+        pin_tela: client.pinScreen || '',
+        link: client.accessLink || '',
+        link_acesso: client.accessLink || '',
+    };
 }
 
 export async function sendUazapiText(
@@ -243,12 +390,37 @@ export async function executeFlowNode(
     const nodeData = currentNode.data as FlowNodeData;
     const sessionDocRef = doc(ctx.db, 'users', ctx.userId, 'flow_sessions', ctx.phoneNumber);
 
-    // Substituição de variáveis no texto
+    // 0. CARREGA OU RECUPERA VARIÁVEIS DO CLIENTE
+    let clientVars: Record<string, string> | null = ctx.clientVariables || null;
+    if (!clientVars) {
+        try {
+            const sessionSnap = await getDoc(sessionDocRef);
+            if (sessionSnap.exists()) {
+                const sData = sessionSnap.data() as FlowContactSession;
+                if (sData.variables && Object.keys(sData.variables).length > 0) {
+                    clientVars = sData.variables as Record<string, string>;
+                    ctx.clientVariables = clientVars;
+                }
+            }
+        } catch {}
+    }
+
+    // Substituição de todas as variáveis no texto
     const replaceVars = (str?: string) => {
         if (!str) return '';
-        return str
+        let result = str;
+        if (clientVars) {
+            for (const [key, val] of Object.entries(clientVars)) {
+                const regex = new RegExp(`\\{${key}\\}`, 'gi');
+                result = result.replace(regex, val || '');
+            }
+        }
+        return result
             .replace(/\{nome\}/gi, ctx.contactName || 'Amigo(a)')
-            .replace(/\{telefone\}/gi, ctx.phoneNumber);
+            .replace(/\{cliente\}/gi, ctx.contactName || 'Amigo(a)')
+            .replace(/\{primeiro_nome\}/gi, (ctx.contactName || 'Amigo(a)').split(' ')[0])
+            .replace(/\{telefone\}/gi, ctx.phoneNumber)
+            .replace(/\{numero\}/gi, ctx.phoneNumber);
     };
 
     // 1. CONTEÚDO
@@ -383,6 +555,60 @@ export async function executeFlowNode(
             }
         } catch (err) {
             console.error('[FlowRunner] Erro ao transferir fluxo:', err);
+        }
+        return;
+    }
+
+    // 6. CONDIÇÃO (Verificar Cliente no CRM)
+    if (nodeData.nodeType === 'condition') {
+        console.log(`[FlowRunner] Verificando se ${ctx.phoneNumber} é cliente cadastrado no CRM...`);
+        const client = await findClientByPhone(ctx.db, ctx.userId, ctx.phoneNumber);
+        const isClient = !!client;
+
+        console.log(`[FlowRunner] Resultado da verificação no CRM: isClient=${isClient} (Cliente: ${client?.name || 'Não cadastrado'})`);
+
+        // Formata e salva as variáveis completas do cliente
+        clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber);
+        ctx.clientVariables = clientVars;
+        ctx.clientData = client;
+
+        // Atualiza sessão com os dados do cliente e variáveis
+        await setDoc(
+            sessionDocRef,
+            {
+                userId: ctx.userId,
+                flowId: flow.id,
+                currentNodeId: nodeId,
+                currentNodeLabel: nodeData.label || 'Verificar Cliente CRM',
+                variables: clientVars,
+                isClient,
+                contactName: client?.name || ctx.contactName || 'Cliente WhatsApp',
+                lastInteractionAt: new Date().toISOString(),
+            },
+            { merge: true }
+        );
+
+        // Identifica qual saída seguir: is_client (Cliente Cadastrado) ou not_client (Não Cadastrado)
+        const targetHandleId = isClient ? 'is_client' : 'not_client';
+        let targetEdge = edges.find((e: any) => e.source === nodeId && e.sourceHandle === targetHandleId);
+
+        // Fallback: se o usuário conectou a saída sem especificar handle
+        if (!targetEdge) {
+            targetEdge = edges.find((e: any) => e.source === nodeId);
+        }
+
+        if (targetEdge && targetEdge.target) {
+            await executeFlowNode(ctx, flow, targetEdge.target);
+        } else {
+            console.log(`[FlowRunner] Fim do caminho após condição (${targetHandleId})`);
+            await setDoc(
+                sessionDocRef,
+                {
+                    status: 'completed',
+                    lastInteractionAt: new Date().toISOString(),
+                },
+                { merge: true }
+            );
         }
         return;
     }
