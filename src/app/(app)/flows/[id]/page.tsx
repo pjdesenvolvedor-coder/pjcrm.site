@@ -25,6 +25,7 @@ import type { FlowDefinition, FlowNodeData, UazapiConnectionConfig } from '@/lib
 import { useToast } from '@/hooks/use-toast';
 import { FlowCustomNode } from '@/components/flows/FlowCustomNode';
 import { NodeConfigDialog } from '@/components/flows/NodeConfigDialog';
+import { FlowNodeActionsContext } from '@/components/flows/FlowNodeActionsContext';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -204,17 +205,40 @@ export default function FlowCanvasEditorPage() {
         };
     }, []);
 
-    // Interceptar mudanças de nós (ex: arrastar, selecionar) sem travar
+    // Excluir nó do fluxo e todas as suas conexões
+    const handleDeleteNode = useCallback(
+        (nodeId: string) => {
+            setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+            setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+            if (selectedNode?.id === nodeId) {
+                setSelectedNode(null);
+                setIsConfigOpen(false);
+            }
+            scheduleAutoSave(400);
+            toast({
+                title: 'Bloco excluído',
+                description: 'O bloco e suas conexões foram removidos com sucesso.',
+            });
+        },
+        [setNodes, setEdges, selectedNode, scheduleAutoSave, toast]
+    );
+
+    // Interceptar mudanças de nós (ex: arrastar, selecionar, remover) sem travar
     const handleNodesChange = useCallback(
         (changes: any) => {
             onNodesChange(changes);
+            // Se algum nó foi removido (ex: pelo teclado Delete/Backspace)
+            const removedIds = changes.filter((c: any) => c.type === 'remove').map((c: any) => c.id);
+            if (removedIds.length > 0) {
+                setEdges((eds) => eds.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)));
+            }
             // Salvar apenas se houver movimentação de posição, dimensão ou remoção (ignorar simples clique/seleção)
             const hasStructuralChange = changes.some((c: any) => c.type !== 'select');
             if (hasStructuralChange) {
                 scheduleAutoSave(1200); // 1.2s após parar de arrastar
             }
         },
-        [onNodesChange, scheduleAutoSave]
+        [onNodesChange, setEdges, scheduleAutoSave]
     );
 
     // Interceptar mudanças de arestas
@@ -635,44 +659,46 @@ export default function FlowCanvasEditorPage() {
                 )}
 
                 {/* REACT FLOW CANVAS */}
-                <ReactFlow
-                    nodes={nodes}
-                    edges={displayEdges}
-                    onNodesChange={handleNodesChange}
-                    onEdgesChange={handleEdgesChange}
-                    onConnect={onConnect}
-                    onNodeClick={onNodeClick}
-                    onEdgeClick={onEdgeClick}
-                    onEdgeDoubleClick={onEdgeDoubleClick}
-                    onPaneClick={onPaneClick}
-                    connectionMode={ConnectionMode.Loose}
-                    connectionLineType={ConnectionLineType.SmoothStep}
-                    connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 2.5 }}
-                    nodeTypes={nodeTypes}
-                    fitView
-                    minZoom={0.2}
-                    maxZoom={2}
-                    defaultEdgeOptions={{
-                        animated: true,
-                        style: { stroke: '#6366f1', strokeWidth: 2.5 },
-                    }}
-                    className="bg-slate-50 dark:bg-slate-950"
-                >
-                    <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#94a3b8" />
-                    <Controls className="!bg-card !border-border !shadow-md" />
-                    <MiniMap
-                        className="!bg-card !border !border-border !rounded-xl !shadow-lg"
-                        nodeColor={(n: any) => {
-                            const type = n.data?.nodeType;
-                            if (type === 'menu') return '#818cf8';
-                            if (type === 'content') return '#f87171';
-                            if (type === 'delay') return '#fb923c';
-                            if (type === 'action') return '#facc15';
-                            if (type === 'flow_connect') return '#4ade80';
-                            return '#94a3b8';
+                <FlowNodeActionsContext.Provider value={{ onDeleteNode: handleDeleteNode }}>
+                    <ReactFlow
+                        nodes={nodes}
+                        edges={displayEdges}
+                        onNodesChange={handleNodesChange}
+                        onEdgesChange={handleEdgesChange}
+                        onConnect={onConnect}
+                        onNodeClick={onNodeClick}
+                        onEdgeClick={onEdgeClick}
+                        onEdgeDoubleClick={onEdgeDoubleClick}
+                        onPaneClick={onPaneClick}
+                        connectionMode={ConnectionMode.Loose}
+                        connectionLineType={ConnectionLineType.SmoothStep}
+                        connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 2.5 }}
+                        nodeTypes={nodeTypes}
+                        fitView
+                        minZoom={0.2}
+                        maxZoom={2}
+                        defaultEdgeOptions={{
+                            animated: true,
+                            style: { stroke: '#6366f1', strokeWidth: 2.5 },
                         }}
-                    />
-                </ReactFlow>
+                        className="bg-slate-50 dark:bg-slate-950"
+                    >
+                        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#94a3b8" />
+                        <Controls className="!bg-card !border-border !shadow-md" />
+                        <MiniMap
+                            className="!bg-card !border !border-border !rounded-xl !shadow-lg"
+                            nodeColor={(n: any) => {
+                                const type = n.data?.nodeType;
+                                if (type === 'menu') return '#818cf8';
+                                if (type === 'content') return '#f87171';
+                                if (type === 'delay') return '#fb923c';
+                                if (type === 'action') return '#facc15';
+                                if (type === 'flow_connect') return '#4ade80';
+                                return '#94a3b8';
+                            }}
+                        />
+                    </ReactFlow>
+                </FlowNodeActionsContext.Provider>
             </div>
 
             {/* MODAL DE CONFIGURAÇÃO DO NÓ (media_1791138953499.png) */}
@@ -682,6 +708,7 @@ export default function FlowCanvasEditorPage() {
                 node={selectedNode}
                 flowsList={allFlows || []}
                 onSave={handleSaveNodeData}
+                onDelete={handleDeleteNode}
             />
 
             {/* MODAL DE DISPARO DE TESTE */}

@@ -41,6 +41,7 @@ interface NodeConfigDialogProps {
     node: any | null;
     flowsList?: FlowDefinition[];
     onSave: (nodeId: string, updatedData: FlowNodeData) => void;
+    onDelete?: (nodeId: string) => void;
 }
 
 export function NodeConfigDialog({
@@ -49,6 +50,7 @@ export function NodeConfigDialog({
     node,
     flowsList = [],
     onSave,
+    onDelete,
 }: NodeConfigDialogProps) {
     const [formData, setFormData] = useState<FlowNodeData>({
         nodeType: 'content',
@@ -591,19 +593,33 @@ export function NodeConfigDialog({
                 </div>
 
                 <DialogFooter className="border-t pt-3 flex flex-row items-center justify-between sm:justify-between w-full">
-                    {formData.nodeType === 'menu' ? (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsPreviewOpen(true)}
-                            className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                        >
-                            <Eye className="h-3.5 w-3.5" />
-                            Pré-visualizar
-                        </Button>
-                    ) : (
-                        <div />
-                    )}
+                    <div className="flex items-center gap-2">
+                        {formData.nodeType === 'menu' && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsPreviewOpen(true)}
+                                className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                            >
+                                <Eye className="h-3.5 w-3.5" />
+                                Pré-visualizar
+                            </Button>
+                        )}
+                        {onDelete && node && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                    onDelete(node.id);
+                                    onOpenChange(false);
+                                }}
+                                className="gap-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Excluir Bloco
+                            </Button>
+                        )}
+                    </div>
 
                     <div className="flex items-center gap-2">
                         <Button variant="outline" onClick={() => onOpenChange(false)}>

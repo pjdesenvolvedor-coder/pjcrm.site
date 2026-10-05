@@ -11,6 +11,7 @@ import {
     MoreHorizontal,
     MoreVertical,
     Eye,
+    Trash2,
     FileText,
     Image as ImageIcon,
     Volume2,
@@ -26,6 +27,7 @@ import {
     DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
+import { useFlowNodeActions } from '@/components/flows/FlowNodeActionsContext';
 import type { FlowNodeData } from '@/lib/types';
 
 const nodeTypeConfigs: Record<
@@ -87,11 +89,12 @@ const nodeTypeConfigs: Record<
     },
 };
 
-export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
+export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
     const nodeData = data as unknown as FlowNodeData;
     const config = nodeTypeConfigs[nodeData?.nodeType || 'content'] || nodeTypeConfigs.content;
     const Icon = config.icon;
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const { onDeleteNode } = useFlowNodeActions();
 
     return (
         <div
@@ -119,12 +122,27 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                     </span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${config.badgeClass}`}>
                         {config.title}
                     </span>
 
-                    {/* DROPDOWN DO CARD (com botão 'Pré-visualizar') */}
+                    {/* BOTÃO LIXEIRINHA PARA APAGAR O BLOCO */}
+                    <button
+                        type="button"
+                        className="nodrag nopan p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                        title="Excluir este bloco"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onDeleteNode) {
+                                onDeleteNode(id);
+                            }
+                        }}
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+
+                    {/* DROPDOWN DO CARD (com opções) */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -137,15 +155,29 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40 nodrag nopan">
+                            {nodeData?.nodeType === 'menu' && (
+                                <DropdownMenuItem
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsPreviewOpen(true);
+                                    }}
+                                    className="text-xs gap-2 cursor-pointer font-medium"
+                                >
+                                    <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                                    Pré-visualizar
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    setIsPreviewOpen(true);
+                                    if (onDeleteNode) {
+                                        onDeleteNode(id);
+                                    }
                                 }}
-                                className="text-xs gap-2 cursor-pointer font-medium"
+                                className="text-xs gap-2 cursor-pointer font-medium text-rose-600 dark:text-rose-400 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-950/40"
                             >
-                                <Eye className="h-3.5 w-3.5 text-emerald-600" />
-                                Pré-visualizar
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Excluir bloco
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
