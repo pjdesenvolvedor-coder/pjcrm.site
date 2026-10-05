@@ -598,17 +598,6 @@ export default function FlowCanvasEditorPage() {
                         }}
                     />
                 </ReactFlow>
-
-                {/* ESTILOS VISUAIS PARA LINHAS DE CONEXÃO SELECIONADAS EM VERMELHO */}
-                <style jsx global>{`
-                    .react-flow__edge.selected .react-flow__edge-path {
-                        stroke: #ef4444 !important;
-                        stroke-width: 3.5px !important;
-                    }
-                    .react-flow__edge:hover .react-flow__edge-path {
-                        cursor: pointer;
-                    }
-                `}</style>
             </div>
 
             {/* MODAL DE CONFIGURAÇÃO DO NÓ (media_1791138953499.png) */}

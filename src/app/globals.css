@@ -86,3 +86,40 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* ========================================================
+   REACT FLOW: Conexões (Edges) e Bolinhas (Handles)
+   ======================================================== */
+
+/* Linha de conexão selecionada fica em vermelho vibrante */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #ef4444 !important;
+  stroke-width: 3.5px !important;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  cursor: pointer;
+}
+
+/* Bolinhas de conexão: mantêm a posição exata e apenas crescem suavemente no hover */
+.react-flow__handle {
+  transform-origin: center center !important;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.react-flow__handle-left:hover {
+  transform: translate(-50%, -50%) scale(1.22) !important;
+}
+
+.react-flow__handle-right:hover {
+  transform: translate(50%, -50%) scale(1.22) !important;
+}
+
+.react-flow__handle-top:hover {
+  transform: translate(-50%, -50%) scale(1.22) !important;
+}
+
+.react-flow__handle-bottom:hover {
+  transform: translate(-50%, 50%) scale(1.22) !important;
+}
+

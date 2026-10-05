@@ -114,7 +114,7 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                 type="target"
                 position={Position.Left}
                 id="target"
-                className="!w-4 !h-4 !bg-slate-400 hover:!bg-indigo-500 !border-2 !border-white dark:!border-slate-900 !rounded-full -ml-[8px] hover:scale-125 transition-transform cursor-crosshair shadow-sm z-10"
+                className="!w-4 !h-4 !bg-slate-400 hover:!bg-indigo-500 !border-2 !border-white dark:!border-slate-900 !rounded-full -ml-[8px] cursor-crosshair shadow-sm z-10"
                 title="Ponto de entrada: solte a conexão aqui"
             />
 
@@ -176,7 +176,7 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                                         type="source"
                                         position={Position.Right}
                                         id={opt.id}
-                                        className="!w-3.5 !h-3.5 !bg-indigo-500 hover:!bg-indigo-600 !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[19px] hover:scale-125 transition-transform cursor-crosshair shadow-sm z-10"
+                                        className="!w-3.5 !h-3.5 !bg-indigo-500 hover:!bg-indigo-600 !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[19px] cursor-crosshair shadow-sm z-10"
                                         title={`Clique e arraste para ligar a opção ${opt.label} a outro bloco`}
                                     />
                                 </div>
@@ -261,7 +261,7 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                     type="source"
                     position={Position.Right}
                     id="source"
-                    className="!w-4 !h-4 !bg-indigo-500 hover:!bg-indigo-600 !border-2 !border-white dark:!border-slate-900 !rounded-full -mr-[8px] hover:scale-125 transition-transform cursor-crosshair shadow-sm z-10"
+                    className="!w-4 !h-4 !bg-indigo-500 hover:!bg-indigo-600 !border-2 !border-white dark:!border-slate-900 !rounded-full -mr-[8px] cursor-crosshair shadow-sm z-10"
                     title="Ponto de saída: clique e arraste para ligar a outro bloco"
                 />
             )}
