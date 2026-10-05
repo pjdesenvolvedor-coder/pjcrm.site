@@ -7,6 +7,8 @@ import {
     Background,
     Controls,
     MiniMap,
+    Panel,
+    ControlButton,
     useNodesState,
     useEdgesState,
     addEdge,
@@ -59,6 +61,8 @@ import {
     Redo2,
     AlertTriangle,
     Trash2,
+    Eye,
+    EyeOff,
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -121,6 +125,9 @@ export default function FlowCanvasEditorPage() {
 
     // Controle da paleta de blocos (minimizar / expandir)
     const [isPaletteMinimized, setIsPaletteMinimized] = useState(false);
+
+    // Controle do MiniMap (minimizado por padrão, só aparece ao clicar no olhinho)
+    const [showMiniMap, setShowMiniMap] = useState(false);
 
     // Seleção de arestas/conexões (destaque em vermelho e exclusão com duplo clique)
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -844,22 +851,59 @@ export default function FlowCanvasEditorPage() {
                             animated: true,
                             style: { stroke: '#6366f1', strokeWidth: 2.5 },
                         }}
+                        proOptions={{ hideAttribution: true }}
                         className="bg-slate-50 dark:bg-slate-950"
                     >
                         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#94a3b8" />
-                        <Controls className="!bg-card !border-border !shadow-md" />
-                        <MiniMap
-                            className="!bg-card !border !border-border !rounded-xl !shadow-lg"
-                            nodeColor={(n: any) => {
-                                const type = n.data?.nodeType;
-                                if (type === 'menu') return '#818cf8';
-                                if (type === 'content') return '#f87171';
-                                if (type === 'delay') return '#fb923c';
-                                if (type === 'action') return '#facc15';
-                                if (type === 'flow_connect') return '#4ade80';
-                                return '#94a3b8';
-                            }}
-                        />
+                        <Controls className="!bg-card !border-border !shadow-md">
+                            <ControlButton
+                                onClick={() => setShowMiniMap((prev) => !prev)}
+                                title={showMiniMap ? 'Minimizar mapa do fluxo' : 'Mostrar mapa do fluxo (olhinho)'}
+                                aria-label="Alternar mapa do fluxo"
+                                className="!text-slate-700 dark:!text-slate-200 hover:!text-indigo-600"
+                            >
+                                {showMiniMap ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </ControlButton>
+                        </Controls>
+
+                        {showMiniMap && (
+                            <MiniMap
+                                className="!bg-card !border !border-border !rounded-xl !shadow-lg"
+                                nodeColor={(n: any) => {
+                                    const type = n.data?.nodeType;
+                                    if (type === 'menu') return '#818cf8';
+                                    if (type === 'content') return '#f87171';
+                                    if (type === 'delay') return '#fb923c';
+                                    if (type === 'action') return '#facc15';
+                                    if (type === 'flow_connect') return '#4ade80';
+                                    return '#94a3b8';
+                                }}
+                            />
+                        )}
+
+                        {/* BOTÃO FLUTUANTE (OLHINHO) NO CANTO INFERIOR DIREITO */}
+                        <Panel position="bottom-right" className="!m-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowMiniMap((prev) => !prev)}
+                                className="h-8 px-2.5 gap-1.5 rounded-lg bg-card/95 backdrop-blur-xs border border-border shadow-md hover:shadow-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-all font-medium text-xs"
+                                title={showMiniMap ? 'Minimizar mapa do fluxo' : 'Mostrar mapa do fluxo (olhinho)'}
+                            >
+                                {showMiniMap ? (
+                                    <>
+                                        <EyeOff className="h-3.5 w-3.5 text-slate-500" />
+                                        <span>Minimizar</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Eye className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                        <span>Mapa</span>
+                                    </>
+                                )}
+                            </Button>
+                        </Panel>
                     </ReactFlow>
                 </FlowNodeActionsContext.Provider>
             </div>
