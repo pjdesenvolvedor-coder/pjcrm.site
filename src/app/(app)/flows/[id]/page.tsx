@@ -55,6 +55,10 @@ import {
     Sparkles,
     ChevronLeft,
     ChevronRight,
+    Undo2,
+    Redo2,
+    AlertTriangle,
+    Trash2,
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -133,6 +137,15 @@ export default function FlowCanvasEditorPage() {
     // Simulador interativo do WhatsApp no canvas
     const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
 
+    // Confirmação antes de excluir nó
+    const [nodePendingDelete, setNodePendingDelete] = useState<string | null>(null);
+
+    // Histórico de alterações para Voltar (Desfazer / Ctrl+Z) e Refazer (Ctrl+Y)
+    const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+    const redoStackRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+    const [canUndo, setCanUndo] = useState(false);
+    const [canRedo, setCanRedo] = useState(false);
+
     // Carregar nós e arestas iniciais (somente uma vez, para não resetar o canva nem interromper o usuário)
     useEffect(() => {
         if (flowData && !isInitialLoadedRef.current) {
@@ -209,31 +222,129 @@ export default function FlowCanvasEditorPage() {
         };
     }, []);
 
-    // Excluir nó do fluxo e todas as suas conexões
-    const handleDeleteNode = useCallback(
-        (nodeId: string) => {
-            setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-            setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-            if (selectedNode?.id === nodeId) {
-                setSelectedNode(null);
-                setIsConfigOpen(false);
-            }
+    // Salvar estado atual no histórico antes de alterações importantes
+    const pushHistory = useCallback(() => {
+        historyRef.current = [
+            ...historyRef.current.slice(-30),
+            { nodes: stateRef.current.nodes, edges: stateRef.current.edges },
+        ];
+        redoStackRef.current = [];
+        setCanUndo(true);
+        setCanRedo(false);
+    }, []);
+
+    // Função Voltar (Desfazer / Undo)
+    const handleUndo = useCallback(() => {
+        if (historyRef.current.length === 0) return;
+
+        redoStackRef.current.push({
+            nodes: stateRef.current.nodes,
+            edges: stateRef.current.edges,
+        });
+
+        const previous = historyRef.current.pop();
+        if (previous) {
+            setNodes(previous.nodes);
+            setEdges(previous.edges);
             scheduleAutoSave(400);
             toast({
-                title: 'Bloco excluído',
-                description: 'O bloco e suas conexões foram removidos com sucesso.',
+                title: 'Ação desfeita!',
+                description: 'O estado anterior foi restaurado com sucesso.',
             });
+        }
+
+        setCanUndo(historyRef.current.length > 0);
+        setCanRedo(true);
+    }, [setNodes, setEdges, scheduleAutoSave, toast]);
+
+    // Função Avançar (Refazer / Redo)
+    const handleRedo = useCallback(() => {
+        if (redoStackRef.current.length === 0) return;
+
+        historyRef.current.push({
+            nodes: stateRef.current.nodes,
+            edges: stateRef.current.edges,
+        });
+
+        const next = redoStackRef.current.pop();
+        if (next) {
+            setNodes(next.nodes);
+            setEdges(next.edges);
+            scheduleAutoSave(400);
+            toast({
+                title: 'Ação refeita!',
+                description: 'Alteração reaplicada com sucesso.',
+            });
+        }
+
+        setCanUndo(true);
+        setCanRedo(redoStackRef.current.length > 0);
+    }, [setNodes, setEdges, scheduleAutoSave, toast]);
+
+    // Atalhos globais de teclado (Ctrl+Z para Voltar / Ctrl+Y ou Ctrl+Shift+Z para Refazer)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                return;
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    handleRedo();
+                } else {
+                    e.preventDefault();
+                    handleUndo();
+                }
+            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                handleRedo();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleUndo, handleRedo]);
+
+    // Solicitar exclusão do nó (abre modal de confirmação)
+    const handleDeleteNode = useCallback(
+        (nodeId: string) => {
+            setNodePendingDelete(nodeId);
         },
-        [setNodes, setEdges, selectedNode, scheduleAutoSave, toast]
+        []
     );
+
+    // Confirmar exclusão do nó após o usuário aceitar no modal
+    const confirmDeleteNode = useCallback(() => {
+        if (!nodePendingDelete) return;
+        const nodeId = nodePendingDelete;
+        setNodePendingDelete(null);
+
+        // Salvar estado no histórico para o botão 'Voltar' poder desfazer!
+        pushHistory();
+
+        setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+        setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+        if (selectedNode?.id === nodeId) {
+            setSelectedNode(null);
+            setIsConfigOpen(false);
+        }
+        scheduleAutoSave(400);
+        toast({
+            title: 'Bloco excluído',
+            description: 'O bloco foi removido. Você pode clicar em "Voltar" caso queira restaurá-lo.',
+        });
+    }, [nodePendingDelete, pushHistory, setNodes, setEdges, selectedNode, scheduleAutoSave, toast]);
 
     // Interceptar mudanças de nós (ex: arrastar, selecionar, remover) sem travar
     const handleNodesChange = useCallback(
         (changes: any) => {
             onNodesChange(changes);
-            // Se algum nó foi removido (ex: pelo teclado Delete/Backspace)
+            // Se algum nó foi removido diretamente
             const removedIds = changes.filter((c: any) => c.type === 'remove').map((c: any) => c.id);
             if (removedIds.length > 0) {
+                pushHistory();
                 setEdges((eds) => eds.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)));
             }
             // Salvar apenas se houver movimentação de posição, dimensão ou remoção (ignorar simples clique/seleção)
@@ -242,7 +353,7 @@ export default function FlowCanvasEditorPage() {
                 scheduleAutoSave(1200); // 1.2s após parar de arrastar
             }
         },
-        [onNodesChange, setEdges, scheduleAutoSave]
+        [onNodesChange, setEdges, scheduleAutoSave, pushHistory]
     );
 
     // Interceptar mudanças de arestas
@@ -260,6 +371,7 @@ export default function FlowCanvasEditorPage() {
     // Conectar nós (ligando bolinha com bolinha)
     const onConnect = useCallback(
         (connection: Connection) => {
+            pushHistory();
             setEdges((eds) =>
                 addEdge(
                     {
@@ -272,7 +384,7 @@ export default function FlowCanvasEditorPage() {
             );
             scheduleAutoSave(500);
         },
-        [setEdges, scheduleAutoSave]
+        [setEdges, pushHistory, scheduleAutoSave]
     );
 
     // Seleção de aresta ao clicar (fica vermelho para identificar no fluxo)
@@ -283,6 +395,7 @@ export default function FlowCanvasEditorPage() {
     // Excluir aresta ao clicar 2 vezes (duplo clique)
     const onEdgeDoubleClick = useCallback(
         (_: React.MouseEvent, edge: Edge) => {
+            pushHistory();
             setEdges((eds) => eds.filter((e) => e.id !== edge.id));
             setSelectedEdgeId((current) => (current === edge.id ? null : current));
             scheduleAutoSave(500);
@@ -291,7 +404,7 @@ export default function FlowCanvasEditorPage() {
                 description: 'A ligação entre os blocos foi excluída.',
             });
         },
-        [setEdges, scheduleAutoSave, toast]
+        [setEdges, pushHistory, scheduleAutoSave, toast]
     );
 
     // Desmarcar aresta selecionada ao clicar no fundo
@@ -324,6 +437,7 @@ export default function FlowCanvasEditorPage() {
 
     // Adicionar novo bloco através da paleta flutuante (sem Condição e sem Randomizador)
     const handleAddBlock = (type: FlowNodeData['nodeType']) => {
+        pushHistory();
         const id = `node_${Date.now()}`;
         // Posição no centro da tela ou escalonada
         const xOffset = 250 + Math.random() * 80;
@@ -396,6 +510,7 @@ export default function FlowCanvasEditorPage() {
 
     // Atualizar dados do nó configurado
     const handleSaveNodeData = (nodeId: string, updatedData: FlowNodeData) => {
+        pushHistory();
         setNodes((nds) =>
             nds.map((node) => {
                 if (node.id === nodeId) {
@@ -514,6 +629,34 @@ export default function FlowCanvasEditorPage() {
                         >
                             {isActive ? '🟢 Ativo' : '⚪ Pausado'}
                         </Badge>
+
+                        {/* BOTÕES VOLTAR (DESFAZER) E REFAZER */}
+                        <div className="flex items-center border-l pl-2 ml-1 gap-1 border-border/70">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleUndo}
+                                disabled={!canUndo}
+                                className="h-8 px-2.5 text-xs gap-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:border-indigo-300 disabled:opacity-40 disabled:pointer-events-none transition-all shadow-2xs"
+                                title="Voltar / Desfazer última alteração (Ctrl+Z)"
+                            >
+                                <Undo2 className="h-3.5 w-3.5" />
+                                <span className="font-semibold text-xs">Voltar</span>
+                            </Button>
+                            {canRedo && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleRedo}
+                                    className="h-8 px-2 text-xs gap-1 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:border-indigo-300 shadow-2xs"
+                                    title="Avançar / Refazer (Ctrl+Y)"
+                                >
+                                    <Redo2 className="h-3.5 w-3.5" />
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -689,6 +832,7 @@ export default function FlowCanvasEditorPage() {
                         onEdgeClick={onEdgeClick}
                         onEdgeDoubleClick={onEdgeDoubleClick}
                         onPaneClick={onPaneClick}
+                        deleteKeyCode={null}
                         connectionMode={ConnectionMode.Loose}
                         connectionLineType={ConnectionLineType.SmoothStep}
                         connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 2.5 }}
@@ -777,6 +921,39 @@ export default function FlowCanvasEditorPage() {
                         >
                             {isTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
                             Disparar Teste
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE BLOCO */}
+            <Dialog open={!!nodePendingDelete} onOpenChange={(open) => !open && setNodePendingDelete(null)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                            <AlertTriangle className="h-5 w-5" />
+                            Excluir este bloco?
+                        </DialogTitle>
+                        <DialogDescription className="space-y-2 pt-1 text-slate-700 dark:text-slate-300 text-xs leading-relaxed">
+                            <span>
+                                Tem certeza que deseja remover o bloco{' '}
+                                <strong className="text-slate-900 dark:text-slate-100 font-bold">
+                                    &quot;{((nodes.find((n) => n.id === nodePendingDelete)?.data as any)?.label) || 'Bloco selecionado'}&quot;
+                                </strong>?
+                            </span>
+                            <br />
+                            <span className="text-muted-foreground block pt-1">
+                                Todas as conexões ligadas a este bloco também serão excluídas. (Você poderá usar o botão <strong>&quot;Voltar&quot;</strong> para desfazer).
+                            </span>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                        <Button type="button" variant="outline" onClick={() => setNodePendingDelete(null)}>
+                            Cancelar
+                        </Button>
+                        <Button type="button" onClick={confirmDeleteNode} className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5 shadow-sm">
+                            <Trash2 className="h-4 w-4" />
+                            Sim, Excluir Bloco
                         </Button>
                     </DialogFooter>
                 </DialogContent>
