@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import {
     Star,
@@ -11,14 +11,23 @@ import {
     Shuffle,
     Clock,
     MoreHorizontal,
+    MoreVertical,
+    Eye,
     FileText,
     Image as ImageIcon,
     Volume2,
     Video,
     File,
     HelpCircle,
-    CheckCircle2
+    CheckCircle2,
 } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData } from '@/lib/types';
 
 const nodeTypeConfigs: Record<
@@ -102,6 +111,7 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
     const nodeData = data as unknown as FlowNodeData;
     const config = nodeTypeConfigs[nodeData?.nodeType || 'content'] || nodeTypeConfigs.content;
     const Icon = config.icon;
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
     return (
         <div
@@ -128,9 +138,38 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                         {nodeData?.label || config.title}
                     </span>
                 </div>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${config.badgeClass}`}>
-                    {config.title}
-                </span>
+
+                <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${config.badgeClass}`}>
+                        {config.title}
+                    </span>
+
+                    {/* DROPDOWN DO CARD (com botão 'Pré-visualizar') */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                className="nodrag nopan p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors"
+                                title="Opções do bloco"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <MoreVertical className="h-3.5 w-3.5" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40 nodrag nopan">
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsPreviewOpen(true);
+                                }}
+                                className="text-xs gap-2 cursor-pointer font-medium"
+                            >
+                                <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                                Pré-visualizar
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
 
             {/* CORPO DO NÓ */}
@@ -265,6 +304,13 @@ export const FlowCustomNode = memo(({ data, selected }: NodeProps) => {
                     title="Ponto de saída: clique e arraste para ligar a outro bloco"
                 />
             )}
+
+            {/* MODAL DE PRÉ-VISUALIZAÇÃO DO WHATSAPP */}
+            <WhatsAppMenuPreviewDialog
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+                data={nodeData}
+            />
         </div>
     );
 });

@@ -32,7 +32,9 @@ import {
     Code,
     Sparkles,
     GripVertical,
+    Eye,
 } from 'lucide-react';
+import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
 
 interface NodeConfigDialogProps {
@@ -53,6 +55,7 @@ export function NodeConfigDialog({
     const [formData, setFormData] = useState<FlowNodeData>({
         nodeType: 'content',
     });
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
     useEffect(() => {
         if (node?.data) {
@@ -593,15 +596,38 @@ export function NodeConfigDialog({
                     )}
                 </div>
 
-                <DialogFooter className="border-t pt-3 flex justify-between">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancelar
-                    </Button>
-                    <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                        Salvar Bloco
-                    </Button>
+                <DialogFooter className="border-t pt-3 flex flex-row items-center justify-between sm:justify-between w-full">
+                    {formData.nodeType === 'menu' ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsPreviewOpen(true)}
+                            className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                        >
+                            <Eye className="h-3.5 w-3.5" />
+                            Pré-visualizar
+                        </Button>
+                    ) : (
+                        <div />
+                    )}
+
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                            Salvar Bloco
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
+
+            {/* MODAL DE PRÉ-VISUALIZAÇÃO NO WHATSAPP */}
+            <WhatsAppMenuPreviewDialog
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+                data={formData}
+            />
         </Dialog>
     );
 }
