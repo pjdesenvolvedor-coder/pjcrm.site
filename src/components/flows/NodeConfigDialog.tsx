@@ -34,9 +34,32 @@ import {
     UserCheck,
     UserX,
     CheckCircle2,
+    Mail,
+    KeyRound,
+    Tv,
+    CreditCard,
 } from 'lucide-react';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
+
+export const AVAILABLE_FLOW_VARIABLES = [
+    { key: 'nome', label: '{nome}', desc: 'Nome completo cadastrado' },
+    { key: 'primeiro_nome', label: '{primeiro_nome}', desc: 'Primeiro nome' },
+    { key: 'telefone', label: '{telefone}', desc: 'Telefone WhatsApp' },
+    { key: 'email', label: '{email}', desc: 'E-mail da conta de acesso' },
+    { key: 'senha', label: '{senha}', desc: 'Senha da conta de acesso' },
+    { key: 'tela', label: '{tela}', desc: 'Tela de acesso (ex: Tela 1)' },
+    { key: 'pin_tela', label: '{pin_tela}', desc: 'PIN da tela' },
+    { key: 'assinatura', label: '{assinatura}', desc: 'Nome da assinatura contratada' },
+    { key: 'plano', label: '{plano}', desc: 'Nome do plano (sinônimo de assinatura)' },
+    { key: 'metodo_pagamento', label: '{metodo_pagamento}', desc: 'Método de pagamento (PIX, Cartão...)' },
+    { key: 'valor', label: '{valor}', desc: 'Valor / mensalidade' },
+    { key: 'vencimento', label: '{vencimento}', desc: 'Data de vencimento (dd/mm/aaaa)' },
+    { key: 'dias_restantes', label: '{dias_restantes}', desc: 'Dias restantes para vencer' },
+    { key: 'status', label: '{status}', desc: 'Status no CRM (Ativo, Vencido...)' },
+    { key: 'link_acesso', label: '{link_acesso}', desc: 'Link de acesso' },
+    { key: 'notas', label: '{notas}', desc: 'Observações do cliente' },
+];
 
 interface NodeConfigDialogProps {
     open: boolean;
@@ -324,42 +347,18 @@ export function NodeConfigDialog({
                                             </Button>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-1 pt-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleInsertVariable('menuQuestionText', 'nome')}
-                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground transition-colors cursor-pointer"
-                                        >
-                                            +{'{nome}'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleInsertVariable('menuQuestionText', 'primeiro_nome')}
-                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground transition-colors cursor-pointer"
-                                        >
-                                            +{'{primeiro_nome}'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleInsertVariable('menuQuestionText', 'vencimento')}
-                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground transition-colors cursor-pointer"
-                                        >
-                                            +{'{vencimento}'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleInsertVariable('menuQuestionText', 'status')}
-                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground transition-colors cursor-pointer"
-                                        >
-                                            +{'{status}'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleInsertVariable('menuQuestionText', 'plano')}
-                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground transition-colors cursor-pointer"
-                                        >
-                                            +{'{plano}'}
-                                        </button>
+                                    <div className="flex flex-wrap gap-1 pt-1.5 max-h-28 overflow-y-auto">
+                                        {AVAILABLE_FLOW_VARIABLES.map((v) => (
+                                            <button
+                                                key={v.key}
+                                                type="button"
+                                                onClick={() => handleInsertVariable('menuQuestionText', v.key)}
+                                                className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                                title={v.desc}
+                                            >
+                                                +{v.label}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -527,91 +526,24 @@ export function NodeConfigDialog({
                                     onChange={(e) => setFormData({ ...formData, text: e.target.value })}
                                 />
                                 <div className="space-y-1.5 pt-1">
-                                    <span className="text-[10px] text-muted-foreground font-medium">
-                                        Variáveis disponíveis (substituídas automaticamente pelo CRM):
+                                    <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                                        <Sparkles className="h-3 w-3 text-indigo-500" />
+                                        Variáveis disponíveis (substituídas automaticamente com os dados do cliente):
                                     </span>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'nome')}
-                                        >
-                                            + {'{nome}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'primeiro_nome')}
-                                        >
-                                            + {'{primeiro_nome}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'telefone')}
-                                        >
-                                            + {'{telefone}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'vencimento')}
-                                        >
-                                            + {'{vencimento}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'dias_restantes')}
-                                        >
-                                            + {'{dias_restantes}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'status')}
-                                        >
-                                            + {'{status}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'plano')}
-                                        >
-                                            + {'{plano}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'email')}
-                                        >
-                                            + {'{email}'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-[11px] h-6 px-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                                            onClick={() => handleInsertVariable('text', 'link_acesso')}
-                                        >
-                                            + {'{link_acesso}'}
-                                        </Button>
+                                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                                        {AVAILABLE_FLOW_VARIABLES.map((v) => (
+                                            <Button
+                                                key={v.key}
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-[11px] h-6 px-2 bg-background hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 border-slate-200 dark:border-slate-800 transition-colors shadow-2xs"
+                                                onClick={() => handleInsertVariable('text', v.key)}
+                                                title={v.desc}
+                                            >
+                                                + {v.label}
+                                            </Button>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -771,44 +703,21 @@ export function NodeConfigDialog({
                             <div className="p-3.5 rounded-xl border bg-muted/20 space-y-2.5">
                                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                     <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                                    Variáveis disponíveis na saída &quot;Cliente Cadastrado&quot;:
+                                    Todas as variáveis disponíveis na saída &quot;Cliente Cadastrado&quot;:
                                 </span>
                                 <p className="text-[11px] text-muted-foreground">
-                                    Nos blocos de mensagem ou menu conectados a esta saída, você pode usar qualquer uma destas variáveis:
+                                    Nos blocos de mensagem ou menu conectados a esta saída, você pode utilizar qualquer uma das variáveis abaixo. Elas serão substituídas automaticamente pelos dados cadastrados do cliente no CRM:
                                 </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{nome}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Nome do cliente</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{primeiro_nome}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Primeiro nome</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{telefone}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Número do WhatsApp</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{vencimento}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Data (dd/mm/aaaa)</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{dias_restantes}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Ex: 5 dias restantes</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{status}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Ativo, Vencido...</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{plano}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">Nome do plano/assinatura</span>
-                                    </div>
-                                    <div className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs">
-                                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{'{email}'}</span>
-                                        <span className="text-[10px] text-muted-foreground font-sans">E-mail do cliente</span>
-                                    </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px] max-h-64 overflow-y-auto pr-1">
+                                    {AVAILABLE_FLOW_VARIABLES.map((v) => (
+                                        <div
+                                            key={v.key}
+                                            className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs hover:border-indigo-300 dark:hover:border-indigo-750 transition-colors"
+                                        >
+                                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">{v.label}</span>
+                                            <span className="text-[10px] text-muted-foreground font-sans truncate ml-2">{v.desc}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>

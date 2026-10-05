@@ -106,36 +106,129 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
     const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean)));
 
     const clientsCol = collection(db, 'users', userId, 'clients');
+    const matchingDocsMap = new Map<string, any>();
 
     // 1. Busca direta por telefone exato
     for (const cand of uniqueCandidates) {
         try {
             const q = query(clientsCol, where('phone', '==', cand));
             const snap = await getDocs(q);
-            if (!snap.empty) {
-                return { id: snap.docs[0].id, ...snap.docs[0].data() };
+            for (const d of snap.docs) {
+                matchingDocsMap.set(d.id, { id: d.id, ...d.data() });
             }
         } catch {}
     }
 
-    // 2. Busca fallback com canonical phone
-    try {
-        const allSnap = await getDocs(clientsCol);
-        const targetCanonical = getCanonicalPhone(digits);
-        for (const d of allSnap.docs) {
-            const cData: any = d.data();
-            if (cData.phone) {
-                const cDigits = cleanPhone(cData.phone);
-                if (uniqueCandidates.includes(cDigits) || (targetCanonical && getCanonicalPhone(cDigits) === targetCanonical)) {
-                    return { id: d.id, ...cData };
+    // 2. Busca fallback com canonical phone (caso o telefone esteja salvo com máscara, ex: (11) 98765-4321)
+    if (matchingDocsMap.size === 0) {
+        try {
+            const allSnap = await getDocs(clientsCol);
+            const targetCanonical = getCanonicalPhone(digits);
+            for (const d of allSnap.docs) {
+                const cData: any = d.data();
+                if (cData.phone) {
+                    const cDigits = cleanPhone(cData.phone);
+                    if (
+                        uniqueCandidates.includes(cDigits) ||
+                        (targetCanonical && getCanonicalPhone(cDigits) === targetCanonical)
+                    ) {
+                        matchingDocsMap.set(d.id, { id: d.id, ...cData });
+                    }
                 }
             }
+        } catch (err) {
+            console.error('[findClientByPhone] erro ao consultar clientes no fallback:', err);
         }
-    } catch (err) {
-        console.error('[findClientByPhone] erro ao consultar clientes:', err);
     }
 
-    return null;
+    if (matchingDocsMap.size === 0) {
+        return null;
+    }
+
+    const matchingList = Array.from(matchingDocsMap.values());
+
+    // Se houver mais de um registro do mesmo cliente (ex: renovações ou planos adicionais),
+    // seleciona o plano ativo e mais recente com maior pontuação:
+    const getClientScore = (c: any): number => {
+        let score = 0;
+        // Prioridade 1: Status Ativo é prioritário
+        if (c.status === 'Ativo') score += 1000;
+        else if (c.status === 'Vencido') score += 200;
+
+        // Prioridade 2: Vencimento futuro / mais recente
+        const dueMs = getTimestampMs(c.dueDate);
+        if (dueMs) {
+            const nowMs = Date.now();
+            if (dueMs > nowMs) {
+                score += 500 + Math.min(Math.floor((dueMs - nowMs) / (1000 * 60 * 60 * 24)), 365);
+            } else {
+                score += Math.max(0, 100 - Math.floor((nowMs - dueMs) / (1000 * 60 * 60 * 24)));
+            }
+        }
+
+        // Prioridade 3: Possui nome de assinatura/plano preenchido
+        if (c.subscription || c.plan || c.plano) score += 60;
+
+        // Prioridade 4: Possui credenciais (email/senha) preenchidas
+        if (c.email && (Array.isArray(c.email) ? c.email.length > 0 : String(c.email).trim() !== '')) score += 40;
+        if (c.password || c.senha) score += 40;
+
+        // Prioridade 5: Data de cadastro mais recente
+        const createdMs = getTimestampMs(c.createdAt) || getTimestampMs(c.firstCreatedAt);
+        if (createdMs) {
+            score += Math.min(Math.floor(createdMs / 100000000), 50);
+        }
+
+        return score;
+    };
+
+    matchingList.sort((a, b) => getClientScore(b) - getClientScore(a));
+    const bestClient = matchingList[0];
+
+    // Mescla dados complementares se o melhor registro tiver campos em branco (ex: senha em outro registro)
+    const mergedClient = { ...bestClient };
+
+    for (const other of matchingList) {
+        if (!mergedClient.password && (other.password || other.senha)) {
+            mergedClient.password = other.password || other.senha;
+        }
+        if (!mergedClient.screen && (other.screen || other.tela)) {
+            mergedClient.screen = other.screen || other.tela;
+        }
+        if (!mergedClient.pinScreen && (other.pinScreen || other.pin_tela || other.pin)) {
+            mergedClient.pinScreen = other.pinScreen || other.pin_tela || other.pin;
+        }
+        if (
+            (!mergedClient.email || (Array.isArray(mergedClient.email) && mergedClient.email.length === 0)) &&
+            other.email
+        ) {
+            mergedClient.email = other.email;
+        }
+        if (!mergedClient.accessLink && (other.accessLink || other.link)) {
+            mergedClient.accessLink = other.accessLink || other.link;
+        }
+        if (!mergedClient.paymentMethod && (other.paymentMethod || other.metodo_pagamento || other.pagamento)) {
+            mergedClient.paymentMethod = other.paymentMethod || other.metodo_pagamento || other.pagamento;
+        }
+        if (!mergedClient.amountPaid && (other.amountPaid || other.valor)) {
+            mergedClient.amountPaid = other.amountPaid || other.valor;
+        }
+    }
+
+    // Coleta todas as assinaturas ativas se o cliente tiver múltiplos produtos
+    const allSubs = Array.from(
+        new Set(
+            matchingList
+                .filter((c) => c.status === 'Ativo' || matchingList.length === 1)
+                .map((c) => (c.subscription || c.plan || c.plano || '').trim())
+                .filter(Boolean)
+        )
+    );
+    if (allSubs.length > 1) {
+        mergedClient.allSubscriptions = allSubs.join(' + ');
+    }
+
+    return mergedClient;
 }
 
 export function formatClientVariables(client: any, fallbackName?: string, fallbackPhone?: string): Record<string, string> {
@@ -147,42 +240,184 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
             primeiro_nome: name.split(' ')[0] || name,
             telefone: fallbackPhone || '',
             numero: fallbackPhone || '',
+            phone: fallbackPhone || '',
             status: 'Não cadastrado',
             plano: '',
             assinatura: '',
+            subscription: '',
+            metodo_pagamento: '',
+            forma_pagamento: '',
+            pagamento: '',
+            payment_method: '',
+            valor: '',
+            valor_pago: '',
+            amount_paid: '',
             vencimento: '',
+            data_vencimento: '',
+            due_date: '',
             dias_restantes: '',
             email: '',
+            'e-mail': '',
+            emails: '',
             senha: '',
+            password: '',
             tela: '',
+            screen: '',
             pin_tela: '',
+            pin: '',
             link: '',
             link_acesso: '',
+            access_link: '',
+            quantidade: '',
+            notas: '',
+            observacoes: '',
+            tipo_cliente: '',
         };
     }
 
-    const fullName = client.name || fallbackName || 'Cliente';
+    const fullName = (client.name || fallbackName || 'Cliente').trim();
     const firstName = fullName.split(' ')[0] || fullName;
-    const phone = client.phone || fallbackPhone || '';
-    const email = Array.isArray(client.email) ? client.email.join(', ') : (client.email || '');
+    const phone = (client.phone || fallbackPhone || '').trim();
+
+    // Extrair email com segurança (suporta array de strings, array de objetos {value: string}, ou string direta)
+    let emailStr = '';
+    if (Array.isArray(client.email)) {
+        emailStr = client.email
+            .map((e: any) => (typeof e === 'object' && e ? (e.value || '') : String(e || '')))
+            .filter(Boolean)
+            .join(', ');
+    } else if (Array.isArray(client.emails)) {
+        emailStr = client.emails
+            .map((e: any) => (typeof e === 'object' && e ? (e.value || '') : String(e || '')))
+            .filter(Boolean)
+            .join(', ');
+    } else if (typeof client.email === 'string') {
+        emailStr = client.email.trim();
+    } else if (typeof client.emails === 'string') {
+        emailStr = client.emails.trim();
+    } else if (client.login && typeof client.login === 'string') {
+        emailStr = client.login.trim();
+    }
+
+    // Primeiro e-mail (caso seja lista) ou o e-mail completo
+    const firstEmail = emailStr.split(',')[0]?.trim() || emailStr;
+
+    // Senha da conta
+    const password = (client.password || client.senha || client.pass || '').trim();
+
+    // Tela de acesso
+    const screen = (client.screen || client.tela || '').trim();
+
+    // PIN da tela
+    const pinScreen = (client.pinScreen || client.pin_tela || client.pin || '').trim();
+
+    // Plano / Assinatura (busca nas chaves subscription, plan, plano ou allSubscriptions)
+    const planName = (
+        client.subscription ||
+        client.plan ||
+        client.plano ||
+        client.subscriptionName ||
+        client.produto ||
+        client.product ||
+        client.allSubscriptions ||
+        ''
+    ).trim();
+
+    // Método de pagamento
+    const paymentMethod = (
+        client.paymentMethod ||
+        client.metodo_pagamento ||
+        client.forma_pagamento ||
+        client.formaPagamento ||
+        client.pagamento ||
+        ''
+    ).trim();
+
+    // Valor pago / Valor
+    let amountStr = '';
+    if (client.amountPaid !== undefined && client.amountPaid !== null && String(client.amountPaid).trim() !== '') {
+        const rawAmount = String(client.amountPaid).trim();
+        amountStr = rawAmount.includes('R$') ? rawAmount : `R$ ${rawAmount}`;
+    }
+
+    // Vencimento e dias restantes
+    const dueDateStr = formatDateSafe(client.dueDate);
+    const daysRemainingStr = formatDaysRemaining(client.dueDate);
+
+    // Link de acesso
+    const accessLink = (client.accessLink || client.link || client.link_acesso || '').trim();
+
+    // Status
+    const statusStr = (client.status || 'Ativo').trim();
+
+    // Quantidade
+    const quantityStr = client.quantity ? String(client.quantity) : '';
+
+    // Observações / Notas
+    const notesStr = (client.notes || client.observacoes || client.obs || '').trim();
+
+    // Tipo de cliente
+    const clientTypeStr = (client.clientType || '').trim();
 
     return {
+        // Nomes
         nome: fullName,
         cliente: fullName,
         primeiro_nome: firstName,
+
+        // Telefones
         telefone: phone,
         numero: phone,
-        status: client.status || 'Ativo',
-        plano: client.subscription || '',
-        assinatura: client.subscription || '',
-        vencimento: formatDateSafe(client.dueDate),
-        dias_restantes: formatDaysRemaining(client.dueDate),
-        email,
-        senha: client.password || '',
-        tela: client.screen || '',
-        pin_tela: client.pinScreen || '',
-        link: client.accessLink || '',
-        link_acesso: client.accessLink || '',
+        phone: phone,
+
+        // Status
+        status: statusStr,
+
+        // Plano e Assinatura
+        plano: planName,
+        assinatura: planName,
+        subscription: planName,
+
+        // Método de pagamento
+        metodo_pagamento: paymentMethod,
+        forma_pagamento: paymentMethod,
+        pagamento: paymentMethod,
+        payment_method: paymentMethod,
+
+        // Valor
+        valor: amountStr,
+        valor_pago: amountStr,
+        amount_paid: amountStr,
+
+        // Vencimento
+        vencimento: dueDateStr,
+        data_vencimento: dueDateStr,
+        due_date: dueDateStr,
+        dias_restantes: daysRemainingStr,
+
+        // E-mail e Senha (duas variáveis independentes)
+        email: firstEmail,
+        'e-mail': firstEmail,
+        emails: emailStr,
+        senha: password,
+        password: password,
+
+        // Tela e PIN
+        tela: screen,
+        screen: screen,
+        pin_tela: pinScreen,
+        pin: pinScreen,
+
+        // Links de acesso
+        link: accessLink,
+        link_acesso: accessLink,
+        access_link: accessLink,
+
+        // Extras
+        quantidade: quantityStr,
+        notas: notesStr,
+        observacoes: notesStr,
+        tipo_cliente: clientTypeStr,
     };
 }
 
@@ -411,7 +646,8 @@ export async function executeFlowNode(
         let result = str;
         if (clientVars) {
             for (const [key, val] of Object.entries(clientVars)) {
-                const regex = new RegExp(`\\{${key}\\}`, 'gi');
+                const escapedKey = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(`\\{${escapedKey}\\}`, 'gi');
                 result = result.replace(regex, val || '');
             }
         }

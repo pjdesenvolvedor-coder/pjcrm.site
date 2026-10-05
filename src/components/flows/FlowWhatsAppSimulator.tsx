@@ -39,6 +39,7 @@ export interface FlowWhatsAppSimulatorProps {
     edges: Edge[];
     flowName: string;
     onOpenRealTest?: () => void;
+    clients?: any[];
 }
 
 interface SimMessage {
@@ -90,6 +91,7 @@ export function FlowWhatsAppSimulator({
     edges,
     flowName,
     onOpenRealTest,
+    clients,
 }: FlowWhatsAppSimulatorProps) {
     const [messages, setMessages] = useState<SimMessage[]>([]);
     const [isTyping, setIsTyping] = useState(false);
@@ -106,6 +108,12 @@ export function FlowWhatsAppSimulator({
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const executionRef = useRef<{ isCancelled: boolean }>({ isCancelled: false });
+
+    // Encontra o melhor cliente ativo da base do CRM para testar com fidelidade máxima
+    const sampleClient = React.useMemo(() => {
+        if (!clients || clients.length === 0) return null;
+        return clients.find((c: any) => c.status === 'Ativo') || clients[0];
+    }, [clients]);
 
     // Rola para a última mensagem automaticamente
     useEffect(() => {
@@ -127,23 +135,77 @@ export function FlowWhatsAppSimulator({
 
             const formatText = (txt?: string) => {
                 if (!txt) return '';
+
+                const cName = sampleClient?.name || 'Pedro Henrique';
+                const cFirstName = cName.split(' ')[0] || 'Pedro';
+                const cPhone = sampleClient?.phone || '5511999999999';
+
+                let cEmail = 'cliente@email.com';
+                if (sampleClient?.email) {
+                    if (Array.isArray(sampleClient.email)) {
+                        cEmail = sampleClient.email[0] || 'cliente@email.com';
+                    } else if (typeof sampleClient.email === 'string') {
+                        cEmail = sampleClient.email;
+                    }
+                }
+
+                const cPassword = sampleClient?.password || sampleClient?.senha || '123456';
+                const cScreen = sampleClient?.screen || sampleClient?.tela || 'Tela 1';
+                const cPinScreen = sampleClient?.pinScreen || sampleClient?.pin_tela || '8888';
+                const cPlan = sampleClient?.subscription || sampleClient?.plan || sampleClient?.plano || 'Plano Completo VIP';
+                const cPayment = sampleClient?.paymentMethod || sampleClient?.metodo_pagamento || 'PIX';
+
+                let cAmount = 'R$ 35,00';
+                if (sampleClient?.amountPaid) {
+                    const raw = String(sampleClient.amountPaid);
+                    cAmount = raw.includes('R$') ? raw : `R$ ${raw}`;
+                }
+
+                let cDueDate = '15/10/2026';
+                if (sampleClient?.dueDate) {
+                    try {
+                        const d = typeof sampleClient.dueDate.toDate === 'function'
+                            ? sampleClient.dueDate.toDate()
+                            : new Date(sampleClient.dueDate);
+                        cDueDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                    } catch {}
+                }
+
+                const cStatus = sampleClient?.status || 'Ativo';
+                const cLink = sampleClient?.accessLink || sampleClient?.link || 'https://pjcrm.site/acesso';
+                const cNotes = sampleClient?.notes || 'Cliente VIP';
+
                 return txt
-                    .replace(/\{nome\}/gi, 'Pedro Henrique')
-                    .replace(/\{cliente\}/gi, 'Pedro Henrique')
-                    .replace(/\{primeiro_nome\}/gi, 'Pedro')
-                    .replace(/\{telefone\}/gi, '5511999999999')
-                    .replace(/\{numero\}/gi, '5511999999999')
-                    .replace(/\{vencimento\}/gi, '15/10/2026')
+                    .replace(/\{nome\}/gi, cName)
+                    .replace(/\{cliente\}/gi, cName)
+                    .replace(/\{primeiro_nome\}/gi, cFirstName)
+                    .replace(/\{telefone\}/gi, cPhone)
+                    .replace(/\{numero\}/gi, cPhone)
+                    .replace(/\{phone\}/gi, cPhone)
+                    .replace(/\{vencimento\}/gi, cDueDate)
+                    .replace(/\{data_vencimento\}/gi, cDueDate)
                     .replace(/\{dias_restantes\}/gi, '5 dias restantes')
-                    .replace(/\{status\}/gi, 'Ativo')
-                    .replace(/\{plano\}/gi, 'Plano Mensal VIP')
-                    .replace(/\{assinatura\}/gi, 'Plano Mensal VIP')
-                    .replace(/\{email\}/gi, 'pedro@gmail.com')
-                    .replace(/\{senha\}/gi, '123456')
-                    .replace(/\{tela\}/gi, 'Tela 1')
-                    .replace(/\{pin_tela\}/gi, '8888')
-                    .replace(/\{link\}/gi, 'https://pjcrm.site/acesso')
-                    .replace(/\{link_acesso\}/gi, 'https://pjcrm.site/acesso');
+                    .replace(/\{status\}/gi, cStatus)
+                    .replace(/\{plano\}/gi, cPlan)
+                    .replace(/\{assinatura\}/gi, cPlan)
+                    .replace(/\{subscription\}/gi, cPlan)
+                    .replace(/\{email\}/gi, cEmail)
+                    .replace(/\{e-mail\}/gi, cEmail)
+                    .replace(/\{senha\}/gi, cPassword)
+                    .replace(/\{password\}/gi, cPassword)
+                    .replace(/\{tela\}/gi, cScreen)
+                    .replace(/\{screen\}/gi, cScreen)
+                    .replace(/\{pin_tela\}/gi, cPinScreen)
+                    .replace(/\{pin\}/gi, cPinScreen)
+                    .replace(/\{metodo_pagamento\}/gi, cPayment)
+                    .replace(/\{forma_pagamento\}/gi, cPayment)
+                    .replace(/\{pagamento\}/gi, cPayment)
+                    .replace(/\{valor\}/gi, cAmount)
+                    .replace(/\{valor_pago\}/gi, cAmount)
+                    .replace(/\{link\}/gi, cLink)
+                    .replace(/\{link_acesso\}/gi, cLink)
+                    .replace(/\{notas\}/gi, cNotes)
+                    .replace(/\{observacoes\}/gi, cNotes);
             };
 
             // 1. CONTEÚDO

@@ -96,6 +96,13 @@ function FlowCanvasEditorContent() {
     }, [firestore, effectiveUserId]);
     const { data: allFlows } = useCollection<FlowDefinition>(flowsQuery);
 
+    // Buscar clientes cadastrados no CRM (para simulação fiel com dados reais)
+    const clientsQuery = useMemoFirebase(() => {
+        if (!effectiveUserId) return null;
+        return collection(firestore, 'users', effectiveUserId, 'clients');
+    }, [firestore, effectiveUserId]);
+    const { data: allClients } = useCollection<any>(clientsQuery);
+
     // Buscar conexão WhatsApp
     const connectionDocRef = useMemoFirebase(() => {
         if (!effectiveUserId) return null;
@@ -807,6 +814,7 @@ function FlowCanvasEditorContent() {
                     edges={edges}
                     flowName={flowName}
                     onOpenRealTest={() => setIsTestOpen(true)}
+                    clients={allClients || []}
                 />
 
                 {/* PALETA LATERAL FLUTUANTE (MINIMIZÁVEL E COMPACTA COM ARRASTAR E SOLTAR) */}

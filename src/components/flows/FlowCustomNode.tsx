@@ -330,7 +330,7 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                                     position={Position.Right}
                                     id="is_client"
                                     className="!w-4 !h-4 !bg-emerald-500 hover:!bg-emerald-600 !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[21px] cursor-crosshair shadow-sm z-10"
-                                    title="Saída para quem é cliente cadastrado no CRM (libera variáveis como {nome}, {vencimento}, {plano}, etc.)"
+                                    title="Saída para quem é cliente cadastrado no CRM (libera variáveis como {email}, {senha}, {tela}, {plano}, {vencimento}, etc.)"
                                 />
                             </div>
 
