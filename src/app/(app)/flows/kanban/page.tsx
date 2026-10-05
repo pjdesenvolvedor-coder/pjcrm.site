@@ -285,10 +285,10 @@ export default function FlowKanbanPage() {
                             key={col.id}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, col.id)}
-                            className={`rounded-2xl border-2 p-3 transition-colors flex flex-col min-h-[550px] ${col.bgColor}`}
+                            className={`rounded-2xl border-2 p-3 transition-colors flex flex-col h-[640px] xl:h-[calc(100vh-14rem)] xl:min-h-[580px] xl:max-h-[840px] ${col.bgColor}`}
                         >
-                            {/* CABEÇALHO DA COLUNA */}
-                            <div className="flex items-center justify-between pb-3 border-b border-border/50 mb-3 px-1">
+                            {/* CABEÇALHO DA COLUNA (FIXO NO TOPO) */}
+                            <div className="flex items-center justify-between pb-3 border-b border-border/50 mb-3 px-1 shrink-0">
                                 <div className="flex items-center gap-2">
                                     <div className={`p-1.5 rounded-lg bg-card shadow-sm ${col.color}`}>
                                         <ColIcon className="h-4 w-4" />
@@ -300,10 +300,10 @@ export default function FlowKanbanPage() {
                                 </Badge>
                             </div>
 
-                            {/* LISTA DE CARDS DA COLUNA */}
-                            <div className="space-y-3 flex-1">
+                            {/* LISTA DE CARDS DA COLUNA COM ROLAGEM AUTOMÁTICA INTERNA */}
+                            <div className="space-y-3 flex-1 overflow-y-auto pr-1 kanban-scroll min-h-0">
                                 {colSessions.length === 0 ? (
-                                    <div className="h-40 border border-dashed rounded-xl flex flex-col items-center justify-center text-center p-4 text-muted-foreground/60 text-xs select-none">
+                                    <div className="h-full min-h-[160px] border border-dashed rounded-xl flex flex-col items-center justify-center text-center p-4 text-muted-foreground/60 text-xs select-none">
                                         Nenhum cliente nesta etapa.
                                         <br />
                                         <span className="text-[10px] opacity-75">Arraste um card para cá</span>
@@ -382,7 +382,7 @@ export default function FlowKanbanPage() {
 
                                                 {/* ÚLTIMA MENSAGEM */}
                                                 {session.lastMessageText && (
-                                                    <div className="bg-muted/40 p-2 rounded-lg border text-[11px] text-muted-foreground line-clamp-2 italic">
+                                                    <div className="bg-muted/40 p-2 rounded-lg border text-[11px] text-muted-foreground max-h-20 overflow-y-auto kanban-scroll italic">
                                                         &quot;{session.lastMessageText}&quot;
                                                     </div>
                                                 )}
