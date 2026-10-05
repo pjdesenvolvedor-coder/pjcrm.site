@@ -320,9 +320,10 @@ export async function executeRenewalPayment({
     const session = sessionSnap.data() as RenewalSession;
     const userId = session.userId;
 
-    // Se já foi processada anteriormente, evita duplicidade
-    if (session.status === 'paid' && session.paidAt) {
-      console.log(`[RenewalService] Sessão ${sessionId} já processada anteriormente.`);
+    // Se já foi processada anteriormente e a mensagem de confirmação já foi enviada, evita duplicidade total
+    const alreadyProcessedInCrm = session.status === 'paid' && Boolean(session.paidAt);
+    if (alreadyProcessedInCrm && (session as any).messageSent === true) {
+      console.log(`[RenewalService] Sessão ${sessionId} já processada e confirmada anteriormente.`);
       return { success: true, renewedCount: session.renewedClientIds?.length || 0, messageSent: true };
     }
 
@@ -337,122 +338,147 @@ export async function executeRenewalPayment({
     const renewedNames: string[] = [];
     let newestDueDateFormatted = '';
 
-    // Renova cada cliente no Firestore
-    for (const clientId of targetClientIds) {
-      try {
-        const clientRef = doc(db, 'users', userId, 'clients', clientId);
-        const clientSnap = await getDoc(clientRef);
-        if (!clientSnap.exists()) continue;
-
-        const clientData = clientSnap.data() as Client;
-        const subName = clientData.subscription || 'Assinatura';
-        renewedNames.push(subName);
-
-        // Se a data de vencimento atual ainda for no futuro, soma 1 mês a partir dela.
-        // Se já tiver vencido ou for hoje, soma 1 mês a partir de hoje!
-        const now = new Date();
-        const existingDue = clientData.dueDate?.toDate ? clientData.dueDate.toDate() : null;
-        const baseDate = (existingDue && existingDue.getTime() > now.getTime()) ? existingDue : now;
-        const newDueDate = add(baseDate, { months: 1 });
-        newestDueDateFormatted = format(newDueDate, 'dd/MM/yyyy');
-
-        const hasReportedIssue = effectiveReportedIssues.some((r) => r.clientId === clientId);
-
-        const updateData: any = {
-          status: 'Ativo',
-          dueDate: Timestamp.fromDate(newDueDate),
-          renewalCount: (clientData.renewalCount || 0) + 1,
-          lastRenewedAt: serverTimestamp(),
-          sentUpsellIds: [],
-          sentUpsell2Ids: [],
-          sentUpsellMenuIds: [],
-          sentRemarketingIds: [],
-        };
-
-        if (hasReportedIssue) {
-          updateData.needsSupport = true;
-          const oldNotes = clientData.notes || '';
-          updateData.notes = `${oldNotes}\n[🚨 Cliente informou problema na assinatura na renovação em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim();
-        }
-
-        await updateDoc(clientRef, updateData);
-        console.log(`[RenewalService] Cliente ${clientId} (${clientData.name}) renovado com sucesso até ${newestDueDateFormatted}${hasReportedIssue ? ' com suporte marcado' : ''}`);
-      } catch (clientErr) {
-        console.error(`[RenewalService] Erro ao renovar cliente ${clientId}:`, clientErr);
-      }
-    }
-
-    // Se houver alguma assinatura reportada com problema que NÃO foi selecionada para renovação, ainda assim marca suporte
-    for (const reported of effectiveReportedIssues) {
-      if (!targetClientIds.includes(reported.clientId)) {
+    if (!alreadyProcessedInCrm) {
+      // Renova cada cliente no Firestore
+      for (const clientId of targetClientIds) {
         try {
+          const clientRef = doc(db, 'users', userId, 'clients', clientId);
+          const clientSnap = await getDoc(clientRef);
+          if (!clientSnap.exists()) continue;
+
+          const clientData = clientSnap.data() as Client;
+          const subName = clientData.subscription || 'Assinatura';
+          renewedNames.push(subName);
+
+          // Se a data de vencimento atual ainda for no futuro, soma 1 mês a partir dela.
+          // Se já tiver vencido ou for hoje, soma 1 mês a partir de hoje!
           const now = new Date();
-          const otherRef = doc(db, 'users', userId, 'clients', reported.clientId);
-          const otherSnap = await getDoc(otherRef);
-          if (otherSnap.exists()) {
-            const otherData = otherSnap.data() as Client;
-            const oldNotes = otherData.notes || '';
-            await updateDoc(otherRef, {
-              needsSupport: true,
-              notes: `${oldNotes}\n[🚨 Cliente informou problema na assinatura na renovação em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim(),
-            });
-            console.log(`[RenewalService] Cliente ${reported.clientId} (${otherData.name}) marcado como needsSupport: true (não renovado)`);
+          const existingDue = clientData.dueDate?.toDate ? clientData.dueDate.toDate() : null;
+          const baseDate = (existingDue && existingDue.getTime() > now.getTime()) ? existingDue : now;
+          const newDueDate = add(baseDate, { months: 1 });
+          newestDueDateFormatted = format(newDueDate, 'dd/MM/yyyy');
+
+          const hasReportedIssue = effectiveReportedIssues.some((r) => r.clientId === clientId);
+
+          const updateData: any = {
+            status: 'Ativo',
+            dueDate: Timestamp.fromDate(newDueDate),
+            renewalCount: (clientData.renewalCount || 0) + 1,
+            lastRenewedAt: serverTimestamp(),
+            sentUpsellIds: [],
+            sentUpsell2Ids: [],
+            sentUpsellMenuIds: [],
+            sentRemarketingIds: [],
+          };
+
+          if (hasReportedIssue) {
+            updateData.needsSupport = true;
+            const oldNotes = clientData.notes || '';
+            updateData.notes = `${oldNotes}\n[🚨 Cliente informou problema na assinatura na renovação em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim();
           }
-        } catch (e) {
-          console.error(`[RenewalService] Erro ao marcar suporte para cliente não renovado ${reported.clientId}:`, e);
+
+          await updateDoc(clientRef, updateData);
+          console.log(`[RenewalService] Cliente ${clientId} (${clientData.name}) renovado com sucesso até ${newestDueDateFormatted}${hasReportedIssue ? ' com suporte marcado' : ''}`);
+        } catch (clientErr) {
+          console.error(`[RenewalService] Erro ao renovar cliente ${clientId}:`, clientErr);
         }
+      }
+
+      // Se houver alguma assinatura reportada com problema que NÃO foi selecionada para renovação, ainda assim marca suporte
+      for (const reported of effectiveReportedIssues) {
+        if (!targetClientIds.includes(reported.clientId)) {
+          try {
+            const now = new Date();
+            const otherRef = doc(db, 'users', userId, 'clients', reported.clientId);
+            const otherSnap = await getDoc(otherRef);
+            if (otherSnap.exists()) {
+              const otherData = otherSnap.data() as Client;
+              const oldNotes = otherData.notes || '';
+              await updateDoc(otherRef, {
+                needsSupport: true,
+                notes: `${oldNotes}\n[🚨 Cliente informou problema na assinatura na renovação em ${format(now, 'dd/MM/yyyy HH:mm')}]`.trim(),
+              });
+              console.log(`[RenewalService] Cliente ${reported.clientId} (${otherData.name}) marcado como needsSupport: true (não renovado)`);
+            }
+          } catch (e) {
+            console.error(`[RenewalService] Erro ao marcar suporte para cliente não renovado ${reported.clientId}:`, e);
+          }
+        }
+      }
+
+      // Atualiza status da sessão
+      await updateDoc(sessionDocRef, {
+        status: 'paid',
+        paidAt: serverTimestamp(),
+        pixTransactionId: pixTransactionId || session.pixTransactionId || null,
+        totalAmountPaid: amountInCents || session.totalAmountPaid || 0,
+        renewedClientIds: targetClientIds,
+        reportedIssues: effectiveReportedIssues,
+        hasSupportRequest: effectiveReportedIssues.length > 0,
+      });
+
+      // Registra log geral
+      await addDoc(collection(db, 'users', userId, 'logs'), {
+        userId,
+        type: 'Renovação Automática',
+        clientName: session.clientName,
+        target: session.phone,
+        status: 'Enviado',
+        details: `Renovadas: ${renewedNames.join(', ')} | Novo vencimento: ${newestDueDateFormatted}${effectiveReportedIssues.length > 0 ? ' | Suporte Aberto Automático 🚨' : ''}`,
+        timestamp: serverTimestamp(),
+      }).catch(() => {});
+    } else {
+      // Já foi atualizado no CRM anteriormente, apenas carrega os dados para envio da mensagem
+      for (const clientId of targetClientIds) {
+        try {
+          const clientRef = doc(db, 'users', userId, 'clients', clientId);
+          const clientSnap = await getDoc(clientRef);
+          if (clientSnap.exists()) {
+            const clientData = clientSnap.data() as Client;
+            renewedNames.push(clientData.subscription || 'Assinatura');
+            if (clientData.dueDate) {
+              const d = clientData.dueDate.toDate ? clientData.dueDate.toDate() : new Date(clientData.dueDate);
+              newestDueDateFormatted = format(d, 'dd/MM/yyyy');
+            }
+          }
+        } catch {}
       }
     }
 
-    // Atualiza status da sessão
-    await updateDoc(sessionDocRef, {
-      status: 'paid',
-      paidAt: serverTimestamp(),
-      pixTransactionId: pixTransactionId || session.pixTransactionId || null,
-      totalAmountPaid: amountInCents || session.totalAmountPaid || 0,
-      renewedClientIds: targetClientIds,
-      reportedIssues: effectiveReportedIssues,
-      hasSupportRequest: effectiveReportedIssues.length > 0,
-    });
-
-    // Registra log geral
-    await addDoc(collection(db, 'users', userId, 'logs'), {
-      userId,
-      type: 'Renovação Automática',
-      clientName: session.clientName,
-      target: session.phone,
-      status: 'Enviado',
-      details: `Renovadas: ${renewedNames.join(', ')} | Novo vencimento: ${newestDueDateFormatted}${effectiveReportedIssues.length > 0 ? ' | Suporte Aberto Automático 🚨' : ''}`,
-      timestamp: serverTimestamp(),
-    }).catch(() => {});
-
-    // Dispara WhatsApp de confirmação para o cliente
+    // Dispara WhatsApp de confirmação para o cliente (SEMPRE que um pagamento for aprovado)
     let messageSent = false;
     try {
       const configSnap = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
       const settings = configSnap.exists() ? (configSnap.data() as Settings) : {};
 
-      const isTestSession = Boolean(
-        session.isTest ||
-        sessionId.startsWith('ren_test') ||
-        (session.clientName && session.clientName.toLowerCase().includes('teste')) ||
-        (session.subscriptions && session.subscriptions.some(s => s.clientId?.startsWith('test_')))
-      );
-      const isAutoActive = Boolean(settings.isAutoRenewalActive);
+      let { primaryToken, fallbackToken } = resolveRenewalWhatsAppTokens(settings);
 
-      // Trava de segurança: Se a renovação automática estiver desligada e NÃO for sessão de teste, NUNCA dispara WhatsApp
-      const allowSendWhatsApp = isTestSession || isAutoActive;
-
-      if (!allowSendWhatsApp) {
-        console.log(`[RenewalService] Renovação automática desabilitada (isAutoRenewalActive: false). Nenhuma mensagem foi disparada.`);
-        return {
-          success: true,
-          renewedCount: renewedNames.length,
-          messageSent: false,
-        };
+      // Fallbacks adicionais de token se não estiverem configurados em config
+      if (!primaryToken && !fallbackToken) {
+        try {
+          const flowSnap = await getDoc(doc(db, 'users', userId, 'settings', 'uazapi_flow'));
+          if (flowSnap.exists()) {
+            const flowData = flowSnap.data() as any;
+            if (flowData.instanceToken?.trim()) {
+              primaryToken = flowData.instanceToken.trim();
+            }
+          }
+        } catch {}
       }
 
-      const { primaryToken, fallbackToken } = resolveRenewalWhatsAppTokens(settings);
+      if (!primaryToken && !fallbackToken) {
+        try {
+          const snap2fa = await getDoc(doc(db, 'users', userId, 'settings', '2fatores'));
+          if (snap2fa.exists()) {
+            const data2fa = snap2fa.data() as any;
+            if (data2fa.webhookToken?.trim()) {
+              primaryToken = data2fa.webhookToken.trim();
+            } else if (data2fa.billingWebhookToken?.trim()) {
+              primaryToken = data2fa.billingWebhookToken.trim();
+            }
+          }
+        } catch {}
+      }
 
       if ((primaryToken || fallbackToken) && session.phone) {
           const defaultTemplate =
@@ -465,13 +491,16 @@ export async function executeRenewalPayment({
             'Obrigado pela preferência e bom entretenimento! 🚀';
 
           const template = settings.renewalSuccessMessage?.trim() || defaultTemplate;
-          const totalReais = amountInCents ? (amountInCents / 100).toFixed(2).replace('.', ',') : '0,00';
+          const effectiveAmountCents = amountInCents || session.totalAmountPaid || 0;
+          const totalReais = effectiveAmountCents ? (effectiveAmountCents / 100).toFixed(2).replace('.', ',') : '0,00';
+          const clientNameSafe = (session.clientName || 'Cliente').trim();
+          const phoneSafe = (session.phone || '').trim();
 
           const finalMsg = template
-            .replace(/{cliente}/gi, session.clientName)
-            .replace(/{nome}/gi, session.clientName)
-            .replace(/{telefone}/gi, session.phone)
-            .replace(/{numero}/gi, session.phone)
+            .replace(/{cliente}/gi, clientNameSafe)
+            .replace(/{nome}/gi, clientNameSafe)
+            .replace(/{telefone}/gi, phoneSafe)
+            .replace(/{numero}/gi, phoneSafe)
             .replace(/{assinaturas}/gi, renewedNames.join(' + '))
             .replace(/{assinatura}/gi, renewedNames.join(' + '))
             .replace(/{novo_vencimento}/gi, newestDueDateFormatted)
@@ -479,13 +508,31 @@ export async function executeRenewalPayment({
             .replace(/{valor}/gi, totalReais)
             .replace(/{status}/gi, 'Ativo');
 
-          const sendResult = await sendWhatsAppWithFallback(session.phone, finalMsg, primaryToken, fallbackToken);
+          const sendResult = await sendWhatsAppWithFallback(phoneSafe, finalMsg, primaryToken, fallbackToken);
           messageSent = sendResult.success;
           if (messageSent) {
-            console.log(`[RenewalService] Confirmação enviada via token: ${sendResult.tokenUsed.slice(0, 10)}...`);
+            console.log(`[RenewalService] Confirmação enviada via token: ${sendResult.tokenUsed.slice(0, 10)}... para ${phoneSafe}`);
           } else {
-            console.warn(`[RenewalService] Falha ao enviar confirmação: ${sendResult.error}`);
+            console.warn(`[RenewalService] Falha ao enviar confirmação para ${phoneSafe}: ${sendResult.error}`);
           }
+
+          // Registra log específico do envio da mensagem de confirmação
+          await addDoc(collection(db, 'users', userId, 'logs'), {
+            userId,
+            type: 'Confirmação de Pagamento WhatsApp',
+            clientName: clientNameSafe,
+            target: phoneSafe,
+            status: messageSent ? 'Enviado' : 'Falha',
+            details: messageSent
+              ? `Comprovante de renovação enviado com sucesso para ${phoneSafe} (Token: ${sendResult.tokenUsed?.slice(0, 10)}...)`
+              : `Falha ao enviar comprovante no WhatsApp: ${sendResult.error || 'Erro desconhecido'}`,
+            timestamp: serverTimestamp(),
+          }).catch(() => {});
+
+          // Salva messageSent na sessão para auditoria e controle de duplicidade
+          await updateDoc(sessionDocRef, {
+            messageSent,
+          }).catch(() => {});
 
           // Se houve relato de problemas na assinatura, dispara a mensagem de abertura de suporte
           if (effectiveReportedIssues.length > 0) {
@@ -506,10 +553,10 @@ export async function executeRenewalPayment({
               const issueDisplay = issueNames.join(' + ') || renewedNames.join(' + ');
 
               const supportMsg = supportTemplate
-                .replace(/{cliente}/gi, session.clientName)
-                .replace(/{nome}/gi, session.clientName)
-                .replace(/{telefone}/gi, session.phone)
-                .replace(/{numero}/gi, session.phone)
+                .replace(/{cliente}/gi, clientNameSafe)
+                .replace(/{nome}/gi, clientNameSafe)
+                .replace(/{telefone}/gi, phoneSafe)
+                .replace(/{numero}/gi, phoneSafe)
                 .replace(/{assinaturas}/gi, issueDisplay)
                 .replace(/{assinatura}/gi, issueDisplay)
                 .replace(/{novo_vencimento}/gi, newestDueDateFormatted)
@@ -521,14 +568,14 @@ export async function executeRenewalPayment({
               await new Promise((resolve) => setTimeout(resolve, 1500));
 
               const supportResult = await sendWhatsAppWithFallback(
-                session.phone,
+                phoneSafe,
                 supportMsg,
                 primaryToken,
                 fallbackToken
               );
 
               if (supportResult.success) {
-                console.log(`[RenewalService] Mensagem de suporte automático enviada para ${session.phone}`);
+                console.log(`[RenewalService] Mensagem de suporte automático enviada para ${phoneSafe}`);
               } else {
                 console.warn(`[RenewalService] Falha ao enviar mensagem de suporte: ${supportResult.error}`);
               }
@@ -536,8 +583,8 @@ export async function executeRenewalPayment({
               await addDoc(collection(db, 'users', userId, 'logs'), {
                 userId,
                 type: 'Suporte Aberto (Renovação)',
-                clientName: session.clientName,
-                target: session.phone,
+                clientName: clientNameSafe,
+                target: phoneSafe,
                 status: supportResult.success ? 'Enviado' : 'Falha',
                 details: `Chamado de suporte aberto para assinatura(s): ${issueDisplay}`,
                 timestamp: serverTimestamp(),
@@ -546,10 +593,12 @@ export async function executeRenewalPayment({
               console.error('[RenewalService] Erro ao disparar mensagem de suporte na renovação:', supErr);
             }
           }
-        }
-      } catch (msgErr) {
-        console.error('[RenewalService] Erro ao disparar mensagem WhatsApp:', msgErr);
+      } else {
+        console.warn(`[RenewalService] Não foi possível enviar WhatsApp: Token ausente ou telefone não informado (${session.phone})`);
       }
+    } catch (msgErr) {
+      console.error('[RenewalService] Erro ao disparar mensagem WhatsApp:', msgErr);
+    }
 
     return {
       success: true,
