@@ -727,25 +727,89 @@ export function NodeConfigDialog({
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="open_support">
-                                            Transferir para Atendimento Humano / Suporte
+                                        <SelectItem value="send_contact">
+                                            👤 Enviar Card de Contato (WhatsApp vCard)
                                         </SelectItem>
-                                        <SelectItem value="add_tag">Adicionar Tag / Etiqueta</SelectItem>
+                                        <SelectItem value="open_support">
+                                            🎧 Transferir para Atendimento Humano / Suporte
+                                        </SelectItem>
+                                        <SelectItem value="add_tag">
+                                            🏷️ Adicionar Tag / Etiqueta
+                                        </SelectItem>
                                         <SelectItem value="notify_attendant">
-                                            Notificar Atendente Responsável
+                                            🔔 Notificar Atendente Responsável
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Mensagem de Notificação / Valor</Label>
-                                <Input
-                                    placeholder="Ex: Cliente solicitou suporte no WhatsApp"
-                                    value={formData.text || ''}
-                                    onChange={(e) => setFormData({ ...formData, text: e.target.value })}
-                                />
-                            </div>
+                            {/* Se for Enviar Card de Contato */}
+                            {formData.actionType === 'send_contact' ? (
+                                <div className="space-y-3.5 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                                        <UserCheck className="h-4 w-4" />
+                                        <span>Dados do Card de Contato (WhatsApp)</span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-medium">Nome da Pessoa / Contato</Label>
+                                        <Input
+                                            placeholder="Ex: Pedro Suporte / Atendimento VIP"
+                                            value={formData.contactCardName || ''}
+                                            onChange={(e) => setFormData({ ...formData, contactCardName: e.target.value })}
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Nome que aparecerá no cartão de contato no WhatsApp. Aceita variáveis como {'{nome}'}.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-medium">Número do WhatsApp</Label>
+                                        <Input
+                                            placeholder="Ex: 5511999999999"
+                                            value={formData.contactCardPhone || ''}
+                                            onChange={(e) => setFormData({ ...formData, contactCardPhone: e.target.value })}
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Número com código do país e DDD (somente dígitos). Aceita variáveis como {'{telefone}'}.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-medium">Empresa / Organização (Opcional)</Label>
+                                        <Input
+                                            placeholder="Ex: PJ CRM Suporte"
+                                            value={formData.contactCardOrganization || ''}
+                                            onChange={(e) => setFormData({ ...formData, contactCardOrganization: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-medium">Mensagem Adicional (Opcional)</Label>
+                                        <Input
+                                            placeholder="Ex: Segue o contato do nosso suporte oficial:"
+                                            value={formData.text || ''}
+                                            onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Se preenchido, esta mensagem é enviada junto com o cartão de contato.
+                                        </p>
+                                    </div>
+
+                                    <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                                        💡 <strong>API UazAPI Nativa:</strong> Envia um cartão de contato nativo (vCard) do WhatsApp. O cliente recebe um botão direto para <em>Conversar</em> ou <em>Salvar Contato</em> na agenda do telefone com apenas 1 clique.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Mensagem de Notificação / Valor</Label>
+                                    <Input
+                                        placeholder="Ex: Cliente solicitou suporte no WhatsApp"
+                                        value={formData.text || ''}
+                                        onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                    />
+                                </div>
+                            )}
                         </div>
                     )}
 

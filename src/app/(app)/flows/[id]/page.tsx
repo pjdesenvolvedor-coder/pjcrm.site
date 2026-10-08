@@ -691,8 +691,11 @@ function FlowCanvasEditorContent() {
                     initialData = {
                         nodeType: 'action',
                         label: 'Ação',
-                        actionType: 'open_support',
-                        text: 'Transferido para atendimento humano',
+                        actionType: 'send_contact',
+                        contactCardName: 'Suporte Oficial',
+                        contactCardPhone: '',
+                        contactCardOrganization: '',
+                        text: '',
                     };
                     break;
                 case 'flow_connect':

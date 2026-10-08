@@ -349,22 +349,45 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
 
                 {/* 4. NÓ DE AÇÃO */}
                 {nodeData?.nodeType === 'action' && (
-                    <div className="p-2 bg-amber-50/50 dark:bg-amber-950/20 rounded border border-amber-100 dark:border-amber-900/50 space-y-1">
+                    <div className="p-2 bg-amber-50/50 dark:bg-amber-950/20 rounded border border-amber-100 dark:border-amber-900/50 space-y-1.5">
                         <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
-                            <Zap className="h-3.5 w-3.5 text-amber-500" />
+                            {nodeData.actionType === 'send_contact' ? (
+                                <UserCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                            ) : (
+                                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                            )}
                             <span>
-                                {nodeData.actionType === 'open_support'
+                                {nodeData.actionType === 'send_contact'
+                                    ? 'Enviar Card de Contato'
+                                    : nodeData.actionType === 'open_support'
                                     ? 'Transferir para Suporte'
                                     : nodeData.actionType === 'add_tag'
                                     ? 'Adicionar Tag'
+                                    : nodeData.actionType === 'notify_attendant'
+                                    ? 'Notificar Atendente'
                                     : 'Ação do Sistema'}
                             </span>
                         </div>
-                        {nodeData.text && (
+
+                        {nodeData.actionType === 'send_contact' ? (
+                            <div className="bg-white/80 dark:bg-slate-900/70 p-2 rounded-md border border-indigo-100 dark:border-indigo-900/60 space-y-0.5 text-[11px]">
+                                <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                    👤 {nodeData.contactCardName || 'Nome do Contato'}
+                                </div>
+                                <div className="text-slate-600 dark:text-slate-400 text-[10px] truncate">
+                                    📞 {nodeData.contactCardPhone || 'Número não definido'}
+                                </div>
+                                {nodeData.contactCardOrganization && (
+                                    <div className="text-[10px] text-muted-foreground truncate">
+                                        🏢 {nodeData.contactCardOrganization}
+                                    </div>
+                                )}
+                            </div>
+                        ) : nodeData.text ? (
                             <p className="text-[11px] text-muted-foreground line-clamp-2">
                                 {nodeData.text}
                             </p>
-                        )}
+                        ) : null}
                     </div>
                 )}
 

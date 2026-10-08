@@ -581,6 +581,46 @@ export async function sendUazapiPresence(
     }
 }
 
+export async function sendUazapiContact(
+    ctx: FlowRunnerContext,
+    fullName: string,
+    phoneNumber: string,
+    organization?: string
+): Promise<boolean> {
+    try {
+        const base = cleanServerUrl(ctx.serverUrl);
+        const recipientPhone = formatPhoneWith55(ctx.phoneNumber);
+        const contactFormattedPhone = formatPhoneWith55(cleanPhone(phoneNumber));
+
+        const res = await fetch(`${base}/send/contact`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'token': ctx.instanceToken,
+                'apikey': ctx.instanceToken,
+            },
+            body: JSON.stringify({
+                number: recipientPhone,
+                fullName: fullName.trim() || 'Contato',
+                phoneNumber: contactFormattedPhone,
+                organization: organization?.trim() || '',
+            }),
+        });
+
+        if (!res.ok) {
+            const errTxt = await res.text().catch(() => '');
+            console.warn(`[sendUazapiContact] Falha ao enviar via /send/contact (${res.status}): ${errTxt}. Enviando fallback em texto.`);
+            const fallbackText = `👤 *Contato:*\n*Nome:* ${fullName.trim()}\n*WhatsApp:* https://wa.me/${contactFormattedPhone}`;
+            return await sendUazapiText(ctx, fallbackText);
+        }
+
+        return true;
+    } catch (err) {
+        console.error('[sendUazapiContact] error:', err);
+        return false;
+    }
+}
+
 export async function sendUazapiMenu(
     ctx: FlowRunnerContext,
     menuData: FlowNodeData
@@ -819,7 +859,26 @@ export async function executeFlowNode(
 
     // 4. AÇÃO
     if (nodeData.nodeType === 'action') {
-        if (nodeData.actionType === 'open_support') {
+        if (nodeData.actionType === 'send_contact') {
+            const rawName = nodeData.contactCardName || 'Contato';
+            const rawPhone = nodeData.contactCardPhone || '';
+            const rawOrg = nodeData.contactCardOrganization || '';
+
+            const contactName = replaceVars(rawName);
+            const contactPhone = replaceVars(rawPhone);
+            const contactOrg = rawOrg ? replaceVars(rawOrg) : undefined;
+
+            if (contactPhone) {
+                console.log(`[FlowRunner] Enviando card de contato para ${ctx.phoneNumber}: ${contactName} (${contactPhone})`);
+                await sendUazapiContact(ctx, contactName, contactPhone, contactOrg);
+            } else {
+                console.warn(`[FlowRunner] Ação send_contact no nó ${nodeId} não possui telefone configurado.`);
+            }
+
+            if (nodeData.text) {
+                await sendUazapiText(ctx, replaceVars(nodeData.text));
+            }
+        } else if (nodeData.actionType === 'open_support') {
             // Procura o cliente e marca como necessitando suporte
             try {
                 const clientsRef = collection(ctx.db, 'users', ctx.userId, 'clients');

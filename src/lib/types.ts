@@ -404,8 +404,11 @@ export type FlowNodeData = {
   delaySeconds?: number;
   delayPresence?: 'composing' | 'recording' | 'none';
   // Ação
-  actionType?: 'add_tag' | 'remove_tag' | 'change_status' | 'open_support' | 'notify_attendant';
+  actionType?: 'add_tag' | 'remove_tag' | 'change_status' | 'open_support' | 'notify_attendant' | 'send_contact';
   actionValue?: string;
+  contactCardName?: string;
+  contactCardPhone?: string;
+  contactCardOrganization?: string;
   // Condição
   conditionType?: 'is_client' | 'has_tag' | 'client_status' | 'custom_field';
   conditionField?: string;

@@ -28,6 +28,8 @@ import {
     ChevronRight,
     AlertCircle,
     Info,
+    UserCheck,
+    MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +57,11 @@ interface SimMessage {
         menuQuestionText?: string;
         menuButtonTitle?: string;
         menuOptions?: Array<{ id: string; label: string; description?: string }>;
+    };
+    contactCard?: {
+        name: string;
+        phone: string;
+        organization?: string;
     };
     time: string;
 }
@@ -336,41 +343,96 @@ export function FlowWhatsAppSimulator({
             }
             // 3. AÇÃO
             else if (data.nodeType === 'action') {
-                if (data.text) {
+                if (data.actionType === 'send_contact') {
+                    const cardName = formatText(data.contactCardName || 'Contato');
+                    const cardPhone = formatText(data.contactCardPhone || '');
+                    const cardOrg = data.contactCardOrganization ? formatText(data.contactCardOrganization) : undefined;
+
+                    if (data.text) {
+                        setIsTyping(true);
+                        setTypingText('digitando...');
+                        await sleep(600);
+                        if (executionRef.current.isCancelled) return;
+                        setIsTyping(false);
+                        setMessages((prev) => [
+                            ...prev,
+                            {
+                                id: `msg_${Date.now()}_intro`,
+                                sender: 'bot',
+                                nodeId,
+                                nodeType: 'action',
+                                text: formatText(data.text!),
+                                time: getCurrentTime(),
+                            },
+                        ]);
+                    }
+
                     setIsTyping(true);
-                    setTypingText('digitando...');
+                    setTypingText('enviando contato...');
                     await sleep(600);
                     if (executionRef.current.isCancelled) return;
                     setIsTyping(false);
+
                     setMessages((prev) => [
                         ...prev,
                         {
-                            id: `msg_${Date.now()}_${Math.random()}`,
+                            id: `msg_contact_${Date.now()}`,
                             sender: 'bot',
                             nodeId,
                             nodeType: 'action',
-                            text: formatText(data.text),
+                            contactCard: {
+                                name: cardName,
+                                phone: cardPhone,
+                                organization: cardOrg,
+                            },
+                            time: getCurrentTime(),
+                        },
+                        {
+                            id: `sys_${Date.now()}`,
+                            sender: 'system',
+                            text: `👤 Card de contato enviado: ${cardName} (${cardPhone || 'Sem número'})`,
+                            time: getCurrentTime(),
+                        },
+                    ]);
+                } else {
+                    if (data.text) {
+                        setIsTyping(true);
+                        setTypingText('digitando...');
+                        await sleep(600);
+                        if (executionRef.current.isCancelled) return;
+                        setIsTyping(false);
+                        setMessages((prev) => [
+                            ...prev,
+                            {
+                                id: `msg_${Date.now()}_${Math.random()}`,
+                                sender: 'bot',
+                                nodeId,
+                                nodeType: 'action',
+                                text: formatText(data.text),
+                                time: getCurrentTime(),
+                            },
+                        ]);
+                    }
+
+                    const actionLabel =
+                        data.actionType === 'open_support'
+                            ? 'Transferido para Atendimento Humano'
+                            : data.actionType === 'add_tag'
+                            ? `Tag adicionada: ${data.actionValue || 'Tag'}`
+                            : data.actionType === 'notify_attendant'
+                            ? 'Atendente Notificado'
+                            : 'Ação do Sistema disparada';
+
+                    setMessages((prev) => [
+                        ...prev,
+                        {
+                            id: `sys_${Date.now()}`,
+                            sender: 'system',
+                            text: `⚡ ${actionLabel}`,
                             time: getCurrentTime(),
                         },
                     ]);
                 }
-
-                const actionLabel =
-                    data.actionType === 'open_support'
-                        ? 'Transferido para Atendimento Humano'
-                        : data.actionType === 'add_tag'
-                        ? `Tag adicionada: ${data.actionValue || 'Tag'}`
-                        : 'Ação do Sistema disparada';
-
-                setMessages((prev) => [
-                    ...prev,
-                    {
-                        id: `sys_${Date.now()}`,
-                        sender: 'system',
-                        text: `⚡ ${actionLabel}`,
-                        time: getCurrentTime(),
-                    },
-                ]);
 
                 const nextEdge = edges.find((e) => e.source === nodeId);
                 if (nextEdge && nextEdge.target) {
@@ -756,6 +818,36 @@ export function FlowWhatsAppSimulator({
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
+                                )}
+
+                                {/* CARD DE CONTATO DO WHATSAPP (vCard) */}
+                                {msg.contactCard && (
+                                    <div className="bg-white dark:bg-[#1f2c34] rounded-xl border border-slate-200 dark:border-slate-700/80 overflow-hidden shadow-xs my-1 min-w-[210px] max-w-[260px]">
+                                        <div className="p-3 flex items-center gap-3 border-b border-slate-100 dark:border-slate-800">
+                                            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-300 dark:border-emerald-800">
+                                                {msg.contactCard.name ? msg.contactCard.name.slice(0, 2).toUpperCase() : <UserCheck className="h-5 w-5" />}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                                                    {msg.contactCard.name}
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground truncate">
+                                                    {msg.contactCard.phone || 'Sem telefone'}
+                                                </p>
+                                                {msg.contactCard.organization && (
+                                                    <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-medium truncate">
+                                                        {msg.contactCard.organization}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50/70 dark:bg-slate-900/40 p-2 text-center">
+                                            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1.5">
+                                                <MessageSquare className="h-3.5 w-3.5" />
+                                                Conversar
+                                            </span>
+                                        </div>
                                     </div>
                                 )}
 
