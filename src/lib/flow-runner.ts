@@ -1,5 +1,6 @@
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import type { FlowDefinition, FlowNodeData, FlowContactSession, UazapiConnectionConfig, Settings, FlowVariablesConfig } from './types';
+import { getOrCreateRenewalSession } from './renewal-service';
 
 export function cleanPhone(raw: string): string {
     if (!raw) return '';
@@ -303,11 +304,30 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
     return mergedClient;
 }
 
+export async function resolveRenewalLinkForClient(
+    userId: string,
+    client: any,
+    originUrl = 'https://pjcrm.site'
+): Promise<string> {
+    if (!userId || !client) return '';
+    try {
+        const matchingDocs: any[] = Array.isArray(client._allMatchingDocs) && client._allMatchingDocs.length > 0
+            ? client._allMatchingDocs
+            : [client];
+        const res = await getOrCreateRenewalSession(userId, matchingDocs, originUrl);
+        return res?.link || '';
+    } catch (err) {
+        console.warn('[FlowRunner] Erro ao gerar link de renovação para o cliente:', err);
+        return '';
+    }
+}
+
 export function formatClientVariables(
     client: any,
     fallbackName?: string,
     fallbackPhone?: string,
-    variablesConfig?: FlowVariablesConfig
+    variablesConfig?: FlowVariablesConfig,
+    renewalLink?: string
 ): Record<string, string> {
     if (!client) {
         const name = fallbackName || 'Amigo(a)';
@@ -352,6 +372,11 @@ export function formatClientVariables(
             link_acesso: '',
             link_de_acesso: '',
             access_link: '',
+            link_renovacao: '',
+            link_de_renovacao: '',
+            link_renovar: '',
+            link_pagamento: '',
+            link_cobranca: '',
             quantidade: '',
             notas: '',
             observacoes: '',
@@ -608,6 +633,13 @@ export function formatClientVariables(
         link_acesso: accessLink,
         link_de_acesso: accessLink,
         access_link: accessLink,
+
+        // Link de Renovação / Pagamento Dinâmico
+        link_renovacao: renewalLink || '',
+        link_de_renovacao: renewalLink || '',
+        link_renovar: renewalLink || '',
+        link_pagamento: renewalLink || '',
+        link_cobranca: renewalLink || '',
 
         // Extras
         quantidade: quantityStr,
@@ -938,7 +970,11 @@ export async function executeFlowNode(
                         varCfg = varDoc.data() as FlowVariablesConfig;
                     }
                 } catch {}
-                clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg);
+                let renewalLink = '';
+                if (client) {
+                    renewalLink = await resolveRenewalLinkForClient(ctx.userId, client);
+                }
+                clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg, renewalLink);
                 ctx.clientVariables = clientVars;
             }
         } catch {}
@@ -1192,13 +1228,18 @@ export async function executeFlowNode(
             }
         } catch {}
 
+        let renewalLink = '';
+        if (client) {
+            renewalLink = await resolveRenewalLinkForClient(ctx.userId, client);
+        }
+
         // Formata e salva as variáveis completas do cliente
         // (se algum dado do CRM vier em formato inesperado, não deixa o fluxo travar)
         try {
-            clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg);
+            clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg, renewalLink);
         } catch (err) {
             console.error('[FlowRunner] Erro ao formatar variáveis do cliente, usando fallback básico:', err);
-            clientVars = formatClientVariables(null, client?.name || ctx.contactName, ctx.phoneNumber, varCfg);
+            clientVars = formatClientVariables(null, client?.name || ctx.contactName, ctx.phoneNumber, varCfg, renewalLink);
             if (client) {
                 clientVars.status = 'Ativo';
             }

@@ -238,8 +238,8 @@ export function FlowVariablesConfigDialog({ open, onOpenChange }: FlowVariablesC
                                 Quando você usa <strong>{`{assinaturas_ativas}`}</strong>, <strong>{`{assinaturas_vencidas}`}</strong> ou <strong>{`{todas_assinaturas}`}</strong> em qualquer mensagem de fluxo do Canva, o robô substitui a variável pela lista das assinaturas do cliente, repetindo o <em>Modelo de Cada Linha</em> para cada plano e aplicando a <em>Mensagem Vazia</em> se ele não possuir nenhum registro.
                             </p>
                             <div className="mt-2 pt-2 border-t border-indigo-200/50 dark:border-indigo-900/40 flex items-center gap-1.5 flex-wrap text-[11px]">
-                                <span className="font-semibold text-indigo-950 dark:text-indigo-100">Contadores Numéricos:</span>
-                                <span>Você também pode usar <code>{`{assinaturas_ativas_qtd}`}</code>, <code>{`{assinaturas_vencidas_qtd}`}</code> e <code>{`{total_assinaturas}`}</code> para exibir apenas a quantidade de planos em textos e no detalhe de botões/menus.</span>
+                                <span className="font-semibold text-indigo-950 dark:text-indigo-100">Contadores e Links:</span>
+                                <span>Use <code>{`{assinaturas_ativas_qtd}`}</code>, <code>{`{total_assinaturas}`}</code> para números, ou <code>{`{link_renovacao}`}</code> para gerar o link onde o cliente seleciona as assinaturas e paga via PIX!</span>
                             </div>
                         </div>
                     </div>
