@@ -175,6 +175,48 @@ export function FlowWhatsAppSimulator({
                 const cLink = sampleClient?.accessLink || sampleClient?.link || 'https://pjcrm.site/acesso';
                 const cNotes = sampleClient?.notes || 'Cliente VIP';
 
+                // Buscar registros do mesmo cliente na lista de clientes para simulação realista de múltiplas assinaturas
+                const clientPhoneDigits = (sampleClient?.phone || '').replace(/\D/g, '');
+                const relatedDocs = Array.isArray(clients) && clients.length > 0 && clientPhoneDigits
+                    ? clients.filter((c: any) => (c.phone || '').replace(/\D/g, '') === clientPhoneDigits)
+                    : sampleClient ? [sampleClient] : [];
+
+                const sampleDocs = relatedDocs.length > 0 ? relatedDocs : [
+                    { subscription: cPlan, status: 'Ativo', dueDate: '2026-10-15', amountPaid: '35,00' },
+                    { subscription: 'Spotify Premium Família', status: 'Vencido', dueDate: '2026-10-01', amountPaid: '21,90' },
+                ];
+
+                const formatSimSubLine = (c: any, withStatus = false) => {
+                    const name = (c.subscription || c.plan || c.plano || 'Assinatura').trim();
+                    const parts: string[] = [];
+                    if (withStatus && c.status) parts.push(c.status);
+                    if (c.dueDate) {
+                        try {
+                            const d = typeof c.dueDate.toDate === 'function' ? c.dueDate.toDate() : new Date(c.dueDate);
+                            parts.push(`Vencimento: ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`);
+                        } catch {}
+                    }
+                    if (c.amountPaid) {
+                        const raw = String(c.amountPaid);
+                        parts.push(raw.includes('R$') ? raw : `R$ ${raw}`);
+                    }
+                    if (parts.length > 0) return `• ${name} (${parts.join(' - ')})`;
+                    return `• ${name}`;
+                };
+
+                const activeListSim = sampleDocs.filter((c: any) => c.status === 'Ativo');
+                const overdueListSim = sampleDocs.filter((c: any) => c.status === 'Vencido');
+
+                const cActiveSubs = activeListSim.length > 0
+                    ? activeListSim.map((c: any) => formatSimSubLine(c, false)).join('\n')
+                    : `• ${cPlan} (Vencimento: ${cDueDate} - ${cAmount})`;
+
+                const cOverdueSubs = overdueListSim.length > 0
+                    ? overdueListSim.map((c: any) => formatSimSubLine(c, false)).join('\n')
+                    : 'Nenhuma assinatura vencida encontrada.';
+
+                const cAllSubs = sampleDocs.map((c: any) => formatSimSubLine(c, true)).join('\n');
+
                 return txt
                     .replace(/\{nome\}/gi, cName)
                     .replace(/\{cliente\}/gi, cName)
@@ -187,6 +229,7 @@ export function FlowWhatsAppSimulator({
                     .replace(/\{dias_restantes\}/gi, '5 dias restantes')
                     .replace(/\{status\}/gi, cStatus)
                     .replace(/\{plano\}/gi, cPlan)
+                    .replace(/\{nome_assinatura\}/gi, cPlan)
                     .replace(/\{assinatura\}/gi, cPlan)
                     .replace(/\{subscription\}/gi, cPlan)
                     .replace(/\{email\}/gi, cEmail)
@@ -201,11 +244,20 @@ export function FlowWhatsAppSimulator({
                     .replace(/\{forma_pagamento\}/gi, cPayment)
                     .replace(/\{pagamento\}/gi, cPayment)
                     .replace(/\{valor\}/gi, cAmount)
+                    .replace(/\{mensalidade\}/gi, cAmount)
                     .replace(/\{valor_pago\}/gi, cAmount)
                     .replace(/\{link\}/gi, cLink)
                     .replace(/\{link_acesso\}/gi, cLink)
+                    .replace(/\{link_de_acesso\}/gi, cLink)
                     .replace(/\{notas\}/gi, cNotes)
-                    .replace(/\{observacoes\}/gi, cNotes);
+                    .replace(/\{observacoes\}/gi, cNotes)
+                    .replace(/\{assinaturas_ativas\}/gi, cActiveSubs)
+                    .replace(/\{planos_ativos\}/gi, cActiveSubs)
+                    .replace(/\{assinaturas_vencidas\}/gi, cOverdueSubs)
+                    .replace(/\{planos_vencidos\}/gi, cOverdueSubs)
+                    .replace(/\{todas_assinaturas\}/gi, cAllSubs)
+                    .replace(/\{todas_as_assinaturas\}/gi, cAllSubs)
+                    .replace(/\{assinaturas\}/gi, sampleDocs.length > 1 ? cAllSubs : cPlan);
             };
 
             // 0. START (Ponto de Partida / Início do Fluxo)

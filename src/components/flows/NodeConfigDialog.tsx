@@ -39,28 +39,86 @@ import {
     Tv,
     CreditCard,
     PlayCircle,
+    Layers,
 } from 'lucide-react';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
 
-export const AVAILABLE_FLOW_VARIABLES = [
-    { key: 'nome', label: '{nome}', desc: 'Nome completo cadastrado' },
-    { key: 'primeiro_nome', label: '{primeiro_nome}', desc: 'Primeiro nome' },
-    { key: 'telefone', label: '{telefone}', desc: 'Telefone WhatsApp' },
-    { key: 'email', label: '{email}', desc: 'E-mail da conta de acesso' },
-    { key: 'senha', label: '{senha}', desc: 'Senha da conta de acesso' },
-    { key: 'tela', label: '{tela}', desc: 'Tela de acesso (ex: Tela 1)' },
-    { key: 'pin_tela', label: '{pin_tela}', desc: 'PIN da tela' },
-    { key: 'assinatura', label: '{assinatura}', desc: 'Nome da assinatura contratada' },
-    { key: 'plano', label: '{plano}', desc: 'Nome do plano (sinônimo de assinatura)' },
-    { key: 'metodo_pagamento', label: '{metodo_pagamento}', desc: 'Método de pagamento (PIX, Cartão...)' },
-    { key: 'valor', label: '{valor}', desc: 'Valor / mensalidade' },
-    { key: 'vencimento', label: '{vencimento}', desc: 'Data de vencimento (dd/mm/aaaa)' },
-    { key: 'dias_restantes', label: '{dias_restantes}', desc: 'Dias restantes para vencer' },
-    { key: 'status', label: '{status}', desc: 'Status no CRM (Ativo, Vencido...)' },
-    { key: 'link_acesso', label: '{link_acesso}', desc: 'Link de acesso' },
-    { key: 'notas', label: '{notas}', desc: 'Observações do cliente' },
+export interface FlowVariableItem {
+    key: string;
+    label: string;
+    desc: string;
+}
+
+export interface FlowVariableGroup {
+    id: string;
+    title: string;
+    icon: any;
+    colorClass: string;
+    badgeClass: string;
+    variables: FlowVariableItem[];
+}
+
+export const FLOW_VARIABLE_GROUPS: FlowVariableGroup[] = [
+    {
+        id: 'client_data',
+        title: 'Dados do Cliente',
+        icon: UserCheck,
+        colorClass: 'text-blue-600 dark:text-blue-400',
+        badgeClass: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+        variables: [
+            { key: 'nome', label: '{nome}', desc: 'Nome completo cadastrado' },
+            { key: 'primeiro_nome', label: '{primeiro_nome}', desc: 'Primeiro nome do cliente' },
+            { key: 'telefone', label: '{telefone}', desc: 'Telefone WhatsApp cadastrado' },
+        ],
+    },
+    {
+        id: 'access_data',
+        title: 'Dados de Assinatura (Acesso / Conta)',
+        icon: KeyRound,
+        colorClass: 'text-violet-600 dark:text-violet-400',
+        badgeClass: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300 border-violet-200 dark:border-violet-800',
+        variables: [
+            { key: 'email', label: '{email}', desc: 'E-mail da conta de acesso' },
+            { key: 'senha', label: '{senha}', desc: 'Senha da conta de acesso' },
+            { key: 'tela', label: '{tela}', desc: 'Tela de acesso (ex: Tela 1)' },
+            { key: 'pin_tela', label: '{pin_tela}', desc: 'PIN da tela de acesso' },
+        ],
+    },
+    {
+        id: 'subscription_data',
+        title: 'Dados Assinatura',
+        icon: CreditCard,
+        colorClass: 'text-emerald-600 dark:text-emerald-400',
+        badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+        variables: [
+            { key: 'nome_assinatura', label: '{nome_assinatura}', desc: 'Nome da assinatura contratada (ou {assinatura})' },
+            { key: 'plano', label: '{plano}', desc: 'Nome do plano cadastrado' },
+            { key: 'metodo_pagamento', label: '{metodo_pagamento}', desc: 'Método de pagamento (PIX, Cartão...)' },
+            { key: 'valor', label: '{valor}', desc: 'Valor da assinatura' },
+            { key: 'mensalidade', label: '{mensalidade}', desc: 'Mensalidade da assinatura' },
+            { key: 'vencimento', label: '{vencimento}', desc: 'Data de vencimento (dd/mm/aaaa)' },
+            { key: 'dias_restantes', label: '{dias_restantes}', desc: 'Dias restantes para vencer' },
+            { key: 'status', label: '{status}', desc: 'Status no CRM (Ativo, Vencido...)' },
+            { key: 'link_de_acesso', label: '{link_de_acesso}', desc: 'Link de acesso à plataforma' },
+            { key: 'notas', label: '{notas}', desc: 'Observações / notas do cliente' },
+        ],
+    },
+    {
+        id: 'multi_subscriptions',
+        title: 'Listas de Assinaturas (Múltiplas)',
+        icon: Layers,
+        colorClass: 'text-amber-600 dark:text-amber-400',
+        badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+        variables: [
+            { key: 'assinaturas_ativas', label: '{assinaturas_ativas}', desc: 'Lista de todas as assinaturas ativas do cliente' },
+            { key: 'assinaturas_vencidas', label: '{assinaturas_vencidas}', desc: 'Lista de todas as assinaturas vencidas do cliente' },
+            { key: 'todas_assinaturas', label: '{todas_assinaturas}', desc: 'Lista de todas as assinaturas (ativas e vencidas)' },
+        ],
+    },
 ];
+
+export const AVAILABLE_FLOW_VARIABLES: FlowVariableItem[] = FLOW_VARIABLE_GROUPS.flatMap((g) => g.variables);
 
 interface NodeConfigDialogProps {
     open: boolean;
@@ -371,17 +429,26 @@ export function NodeConfigDialog({
                                             </Button>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-1 pt-1.5 max-h-28 overflow-y-auto">
-                                        {AVAILABLE_FLOW_VARIABLES.map((v) => (
-                                            <button
-                                                key={v.key}
-                                                type="button"
-                                                onClick={() => handleInsertVariable('menuQuestionText', v.key)}
-                                                className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                                title={v.desc}
-                                            >
-                                                +{v.label}
-                                            </button>
+                                    <div className="space-y-2 pt-2 border-t mt-1.5 max-h-36 overflow-y-auto pr-1">
+                                        {FLOW_VARIABLE_GROUPS.map((grp) => (
+                                            <div key={grp.id} className="space-y-1">
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                                                    {grp.title}:
+                                                </span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {grp.variables.map((v) => (
+                                                        <button
+                                                            key={v.key}
+                                                            type="button"
+                                                            onClick={() => handleInsertVariable('menuQuestionText', v.key)}
+                                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-mono"
+                                                            title={v.desc}
+                                                        >
+                                                            +{v.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
@@ -554,19 +621,28 @@ export function NodeConfigDialog({
                                         <Sparkles className="h-3 w-3 text-indigo-500" />
                                         Variáveis disponíveis (substituídas automaticamente com os dados do cliente):
                                     </span>
-                                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                                        {AVAILABLE_FLOW_VARIABLES.map((v) => (
-                                            <Button
-                                                key={v.key}
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="text-[11px] h-6 px-2 bg-background hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 border-slate-200 dark:border-slate-800 transition-colors shadow-2xs"
-                                                onClick={() => handleInsertVariable('text', v.key)}
-                                                title={v.desc}
-                                            >
-                                                + {v.label}
-                                            </Button>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                                        {FLOW_VARIABLE_GROUPS.map((grp) => (
+                                            <div key={grp.id} className="space-y-1">
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                                                    {grp.title}:
+                                                </span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {grp.variables.map((v) => (
+                                                        <Button
+                                                            key={v.key}
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="text-[11px] h-6 px-2 bg-background hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 border-slate-200 dark:border-slate-800 transition-colors shadow-2xs font-mono"
+                                                            onClick={() => handleInsertVariable('text', v.key)}
+                                                            title={v.desc}
+                                                        >
+                                                            + {v.label}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
@@ -723,25 +799,54 @@ export function NodeConfigDialog({
                                 </div>
                             </div>
 
-                            {/* Guia de Variáveis disponíveis */}
-                            <div className="p-3.5 rounded-xl border bg-muted/20 space-y-2.5">
-                                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                    <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                                    Todas as variáveis disponíveis na saída &quot;Cliente Cadastrado&quot;:
-                                </span>
-                                <p className="text-[11px] text-muted-foreground">
-                                    Nos blocos de mensagem ou menu conectados a esta saída, você pode utilizar qualquer uma das variáveis abaixo. Elas serão substituídas automaticamente pelos dados cadastrados do cliente no CRM:
-                                </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px] max-h-64 overflow-y-auto pr-1">
-                                    {AVAILABLE_FLOW_VARIABLES.map((v) => (
-                                        <div
-                                            key={v.key}
-                                            className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs hover:border-indigo-300 dark:hover:border-indigo-750 transition-colors"
-                                        >
-                                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">{v.label}</span>
-                                            <span className="text-[10px] text-muted-foreground font-sans truncate ml-2">{v.desc}</span>
-                                        </div>
-                                    ))}
+                            {/* Guia de Variáveis disponíveis separadas por grupos */}
+                            <div className="p-3.5 rounded-xl border bg-muted/20 space-y-3.5">
+                                <div className="space-y-1">
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                        <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                                        Variáveis disponíveis na saída &quot;Cliente Cadastrado&quot; (Separadas por Grupos):
+                                    </span>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Nos blocos de mensagem ou menu conectados a esta saída, você pode utilizar qualquer uma das variáveis abaixo. Elas serão substituídas automaticamente pelos dados cadastrados do cliente no CRM:
+                                    </p>
+                                </div>
+
+                                <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
+                                    {FLOW_VARIABLE_GROUPS.map((group) => {
+                                        const GroupIcon = group.icon;
+                                        return (
+                                            <div key={group.id} className="space-y-1.5 p-2.5 rounded-lg bg-background/60 border border-slate-200/60 dark:border-slate-800">
+                                                <div className="flex items-center justify-between pb-1 border-b border-border/50">
+                                                    <span className={`text-[11px] font-bold flex items-center gap-1.5 ${group.colorClass}`}>
+                                                        <GroupIcon className="h-3.5 w-3.5" />
+                                                        {group.title}
+                                                    </span>
+                                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${group.badgeClass}`}>
+                                                        {group.variables.length} variáveis
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                                                    {group.variables.map((v) => (
+                                                        <div
+                                                            key={v.key}
+                                                            className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+                                                        >
+                                                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                                                                {v.label}
+                                                            </span>
+                                                            <span
+                                                                className="text-[10px] text-muted-foreground font-sans truncate ml-2 text-right"
+                                                                title={v.desc}
+                                                            >
+                                                                {v.desc}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

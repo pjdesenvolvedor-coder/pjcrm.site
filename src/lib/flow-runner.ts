@@ -228,6 +228,7 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
         mergedClient.allSubscriptions = allSubs.join(' + ');
     }
 
+    mergedClient._allMatchingDocs = matchingList;
     return mergedClient;
 }
 
@@ -243,6 +244,7 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
             phone: fallbackPhone || '',
             status: 'Não cadastrado',
             plano: '',
+            nome_assinatura: '',
             assinatura: '',
             subscription: '',
             metodo_pagamento: '',
@@ -250,6 +252,7 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
             pagamento: '',
             payment_method: '',
             valor: '',
+            mensalidade: '',
             valor_pago: '',
             amount_paid: '',
             vencimento: '',
@@ -267,11 +270,20 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
             pin: '',
             link: '',
             link_acesso: '',
+            link_de_acesso: '',
             access_link: '',
             quantidade: '',
             notas: '',
             observacoes: '',
             tipo_cliente: '',
+            assinaturas_ativas: 'Nenhuma assinatura ativa encontrada.',
+            planos_ativos: 'Nenhuma assinatura ativa encontrada.',
+            assinaturas_vencidas: 'Nenhuma assinatura vencida encontrada.',
+            planos_vencidos: 'Nenhuma assinatura vencida encontrada.',
+            todas_assinaturas: 'Nenhuma assinatura cadastrada.',
+            todas_as_assinaturas: 'Nenhuma assinatura cadastrada.',
+            assinaturas_todas: 'Nenhuma assinatura cadastrada.',
+            assinaturas: '',
         };
     }
 
@@ -359,6 +371,63 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
     // Tipo de cliente
     const clientTypeStr = (client.clientType || '').trim();
 
+    const matchingDocs: any[] = Array.isArray(client._allMatchingDocs) && client._allMatchingDocs.length > 0
+        ? client._allMatchingDocs
+        : [client];
+
+    // Helper para formatar cada linha de assinatura de forma limpa para WhatsApp
+    const formatSubLine = (c: any, withStatus = false) => {
+        const name = (c.subscription || c.plan || c.plano || c.subscriptionName || c.product || c.produto || 'Assinatura').trim();
+        const parts: string[] = [];
+        if (withStatus && c.status) {
+            parts.push(c.status);
+        }
+        const due = formatDateSafe(c.dueDate);
+        if (due) {
+            parts.push(`Vencimento: ${due}`);
+        }
+        if (c.amountPaid !== undefined && c.amountPaid !== null && String(c.amountPaid).trim() !== '') {
+            const raw = String(c.amountPaid).trim();
+            parts.push(raw.includes('R$') ? raw : `R$ ${raw}`);
+        }
+        if (parts.length > 0) {
+            return `• ${name} (${parts.join(' - ')})`;
+        }
+        return `• ${name}`;
+    };
+
+    // Assinaturas ativas
+    const activeDocs = matchingDocs.filter((c) => {
+        const st = (c.status || '').trim().toLowerCase();
+        if (st === 'ativo' || st === 'active') return true;
+        if (st === 'vencido' || st === 'cancelado') return false;
+        const dueMs = getTimestampMs(c.dueDate);
+        if (dueMs) return dueMs >= Date.now();
+        return true;
+    });
+
+    // Assinaturas vencidas
+    const overdueDocs = matchingDocs.filter((c) => {
+        const st = (c.status || '').trim().toLowerCase();
+        if (st === 'vencido' || st === 'expired' || st === 'atrasado') return true;
+        if (st === 'ativo') return false;
+        const dueMs = getTimestampMs(c.dueDate);
+        if (dueMs) return dueMs < Date.now();
+        return false;
+    });
+
+    const activeSubsList = activeDocs.length > 0
+        ? activeDocs.map((c) => formatSubLine(c, false)).join('\n')
+        : 'Nenhuma assinatura ativa encontrada.';
+
+    const overdueSubsList = overdueDocs.length > 0
+        ? overdueDocs.map((c) => formatSubLine(c, false)).join('\n')
+        : 'Nenhuma assinatura vencida encontrada.';
+
+    const allSubsList = matchingDocs.length > 0
+        ? matchingDocs.map((c) => formatSubLine(c, true)).join('\n')
+        : 'Nenhuma assinatura encontrada.';
+
     return {
         // Nomes
         nome: fullName,
@@ -375,6 +444,7 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
 
         // Plano e Assinatura
         plano: planName,
+        nome_assinatura: planName,
         assinatura: planName,
         subscription: planName,
 
@@ -384,8 +454,9 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
         pagamento: paymentMethod,
         payment_method: paymentMethod,
 
-        // Valor
+        // Valor e Mensalidade
         valor: amountStr,
+        mensalidade: amountStr,
         valor_pago: amountStr,
         amount_paid: amountStr,
 
@@ -411,6 +482,7 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
         // Links de acesso
         link: accessLink,
         link_acesso: accessLink,
+        link_de_acesso: accessLink,
         access_link: accessLink,
 
         // Extras
@@ -418,6 +490,16 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
         notas: notesStr,
         observacoes: notesStr,
         tipo_cliente: clientTypeStr,
+
+        // Listas de Assinaturas (Novas Variáveis)
+        assinaturas_ativas: activeSubsList,
+        planos_ativos: activeSubsList,
+        assinaturas_vencidas: overdueSubsList,
+        planos_vencidos: overdueSubsList,
+        todas_assinaturas: allSubsList,
+        todas_as_assinaturas: allSubsList,
+        assinaturas_todas: allSubsList,
+        assinaturas: matchingDocs.length > 1 ? allSubsList : planName,
     };
 }
 
