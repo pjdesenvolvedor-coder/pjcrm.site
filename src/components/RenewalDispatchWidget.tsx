@@ -64,6 +64,132 @@ function getStoredJob(): RenewalJobState | null {
   }
 }
 
+// Cria Web Worker embutido (Blob) para execução imune ao throttling de abas em segundo plano
+function createBackgroundTimerWorker(): Worker | null {
+  if (typeof window === 'undefined' || typeof Blob === 'undefined' || typeof Worker === 'undefined') {
+    return null;
+  }
+  try {
+    const workerScript = `
+      var timer = null;
+      self.onmessage = function(e) {
+        if (e.data && e.data.type === 'START') {
+          if (timer) clearInterval(timer);
+          var interval = e.data.interval || 500;
+          timer = setInterval(function() {
+            self.postMessage({ type: 'TICK', timestamp: Date.now() });
+          }, interval);
+        } else if (e.data && e.data.type === 'STOP') {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        }
+      };
+    `;
+    const blob = new Blob([workerScript], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    return worker;
+  } catch (err) {
+    console.warn('Worker creation failed, falling back to interval:', err);
+    return null;
+  }
+}
+
+// Aguarda até o timestamp alvo usando Web Worker para garantir tempo real mesmo com aba minimizada ou em segundo plano
+function sleepUntil(
+  targetTimestamp: number,
+  onTick?: (remainingSec: number) => boolean | void
+): Promise<void> {
+  return new Promise((resolve) => {
+    let worker = createBackgroundTimerWorker();
+    let fallbackInterval: any = null;
+    let isDone = false;
+
+    const cleanup = () => {
+      if (isDone) return;
+      isDone = true;
+      if (worker) {
+        try {
+          worker.postMessage({ type: 'STOP' });
+          worker.terminate();
+        } catch {}
+        worker = null;
+      }
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+        fallbackInterval = null;
+      }
+    };
+
+    const check = () => {
+      if (isDone) return;
+      const now = Date.now();
+      const remainingMs = targetTimestamp - now;
+      const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+
+      const abort = onTick ? onTick(remainingSec) === false : false;
+      if (abort || remainingMs <= 0) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    if (worker) {
+      worker.onmessage = () => {
+        check();
+      };
+      worker.postMessage({ type: 'START', interval: 500 });
+    } else {
+      fallbackInterval = setInterval(check, 500);
+    }
+
+    check();
+  });
+}
+
+// Keep-Alive de segundo plano (AudioContext inaudível + WakeLock) para impedir suspensão do navegador/OS
+function acquireKeepAlive() {
+  let audioCtx: any = null;
+  let wakeLock: any = null;
+
+  try {
+    if (typeof window !== 'undefined') {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        audioCtx = new AudioCtxClass();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.00001; // Inaudível
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+      }
+
+      if ('wakeLock' in navigator) {
+        (navigator as any).wakeLock.request('screen').then((lock: any) => {
+          wakeLock = lock;
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  return () => {
+    try {
+      if (audioCtx) {
+        audioCtx.close().catch(() => {});
+        audioCtx = null;
+      }
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+      }
+    } catch {}
+  };
+}
+
 export function RenewalDispatchWidget() {
   const [job, setJob] = useState<RenewalJobState | null>(null);
   const [delayCountdown, setDelayCountdown] = useState<number>(0);
@@ -181,14 +307,26 @@ export function RenewalDispatchWidget() {
     };
     window.addEventListener('START_RENEWAL_DISPATCH', handleStartEvent);
 
+    // Sincronização automática quando a aba volta a ser visível ou focada
+    const handleVisibilitySync = () => {
+      const current = getStoredJob();
+      if (current) {
+        setJob({ ...current });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+    window.addEventListener('focus', handleVisibilitySync);
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('START_RENEWAL_DISPATCH', handleStartEvent);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.removeEventListener('focus', handleVisibilitySync);
       channelRef.current?.close();
     };
   }, [persistJob, setMinimizedWithStorage]);
 
-  // 2. Loop de Execução da Fila (Robusto com ref - nunca aborta em re-renders)
+  // 2. Loop de Execução da Fila (Imune ao throttling de segundo plano)
   useEffect(() => {
     if (!job || job.status !== 'running') {
       return;
@@ -203,6 +341,7 @@ export function RenewalDispatchWidget() {
 
     const executeQueue = async () => {
       isLoopRunningRef.current = true;
+      const releaseKeepAlive = acquireKeepAlive();
 
       while (!isTerminated) {
         const current = getStoredJob();
@@ -210,7 +349,7 @@ export function RenewalDispatchWidget() {
           break;
         }
 
-        // Verifica liderança da aba (Leader Election)
+        // Verifica liderança da aba (Leader Election tolerante a 15 segundos)
         const leaderStr = localStorage.getItem(STORAGE_KEY_LEADER);
         const now = Date.now();
         let currentLeader: { tabId: string; heartbeat: number } | null = null;
@@ -220,19 +359,19 @@ export function RenewalDispatchWidget() {
           } catch {}
         }
 
-        const isLeaderAlive = currentLeader && (now - currentLeader.heartbeat < 3000);
+        const isLeaderAlive = currentLeader && (now - currentLeader.heartbeat < 15000);
         const amILeader = currentLeader?.tabId === TAB_ID;
 
         if (isLeaderAlive && !amILeader) {
           // Outra aba está ativamente executando! Esta aba fica como observadora
-          await new Promise((r) => setTimeout(r, 1000));
+          await sleepUntil(Date.now() + 1000);
           continue;
         }
 
         // Atualiza heartbeat da liderança
         localStorage.setItem(
           STORAGE_KEY_LEADER,
-          JSON.stringify({ tabId: TAB_ID, heartbeat: now })
+          JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
         );
 
         const idx = current.currentIndex;
@@ -253,8 +392,8 @@ export function RenewalDispatchWidget() {
 
         // 2. Executa disparo (Simulação ou Real)
         if (current.isSimulation) {
-          // Espera 2 segundos no modo demonstração
-          await new Promise((r) => setTimeout(r, 2000));
+          // Espera 2 segundos no modo demonstração usando Worker
+          await sleepUntil(Date.now() + 2000);
           if (isTerminated) break;
 
           current.items[idx].status = 'sent';
@@ -262,6 +401,13 @@ export function RenewalDispatchWidget() {
           // Disparo Real via API
           try {
             const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pjcrm.site';
+            
+            // Renova heartbeat antes de fazer fetch
+            localStorage.setItem(
+              STORAGE_KEY_LEADER,
+              JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
+            );
+
             const res = await fetch('/api/renewal/dispatch-single', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -269,6 +415,7 @@ export function RenewalDispatchWidget() {
                 userId: current.userId,
                 clientIds: currentItem.clientIds,
                 originUrl,
+                force: true,
               }),
             });
 
@@ -289,6 +436,12 @@ export function RenewalDispatchWidget() {
           }
         }
 
+        // Renova heartbeat após o disparo
+        localStorage.setItem(
+          STORAGE_KEY_LEADER,
+          JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
+        );
+
         // 3. Avança o índice
         const nextIdx = idx + 1;
         current.currentIndex = nextIdx;
@@ -302,18 +455,20 @@ export function RenewalDispatchWidget() {
           persistJob({ ...current });
         }
 
-        // 4. Intervalo Anti-Banimento (Countdown segundo a segundo)
-        const delay = current.delaySeconds || (current.isSimulation ? 3 : 15);
-        for (let sec = delay; sec > 0; sec--) {
-          if (isTerminated) break;
+        // 4. Intervalo Anti-Banimento imune a throttling via Web Worker
+        const delaySec = current.delaySeconds || (current.isSimulation ? 3 : 15);
+        const targetEndTime = Date.now() + delaySec * 1000;
 
-          // Verifica se o usuário pausou ou cancelou durante a contagem
+        await sleepUntil(targetEndTime, (sec) => {
+          if (isTerminated) return false;
+
+          // Verifica se o trabalho foi pausado ou cancelado
           const checkJob = getStoredJob();
           if (!checkJob || checkJob.status !== 'running') {
-            break;
+            return false;
           }
 
-          // Mantém heartbeat da aba líder
+          // Mantém heartbeat atualizado em background
           localStorage.setItem(
             STORAGE_KEY_LEADER,
             JSON.stringify({ tabId: TAB_ID, heartbeat: Date.now() })
@@ -323,9 +478,8 @@ export function RenewalDispatchWidget() {
           try {
             channelRef.current?.postMessage({ type: 'COUNTDOWN_UPDATE', seconds: sec });
           } catch {}
-
-          await new Promise((r) => setTimeout(r, 1000));
-        }
+          return true;
+        });
 
         setDelayCountdown(0);
         try {
@@ -333,6 +487,7 @@ export function RenewalDispatchWidget() {
         } catch {}
       }
 
+      releaseKeepAlive();
       isLoopRunningRef.current = false;
     };
 
