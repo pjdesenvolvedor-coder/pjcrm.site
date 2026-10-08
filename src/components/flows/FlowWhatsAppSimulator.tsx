@@ -31,6 +31,7 @@ import {
     AlertCircle,
     Info,
     UserCheck,
+    UserX,
     MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -127,6 +128,46 @@ export function FlowWhatsAppSimulator({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const executionRef = useRef<{ isCancelled: boolean }>({ isCancelled: false });
 
+    // Modo de teste para verificação de cliente CRM: 'registered' (Cadastrado) ou 'unregistered' (Não Cadastrado)
+    const [clientTestMode, setClientTestMode] = useState<'registered' | 'unregistered'>('registered');
+    const clientTestModeRef = useRef<'registered' | 'unregistered'>('registered');
+    clientTestModeRef.current = clientTestMode;
+
+    // Snapshot isolado e estável dos nós e arestas ativos no preview para evitar bugs enquanto edita no Canva
+    const [activeNodes, setActiveNodes] = useState<Node[]>(nodes);
+    const [activeEdges, setActiveEdges] = useState<Edge[]>(edges);
+    const activeNodesRef = useRef<Node[]>(nodes);
+    const activeEdgesRef = useRef<Edge[]>(edges);
+
+    // Guarda as alterações mais recentes recebidas do Canva
+    const latestPropsRef = useRef({ nodes, edges });
+    useEffect(() => {
+        latestPropsRef.current = { nodes, edges };
+    }, [nodes, edges]);
+
+    // Identifica se o bloco imediatamente após o bloco de início é "Verificar Cliente no CRM"
+    const hasInitialCrmCondition = React.useMemo(() => {
+        if (!activeNodes || activeNodes.length === 0) return false;
+        const explicitStartNode = activeNodes.find((n) => (n.data as any)?.nodeType === 'start');
+        const targetNodeIds = new Set(activeEdges.map((e) => e.target));
+        const rootNode = explicitStartNode || activeNodes.find((n) => !targetNodeIds.has(n.id)) || activeNodes[0];
+        if (!rootNode) return false;
+
+        // Se o próprio bloco de início for uma condição
+        if ((rootNode.data as any)?.nodeType === 'condition') return true;
+
+        // Se for o nó start padrão, verifica o nó para o qual ele aponta
+        if ((rootNode.data as any)?.nodeType === 'start') {
+            const edgeFromStart = activeEdges.find((e) => e.source === rootNode.id);
+            if (edgeFromStart) {
+                const nextNode = activeNodes.find((n) => n.id === edgeFromStart.target);
+                if ((nextNode?.data as any)?.nodeType === 'condition') return true;
+            }
+        }
+
+        return false;
+    }, [activeNodes, activeEdges]);
+
     // Encontra o melhor cliente ativo da base do CRM para testar com fidelidade máxima
     const sampleClient = React.useMemo(() => {
         if (!clients || clients.length === 0) return null;
@@ -150,7 +191,11 @@ export function FlowWhatsAppSimulator({
         async (nodeId: string) => {
             if (executionRef.current.isCancelled) return;
 
-            const node = nodes.find((n) => n.id === nodeId);
+            const currentNodes = activeNodesRef.current;
+            const currentEdges = activeEdgesRef.current;
+            const isRegistered = clientTestModeRef.current === 'registered';
+
+            const node = currentNodes.find((n) => n.id === nodeId);
             if (!node) {
                 setCurrentNotice('Nó não encontrado no fluxo.');
                 return;
@@ -160,6 +205,55 @@ export function FlowWhatsAppSimulator({
 
             const formatText = (txt?: string) => {
                 if (!txt) return '';
+
+                if (!isRegistered) {
+                    const fallbackName = 'Visitante';
+                    const activeEmpty = varConfig?.activeSubsEmptyMessage || 'Nenhuma assinatura ativa encontrada.';
+                    const overdueEmpty = varConfig?.overdueSubsEmptyMessage || 'Nenhuma assinatura vencida encontrada.';
+                    const allEmpty = varConfig?.allSubsEmptyMessage || 'Nenhuma assinatura cadastrada.';
+
+                    return txt
+                        .replace(/\{nome\}/gi, fallbackName)
+                        .replace(/\{cliente\}/gi, fallbackName)
+                        .replace(/\{primeiro_nome\}/gi, 'Visitante')
+                        .replace(/\{telefone\}/gi, '5511999999999')
+                        .replace(/\{numero\}/gi, '5511999999999')
+                        .replace(/\{phone\}/gi, '5511999999999')
+                        .replace(/\{vencimento\}/gi, '')
+                        .replace(/\{data_vencimento\}/gi, '')
+                        .replace(/\{dias_restantes\}/gi, '')
+                        .replace(/\{status\}/gi, 'Não cadastrado')
+                        .replace(/\{plano\}/gi, '')
+                        .replace(/\{nome_assinatura\}/gi, '')
+                        .replace(/\{assinatura\}/gi, '')
+                        .replace(/\{subscription\}/gi, '')
+                        .replace(/\{email\}/gi, '')
+                        .replace(/\{e-mail\}/gi, '')
+                        .replace(/\{senha\}/gi, '')
+                        .replace(/\{password\}/gi, '')
+                        .replace(/\{tela\}/gi, '')
+                        .replace(/\{screen\}/gi, '')
+                        .replace(/\{pin_tela\}/gi, '')
+                        .replace(/\{pin\}/gi, '')
+                        .replace(/\{metodo_pagamento\}/gi, '')
+                        .replace(/\{forma_pagamento\}/gi, '')
+                        .replace(/\{pagamento\}/gi, '')
+                        .replace(/\{valor\}/gi, '')
+                        .replace(/\{mensalidade\}/gi, '')
+                        .replace(/\{valor_pago\}/gi, '')
+                        .replace(/\{link\}/gi, '')
+                        .replace(/\{link_acesso\}/gi, '')
+                        .replace(/\{link_de_acesso\}/gi, '')
+                        .replace(/\{notas\}/gi, '')
+                        .replace(/\{observacoes\}/gi, '')
+                        .replace(/\{assinaturas_ativas\}/gi, activeEmpty)
+                        .replace(/\{planos_ativos\}/gi, activeEmpty)
+                        .replace(/\{assinaturas_vencidas\}/gi, overdueEmpty)
+                        .replace(/\{planos_vencidos\}/gi, overdueEmpty)
+                        .replace(/\{todas_assinaturas\}/gi, allEmpty)
+                        .replace(/\{todas_as_assinaturas\}/gi, allEmpty)
+                        .replace(/\{assinaturas\}/gi, '');
+                }
 
                 const cName = sampleClient?.name || 'Pedro Henrique';
                 const cFirstName = cName.split(' ')[0] || 'Pedro';
@@ -335,7 +429,7 @@ export function FlowWhatsAppSimulator({
 
             // 0. START (Ponto de Partida / Início do Fluxo)
             if (data.nodeType === 'start') {
-                const nextEdge = edges.find((e) => e.source === nodeId);
+                const nextEdge = currentEdges.find((e) => e.source === nodeId);
                 if (nextEdge && nextEdge.target) {
                     await executeNode(nextEdge.target);
                 } else {
@@ -365,7 +459,7 @@ export function FlowWhatsAppSimulator({
                 setMessages((prev) => [...prev, newMsg]);
 
                 // Avança para a próxima aresta se existir
-                const nextEdge = edges.find((e) => e.source === nodeId);
+                const nextEdge = currentEdges.find((e) => e.source === nodeId);
                 if (nextEdge && nextEdge.target) {
                     await sleep(900);
                     if (executionRef.current.isCancelled) return;
@@ -402,7 +496,7 @@ export function FlowWhatsAppSimulator({
                 setIsTyping(false);
                 setCurrentNotice(null);
 
-                const nextEdge = edges.find((e) => e.source === nodeId);
+                const nextEdge = currentEdges.find((e) => e.source === nodeId);
                 if (nextEdge && nextEdge.target) {
                     await executeNode(nextEdge.target);
                 } else {
@@ -502,7 +596,7 @@ export function FlowWhatsAppSimulator({
                     ]);
                 }
 
-                const nextEdge = edges.find((e) => e.source === nodeId);
+                const nextEdge = currentEdges.find((e) => e.source === nodeId);
                 if (nextEdge && nextEdge.target) {
                     await sleep(800);
                     if (executionRef.current.isCancelled) return;
@@ -552,81 +646,139 @@ export function FlowWhatsAppSimulator({
             }
             // 6. CONDIÇÃO: VERIFICAR CLIENTE NO CRM
             else if (data.nodeType === 'condition') {
-                setMessages((prev) => [
-                    ...prev,
-                    {
-                        id: `sys_${Date.now()}`,
-                        sender: 'system',
-                        text: '🔍 *Simulação:* Contato verificado no CRM como *Cliente Cadastrado* (Pedro Henrique - Plano VIP). Seguindo rota verde...',
-                        time: getCurrentTime(),
-                    },
-                ]);
-                await sleep(700);
-                if (executionRef.current.isCancelled) return;
+                if (isRegistered) {
+                    setMessages((prev) => [
+                        ...prev,
+                        {
+                            id: `sys_${Date.now()}`,
+                            sender: 'system',
+                            text: '🔍 *Simulação:* Contato verificado no CRM como *Cliente Cadastrado* (Pedro Henrique - Plano VIP). Seguindo rota verde...',
+                            time: getCurrentTime(),
+                        },
+                    ]);
+                    await sleep(700);
+                    if (executionRef.current.isCancelled) return;
 
-                // Segue a saída 'is_client' (Cliente Cadastrado) se existir, ou fallback
-                const clientEdge =
-                    edges.find((e) => e.source === nodeId && e.sourceHandle === 'is_client') ||
-                    edges.find((e) => e.source === nodeId);
+                    // Segue a saída 'is_client' (Cliente Cadastrado) se existir, ou fallback
+                    const clientEdge =
+                        currentEdges.find((e) => e.source === nodeId && e.sourceHandle === 'is_client') ||
+                        currentEdges.find((e) => e.source === nodeId);
 
-                if (clientEdge && clientEdge.target) {
-                    await executeNode(clientEdge.target);
+                    if (clientEdge && clientEdge.target) {
+                        await executeNode(clientEdge.target);
+                    } else {
+                        setCurrentNotice('Fim do fluxo após a verificação de cliente CRM (rota de cliente cadastrado não conectada).');
+                    }
                 } else {
-                    const notClientEdge = edges.find((e) => e.source === nodeId && e.sourceHandle === 'not_client');
+                    setMessages((prev) => [
+                        ...prev,
+                        {
+                            id: `sys_${Date.now()}`,
+                            sender: 'system',
+                            text: '🔍 *Simulação:* Contato verificado no CRM como *Não Cadastrado* (Visitante / Lead Novo). Seguindo rota vermelha...',
+                            time: getCurrentTime(),
+                        },
+                    ]);
+                    await sleep(700);
+                    if (executionRef.current.isCancelled) return;
+
+                    // Segue a saída 'not_client' (Não Cadastrado)
+                    const notClientEdge =
+                        currentEdges.find((e) => e.source === nodeId && e.sourceHandle === 'not_client') ||
+                        currentEdges.find((e) => e.source === nodeId && e.sourceHandle !== 'is_client');
+
                     if (notClientEdge && notClientEdge.target) {
                         await executeNode(notClientEdge.target);
                     } else {
-                        setCurrentNotice('Fim do fluxo após a verificação de cliente CRM.');
+                        setCurrentNotice('Fim do fluxo após a verificação de cliente CRM (rota de não cadastrado não conectada).');
                     }
                 }
             }
         },
-        [nodes, edges]
+        [sampleClient, varConfig, clients]
     );
 
-    // Inicia a simulação a partir do nó inicial (in-degree == 0)
+    // Inicia a simulação a partir do nó inicial usando o snapshot fornecido
+    const startSimulationWithSnapshot = useCallback(
+        (nodesSnapshot: Node[], edgesSnapshot: Edge[]) => {
+            executionRef.current.isCancelled = true;
+            executionRef.current = { isCancelled: false };
+
+            setMessages([]);
+            setCurrentNotice(null);
+            setIsTyping(false);
+            setActiveMenuNodeId(null);
+            setIsListDrawerOpen(false);
+
+            if (!nodesSnapshot || nodesSnapshot.length === 0) {
+                setCurrentNotice('O fluxo está vazio. Adicione blocos no canva para testar.');
+                return;
+            }
+
+            // Identifica o nó de início (prioriza o bloco de início 'start', ou nó sem entrada / primeiro nó)
+            const explicitStartNode = nodesSnapshot.find((n) => (n.data as any)?.nodeType === 'start');
+            const targetNodeIds = new Set(edgesSnapshot.map((e) => e.target));
+            const rootNode = explicitStartNode || nodesSnapshot.find((n) => !targetNodeIds.has(n.id)) || nodesSnapshot[0];
+
+            if (rootNode) {
+                // Executa com leve atraso inicial para efeito realista
+                setTimeout(() => {
+                    if (!executionRef.current.isCancelled) {
+                        executeNode(rootNode.id);
+                    }
+                }, 300);
+            }
+        },
+        [executeNode]
+    );
+
+    // Reinicia usando o snapshot ativo atual
     const restartSimulation = useCallback(() => {
-        executionRef.current.isCancelled = true;
-        executionRef.current = { isCancelled: false };
+        startSimulationWithSnapshot(activeNodesRef.current, activeEdgesRef.current);
+    }, [startSimulationWithSnapshot]);
 
-        setMessages([]);
-        setCurrentNotice(null);
-        setIsTyping(false);
-        setActiveMenuNodeId(null);
-        setIsListDrawerOpen(false);
+    // Reinício manual acionado pelo usuário no preview: captura as alterações mais recentes do Canva!
+    const handleManualRestart = useCallback(() => {
+        const latest = latestPropsRef.current;
+        setActiveNodes(latest.nodes);
+        setActiveEdges(latest.edges);
+        activeNodesRef.current = latest.nodes;
+        activeEdgesRef.current = latest.edges;
+        startSimulationWithSnapshot(latest.nodes, latest.edges);
+    }, [startSimulationWithSnapshot]);
 
-        if (!nodes || nodes.length === 0) {
-            setCurrentNotice('O fluxo está vazio. Adicione blocos no canva para testar.');
-            return;
-        }
+    // Alternar modo de simulação (Cadastrado / Não Cadastrado)
+    const handleChangeClientMode = useCallback(
+        (mode: 'registered' | 'unregistered') => {
+            setClientTestMode(mode);
+            clientTestModeRef.current = mode;
+            // Reinicia a simulação com o novo modo imediatamente usando o snapshot ativo
+            startSimulationWithSnapshot(activeNodesRef.current, activeEdgesRef.current);
+        },
+        [startSimulationWithSnapshot]
+    );
 
-        // Identifica o nó de início (prioriza o bloco de início 'start', ou nó sem entrada / primeiro nó)
-        const explicitStartNode = nodes.find((n) => (n.data as any)?.nodeType === 'start');
-        const targetNodeIds = new Set(edges.map((e) => e.target));
-        const rootNode = explicitStartNode || nodes.find((n) => !targetNodeIds.has(n.id)) || nodes[0];
-
-        if (rootNode) {
-            // Executa com leve atraso inicial para efeito realista
-            setTimeout(() => {
-                if (!executionRef.current.isCancelled) {
-                    executeNode(rootNode.id);
-                }
-            }, 300);
-        }
-    }, [nodes, edges, executeNode]);
-
-    // Ao abrir o componente, inicia a simulação automaticamente
+    // Ao abrir o componente, captura o snapshot do canva e inicia a simulação
+    // IMPORTANTE: Não recria nem reseta a simulação ao editar nós no Canva com o preview aberto!
     useEffect(() => {
         if (open) {
-            restartSimulation();
+            const latest = latestPropsRef.current;
+            setActiveNodes(latest.nodes);
+            setActiveEdges(latest.edges);
+            activeNodesRef.current = latest.nodes;
+            activeEdgesRef.current = latest.edges;
+            startSimulationWithSnapshot(latest.nodes, latest.edges);
         } else {
             executionRef.current.isCancelled = true;
         }
-    }, [open, restartSimulation]);
+    }, [open, startSimulationWithSnapshot]);
 
-    // Tratar clique em opção de menu (com fidelidade estrita às arestas conectadas)
+    // Tratar clique em opção de menu (com fidelidade estrita às arestas conectadas do snapshot)
     const handleSelectOption = async (option: { id: string; label: string }, menuNodeId: string) => {
         if (!activeMenuNodeId) return;
+
+        const currentNodes = activeNodesRef.current;
+        const currentEdges = activeEdgesRef.current;
 
         // 1. Mensagem de resposta do usuário
         const userMsg: SimMessage = {
@@ -641,11 +793,11 @@ export function FlowWhatsAppSimulator({
         setCurrentNotice(null);
 
         // 2. Procurar aresta que sai dessa opção específica (sourceHandle === option.id ou opt_${idx+1})
-        const nodeEdges = edges.filter((e) => e.source === menuNodeId);
+        const nodeEdges = currentEdges.filter((e) => e.source === menuNodeId);
         let matchedEdge = nodeEdges.find((e) => e.sourceHandle === option.id);
 
         if (!matchedEdge) {
-            const menuNode = nodes.find((n) => n.id === menuNodeId);
+            const menuNode = currentNodes.find((n) => n.id === menuNodeId);
             const menuOptions = (menuNode?.data as FlowNodeData)?.menuOptions || [];
             const optIdx = menuOptions.findIndex((o) => o.id === option.id || o.label === option.label);
             if (optIdx !== -1) {
@@ -686,7 +838,9 @@ export function FlowWhatsAppSimulator({
 
         // Se houver um menu aguardando resposta:
         if (activeMenuNodeId) {
-            const menuNode = nodes.find((n) => n.id === activeMenuNodeId);
+            const currentNodes = activeNodesRef.current;
+            const currentEdges = activeEdgesRef.current;
+            const menuNode = currentNodes.find((n) => n.id === activeMenuNodeId);
             const menuData = menuNode?.data as FlowNodeData;
             const rawOptions = menuData?.menuOptions || [];
             const options = rawOptions.map((opt: any, idx: number) => ({
@@ -728,7 +882,7 @@ export function FlowWhatsAppSimulator({
 
             if (matchedOpt) {
                 setActiveMenuNodeId(null);
-                const nodeEdges = edges.filter((e) => e.source === activeMenuNodeId);
+                const nodeEdges = currentEdges.filter((e) => e.source === activeMenuNodeId);
                 let matchedEdge = nodeEdges.find((e) => e.sourceHandle === matchedOpt!.id);
 
                 if (!matchedEdge) {
@@ -786,9 +940,9 @@ export function FlowWhatsAppSimulator({
                     {/* BOTÃO REINICIAR FLUXO */}
                     <button
                         type="button"
-                        onClick={restartSimulation}
+                        onClick={handleManualRestart}
                         className="p-1.5 rounded-lg hover:bg-white/15 text-white/90 hover:text-white transition-all group"
-                        title="Reiniciar fluxo do início"
+                        title="Reiniciar fluxo e sincronizar com o canva"
                     >
                         <RotateCcw className="h-4 w-4 group-hover:-rotate-90 transition-transform duration-300" />
                     </button>
@@ -816,6 +970,42 @@ export function FlowWhatsAppSimulator({
                     </button>
                 </div>
             </div>
+
+            {/* SELETOR DE CLIENTE CADASTRADO / NÃO CADASTRADO (SOMENTE QUANDO O BLOCO INICIAL FOR CONDIÇÃO CRM) */}
+            {hasInitialCrmCondition && (
+                <div className="bg-[#f0f2f5] dark:bg-[#111b21] border-b border-slate-300 dark:border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-xs z-10">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                        <UserCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Simular Contato:</span>
+                    </div>
+                    <div className="flex items-center bg-slate-200 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700">
+                        <button
+                            type="button"
+                            onClick={() => handleChangeClientMode('registered')}
+                            className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-bold transition-all flex items-center gap-1 ${
+                                clientTestMode === 'registered'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                            }`}
+                        >
+                            <UserCheck className="h-3 w-3" />
+                            <span>Cadastrado</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleChangeClientMode('unregistered')}
+                            className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-bold transition-all flex items-center gap-1 ${
+                                clientTestMode === 'unregistered'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                            }`}
+                        >
+                            <UserX className="h-3 w-3" />
+                            <span>Não Cadastrado</span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ÁREA DE MENSAGENS COM BACKGROUND TÍPICO DO WHATSAPP */}
             <div className="flex-1 p-3 overflow-y-auto space-y-2.5 relative kanban-scroll">
