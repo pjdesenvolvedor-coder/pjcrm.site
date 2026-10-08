@@ -924,7 +924,7 @@ export async function executeFlowNode(
 
         // Fallback: se o usuário conectou a saída sem especificar handle
         if (!targetEdge) {
-            targetEdge = edges.find((e: any) => e.source === nodeId);
+            targetEdge = edges.find((e: any) => e.source === nodeId && !e.sourceHandle);
         }
 
         if (targetEdge && targetEdge.target) {
@@ -950,13 +950,25 @@ export async function executeFlowNode(
     }
 }
 
+// Helper de sanitização de texto para comparação ultra-resiliente
+const sanitizeOptionText = (str: string) => {
+    return (str || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // remove acentos
+        .replace(/[\p{Emoji}\p{Symbol}\p{Punctuation}\s]/gu, '') // remove emojis, símbolos, pontuações e espaços
+        .trim();
+};
+
 /**
  * Trata resposta do usuário quando ele já está em um menu esperando input
  */
 export async function handleUserMenuResponse(
     ctx: FlowRunnerContext,
     session: FlowContactSession,
-    userText: string
+    userText: string,
+    selectedButtonId?: string,
+    selectedIndex?: number
 ): Promise<boolean> {
     const flowRef = doc(ctx.db, 'users', ctx.userId, 'flows', session.flowId);
     const flowSnap = await getDoc(flowRef);
@@ -974,60 +986,115 @@ export async function handleUserMenuResponse(
         ? Object.values(rawOptions)
         : [];
     const options = optionsList.filter(Boolean).map((opt: any, idx: number) => {
-        if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '' };
+        if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '', index: idx };
         return {
             id: String(opt.id || `opt_${idx + 1}`),
             label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
             description: opt.description ? String(opt.description) : '',
+            index: idx,
         };
     });
-    const normalizedInput = userText.trim().toLowerCase();
 
-    // 1. Tenta correspondência exata por ID ou pelo número digitado (ex: "1", "2")
-    let matchedOptionId: string | null = null;
+    if (options.length === 0) return false;
 
-    // Se o cliente digitou um número exato
-    const numIdx = parseInt(normalizedInput);
-    if (!isNaN(numIdx) && numIdx >= 1 && numIdx <= options.length) {
-        matchedOptionId = options[numIdx - 1].id;
+    const rawInput = (userText || '').trim();
+    const btnId = (selectedButtonId || '').trim();
+
+    // Se não há nenhum input, retorna false imediatamente para evitar falsos positivos
+    if (!rawInput && !btnId && selectedIndex === undefined) {
+        return false;
     }
 
-    // Se bateu com o ID da opção ou o label
-    if (!matchedOptionId) {
-        const found = options.find(
-            (opt) =>
-                opt.id.toLowerCase() === normalizedInput ||
-                opt.label.toLowerCase() === normalizedInput ||
-                normalizedInput.includes(opt.label.toLowerCase()) ||
-                opt.label.toLowerCase().includes(normalizedInput)
-        );
-        if (found) {
-            matchedOptionId = found.id;
+    let matchedOption: typeof options[0] | null = null;
+
+    // 1. Correspondência direta por selectedButtonId (clique no botão do WhatsApp UazAPI)
+    if (btnId) {
+        matchedOption = options.find((opt) => opt.id.toLowerCase() === btnId.toLowerCase()) || null;
+        if (!matchedOption) {
+            // Se o botão ID foi enviado como índice (ex: "opt_1", "1")
+            const numFromBtn = parseInt(btnId.replace(/\D/g, ''));
+            if (!isNaN(numFromBtn) && numFromBtn >= 1 && numFromBtn <= options.length) {
+                matchedOption = options[numFromBtn - 1];
+            }
         }
     }
 
+    // 2. Correspondência direta por selectedIndex do payload do WhatsApp
+    if (!matchedOption && selectedIndex !== undefined && selectedIndex !== null && selectedIndex >= 0 && selectedIndex < options.length) {
+        matchedOption = options[selectedIndex];
+    }
+
+    // 3. Correspondência por número digitado ("1", "2", "3")
+    if (!matchedOption && rawInput) {
+        const numIdx = parseInt(rawInput);
+        if (!isNaN(numIdx) && numIdx >= 1 && numIdx <= options.length && String(numIdx) === rawInput) {
+            matchedOption = options[numIdx - 1];
+        }
+    }
+
+    // 4. Correspondência exata por ID ou pelo texto exato da opção
+    if (!matchedOption && rawInput) {
+        const lowerInput = rawInput.toLowerCase();
+        matchedOption = options.find(
+            (opt) => opt.id.toLowerCase() === lowerInput || opt.label.trim().toLowerCase() === lowerInput
+        ) || null;
+    }
+
+    // 5. Correspondência por texto sanitizado (ignora emojis, espaços extras, acentos e pontuação)
+    if (!matchedOption && rawInput) {
+        const cleanInput = sanitizeOptionText(rawInput);
+        if (cleanInput.length >= 2) {
+            // Match exato no texto limpo
+            matchedOption = options.find((opt) => sanitizeOptionText(opt.label) === cleanInput) || null;
+
+            // Se ainda não achou e o texto tem ao menos 4 caracteres úteis, tenta inclusão
+            if (!matchedOption && cleanInput.length >= 4) {
+                matchedOption = options.find((opt) => {
+                    const cleanOpt = sanitizeOptionText(opt.label);
+                    return cleanOpt.length >= 4 && (cleanOpt.includes(cleanInput) || cleanInput.includes(cleanOpt));
+                }) || null;
+            }
+        }
+    }
+
+    // Se nenhuma opção foi correspondida, retorna false
+    if (!matchedOption) {
+        console.log(`[FlowRunner] Nenhuma opção do menu "${currentNode.id}" correspondeu ao input: "${rawInput}" (btnId: "${btnId}")`);
+        return false;
+    }
+
     const edges = flow.edges || [];
+    const nodeEdges = edges.filter((e: any) => e.source === currentNode.id);
 
-    // Procura a aresta cuja sourceHandle seja o matchedOptionId
-    let targetEdge = null;
-    if (matchedOptionId) {
-        targetEdge = edges.find(
-            (e: any) => e.source === currentNode.id && e.sourceHandle === matchedOptionId
-        );
-    }
+    // Procura aresta específica conectada à saída desta opção
+    let targetEdge = nodeEdges.find((e: any) => e.sourceHandle === matchedOption!.id);
 
-    // Se não encontrou aresta específica da opção, tenta a aresta padrão do nó de menu
+    // Fallback 1: se não achou por opt.id, tenta pelo índice "opt_1", "opt_2", etc.
     if (!targetEdge) {
-        targetEdge = edges.find((e: any) => e.source === currentNode.id && !e.sourceHandle);
+        const fallbackHandle = `opt_${matchedOption!.index + 1}`;
+        targetEdge = nodeEdges.find((e: any) => e.sourceHandle === fallbackHandle);
     }
+
+    // Fallback 2: tenta pelo número "1", "2", etc.
+    if (!targetEdge) {
+        targetEdge = nodeEdges.find((e: any) => e.sourceHandle === String(matchedOption!.index + 1));
+    }
+
+    const sessionDocRef = doc(ctx.db, 'users', ctx.userId, 'flow_sessions', session.phoneNumber);
 
     if (targetEdge && targetEdge.target) {
-        // Encontrou o próximo nó! Executa-o
+        console.log(`[FlowRunner] Opção "${matchedOption.label}" selecionada com sucesso. Avançando para o bloco: ${targetEdge.target}`);
+        // Encontrou o próximo nó conectado à saída desta opção! Executa-o
         await executeFlowNode(ctx, flow, targetEdge.target);
         return true;
     }
 
-    // Se o cliente não digitou uma opção válida do menu, retorna false
-    // para permitir que o webhook trate a mensagem como novo gatilho ou reinício de fluxo
-    return false;
+    // Se o cliente escolheu uma opção válida, mas NÃO há bloco conectado a essa opção específica:
+    // O fluxo para por aqui (nunca deve saltar para um bloco aleatório ou de outra opção!)
+    console.warn(`[FlowRunner] Opção "${matchedOption.label}" selecionada no nó "${currentNode.id}", mas NÃO há bloco conectado a esta saída. Encerrando sessão.`);
+    await setDoc(sessionDocRef, {
+        status: 'completed',
+        lastInteractionAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
 }

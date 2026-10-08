@@ -84,6 +84,15 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
     });
 }
 
+const sanitizeOptionText = (str: string) => {
+    return (str || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\p{Emoji}\p{Symbol}\p{Punctuation}\s]/gu, '')
+        .trim();
+};
+
 export function FlowWhatsAppSimulator({
     open,
     onClose,
@@ -501,10 +510,20 @@ export function FlowWhatsAppSimulator({
         setIsListDrawerOpen(false);
         setCurrentNotice(null);
 
-        // 2. Procurar aresta que sai dessa opção específica (sourceHandle === option.id)
-        const matchedEdge = edges.find(
-            (e) => e.source === menuNodeId && e.sourceHandle === option.id
-        );
+        // 2. Procurar aresta que sai dessa opção específica (sourceHandle === option.id ou opt_${idx+1})
+        const nodeEdges = edges.filter((e) => e.source === menuNodeId);
+        let matchedEdge = nodeEdges.find((e) => e.sourceHandle === option.id);
+
+        if (!matchedEdge) {
+            const menuNode = nodes.find((n) => n.id === menuNodeId);
+            const menuOptions = (menuNode?.data as FlowNodeData)?.menuOptions || [];
+            const optIdx = menuOptions.findIndex((o) => o.id === option.id || o.label === option.label);
+            if (optIdx !== -1) {
+                matchedEdge = nodeEdges.find(
+                    (e) => e.sourceHandle === `opt_${optIdx + 1}` || e.sourceHandle === String(optIdx + 1)
+                );
+            }
+        }
 
         if (matchedEdge && matchedEdge.target) {
             // Bloco conectado encontrado!
@@ -513,21 +532,8 @@ export function FlowWhatsAppSimulator({
                 await executeNode(matchedEdge.target);
             }
         } else {
-            // Checar se há uma aresta padrão do nó sem sourceHandle específico
-            const defaultEdge = edges.find(
-                (e) => e.source === menuNodeId && (!e.sourceHandle || e.sourceHandle === 'source')
-            );
-
-            if (defaultEdge && defaultEdge.target) {
-                await sleep(600);
-                if (!executionRef.current.isCancelled) {
-                    await executeNode(defaultEdge.target);
-                }
-            } else {
-                // FIDELIDADE TOTAL AO FLUXO:
-                // Não há nada conectado a esta opção!
-                setCurrentNotice(`Nenhum bloco conectado à opção "${option.label}". O fluxo encerra aqui.`);
-            }
+            // FIDELIDADE TOTAL AO FLUXO: Não há nada conectado a esta opção!
+            setCurrentNotice(`Nenhum bloco conectado à opção "${option.label}". O fluxo encerra aqui.`);
         }
     };
 
@@ -552,44 +558,62 @@ export function FlowWhatsAppSimulator({
         if (activeMenuNodeId) {
             const menuNode = nodes.find((n) => n.id === activeMenuNodeId);
             const menuData = menuNode?.data as FlowNodeData;
-            const options = menuData?.menuOptions || [];
+            const rawOptions = menuData?.menuOptions || [];
+            const options = rawOptions.map((opt: any, idx: number) => ({
+                id: String(opt.id || `opt_${idx + 1}`),
+                label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+                description: opt.description ? String(opt.description) : '',
+                index: idx,
+            }));
 
-            // Correspondência por número (ex: "1", "2") ou por texto da opção
+            let matchedOpt: typeof options[0] | null = null;
+
+            // 1. Número digitado ("1", "2")
             const numIdx = parseInt(text);
-            let matchedOpt = null;
-            if (!isNaN(numIdx) && numIdx >= 1 && numIdx <= options.length) {
+            if (!isNaN(numIdx) && numIdx >= 1 && numIdx <= options.length && String(numIdx) === text) {
                 matchedOpt = options[numIdx - 1];
-            } else {
+            }
+
+            // 2. Exato por ID ou Label
+            if (!matchedOpt) {
+                const lower = text.toLowerCase();
                 matchedOpt = options.find(
-                    (opt) =>
-                        opt.label.toLowerCase() === text.toLowerCase() ||
-                        text.toLowerCase().includes(opt.label.toLowerCase()) ||
-                        opt.id.toLowerCase() === text.toLowerCase()
-                );
+                    (opt) => opt.id.toLowerCase() === lower || opt.label.trim().toLowerCase() === lower
+                ) || null;
+            }
+
+            // 3. Sanitizado (sem emojis, acentos, pontuação)
+            if (!matchedOpt) {
+                const cleanInput = sanitizeOptionText(text);
+                if (cleanInput.length >= 2) {
+                    matchedOpt = options.find((opt) => sanitizeOptionText(opt.label) === cleanInput) || null;
+                    if (!matchedOpt && cleanInput.length >= 4) {
+                        matchedOpt = options.find((opt) => {
+                            const cleanOpt = sanitizeOptionText(opt.label);
+                            return cleanOpt.length >= 4 && (cleanOpt.includes(cleanInput) || cleanInput.includes(cleanOpt));
+                        }) || null;
+                    }
+                }
             }
 
             if (matchedOpt) {
                 setActiveMenuNodeId(null);
-                const matchedEdge = edges.find(
-                    (e) => e.source === activeMenuNodeId && e.sourceHandle === matchedOpt.id
-                );
+                const nodeEdges = edges.filter((e) => e.source === activeMenuNodeId);
+                let matchedEdge = nodeEdges.find((e) => e.sourceHandle === matchedOpt!.id);
+
+                if (!matchedEdge) {
+                    matchedEdge = nodeEdges.find(
+                        (e) => e.sourceHandle === `opt_${matchedOpt!.index + 1}` || e.sourceHandle === String(matchedOpt!.index + 1)
+                    );
+                }
+
                 if (matchedEdge && matchedEdge.target) {
                     await sleep(600);
                     if (!executionRef.current.isCancelled) {
                         await executeNode(matchedEdge.target);
                     }
                 } else {
-                    const defaultEdge = edges.find(
-                        (e) => e.source === activeMenuNodeId && (!e.sourceHandle || e.sourceHandle === 'source')
-                    );
-                    if (defaultEdge && defaultEdge.target) {
-                        await sleep(600);
-                        if (!executionRef.current.isCancelled) {
-                            await executeNode(defaultEdge.target);
-                        }
-                    } else {
-                        setCurrentNotice(`Nenhum bloco conectado à opção "${matchedOpt.label}". O fluxo encerra aqui.`);
-                    }
+                    setCurrentNotice(`Nenhum bloco conectado à opção "${matchedOpt!.label}". O fluxo encerra aqui.`);
                 }
                 return;
             }

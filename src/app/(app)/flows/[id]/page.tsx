@@ -203,10 +203,19 @@ function FlowCanvasEditorContent() {
         const snapshot = stateRef.current;
 
         try {
+            // Deduplicar nós por id para garantir que nunca fiquem duplicados no banco
+            const uniqueNodesMap = new Map<string, any>();
+            (snapshot.nodes || []).forEach((n: any) => {
+                if (n && n.id) {
+                    uniqueNodesMap.set(n.id, n);
+                }
+            });
+            const deduplicatedNodes = Array.from(uniqueNodesMap.values());
+
             await updateDoc(flowDocRef, {
                 name: snapshot.flowName.trim() || 'Fluxo sem nome',
                 isActive: snapshot.isActive,
-                nodes: snapshot.nodes,
+                nodes: deduplicatedNodes,
                 edges: snapshot.edges,
                 updatedAt: new Date().toISOString(),
             });

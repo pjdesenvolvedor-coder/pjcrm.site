@@ -88,6 +88,8 @@ function extractMessageInfo(body: any) {
 
     const phoneCandidates: any[] = [];
     let text = '';
+    let selectedButtonId = '';
+    let selectedIndex: number | undefined = undefined;
     let msgId = '';
     let fromMe = false;
     let contactName = '';
@@ -120,34 +122,82 @@ function extractMessageInfo(body: any) {
             obj.user
         );
 
+        // Extrai selectedButtonId se vier de clique interativo de botão ou lista
+        if (!selectedButtonId) {
+            if (typeof obj.content?.selectedID === 'string' && obj.content.selectedID.trim()) {
+                selectedButtonId = obj.content.selectedID.trim();
+            } else if (typeof obj.content?.selectedId === 'string' && obj.content.selectedId.trim()) {
+                selectedButtonId = obj.content.selectedId.trim();
+            } else if (typeof obj.buttonOrListid === 'string' && obj.buttonOrListid.trim()) {
+                selectedButtonId = obj.buttonOrListid.trim();
+            } else if (typeof obj.content?.buttonOrListid === 'string' && obj.content.buttonOrListid.trim()) {
+                selectedButtonId = obj.content.buttonOrListid.trim();
+            } else if (typeof obj.buttonsResponseMessage?.selectedButtonId === 'string' && obj.buttonsResponseMessage.selectedButtonId.trim()) {
+                selectedButtonId = obj.buttonsResponseMessage.selectedButtonId.trim();
+            } else if (typeof obj.listResponseMessage?.singleSelectReply?.selectedRowId === 'string' && obj.listResponseMessage.singleSelectReply.selectedRowId.trim()) {
+                selectedButtonId = obj.listResponseMessage.singleSelectReply.selectedRowId.trim();
+            } else if (typeof obj.templateButtonReplyMessage?.selectedId === 'string' && obj.templateButtonReplyMessage.selectedId.trim()) {
+                selectedButtonId = obj.templateButtonReplyMessage.selectedId.trim();
+            }
+        }
+
+        // Extrai selectedIndex se vier no payload
+        if (selectedIndex === undefined) {
+            if (typeof obj.content?.selectedIndex === 'number') {
+                selectedIndex = obj.content.selectedIndex;
+            } else if (typeof obj.selectedIndex === 'number') {
+                selectedIndex = obj.selectedIndex;
+            }
+        }
+
+        // Extrai texto legível da mensagem
         if (!text) {
-            if (typeof obj.text === 'string' && obj.text.trim()) {
-                text = obj.text;
+            if (typeof obj.content?.selectedDisplayText === 'string' && obj.content.selectedDisplayText.trim()) {
+                text = obj.content.selectedDisplayText.trim();
+            } else if (typeof obj.vote === 'string' && obj.vote.trim()) {
+                text = obj.vote.trim();
+            } else if (typeof obj.buttonsResponseMessage?.selectedDisplayText === 'string' && obj.buttonsResponseMessage.selectedDisplayText.trim()) {
+                text = obj.buttonsResponseMessage.selectedDisplayText.trim();
+            } else if (typeof obj.templateButtonReplyMessage?.selectedDisplayText === 'string' && obj.templateButtonReplyMessage.selectedDisplayText.trim()) {
+                text = obj.templateButtonReplyMessage.selectedDisplayText.trim();
+            } else if (typeof obj.listResponseMessage?.title === 'string' && obj.listResponseMessage.title.trim()) {
+                text = obj.listResponseMessage.title.trim();
+            } else if (typeof obj.text === 'string' && obj.text.trim()) {
+                text = obj.text.trim();
             } else if (typeof obj.content?.text === 'string' && obj.content.text.trim()) {
-                text = obj.content.text;
+                text = obj.content.text.trim();
             } else if (typeof obj.body === 'string' && obj.body.trim()) {
-                text = obj.body;
+                text = obj.body.trim();
             } else if (typeof obj.message === 'string' && obj.message.trim()) {
-                text = obj.message;
+                text = obj.message.trim();
             } else if (typeof obj.conversation === 'string' && obj.conversation.trim()) {
-                text = obj.conversation;
-            } else if (typeof obj.extendedTextMessage?.text === 'string') {
-                text = obj.extendedTextMessage.text;
-            } else if (typeof obj.listResponseMessage?.singleSelectReply?.selectedRowId === 'string') {
-                text = obj.listResponseMessage.singleSelectReply.selectedRowId;
-            } else if (typeof obj.listResponseMessage?.title === 'string') {
-                text = obj.listResponseMessage.title;
-            } else if (typeof obj.buttonsResponseMessage?.selectedButtonId === 'string') {
-                text = obj.buttonsResponseMessage.selectedButtonId;
-            } else if (typeof obj.buttonsResponseMessage?.selectedDisplayText === 'string') {
-                text = obj.buttonsResponseMessage.selectedDisplayText;
-            } else if (typeof obj.templateButtonReplyMessage?.selectedId === 'string') {
-                text = obj.templateButtonReplyMessage.selectedId;
+                text = obj.conversation.trim();
+            } else if (typeof obj.extendedTextMessage?.text === 'string' && obj.extendedTextMessage.text.trim()) {
+                text = obj.extendedTextMessage.text.trim();
+            } else if (typeof obj.listResponseMessage?.singleSelectReply?.selectedRowId === 'string' && obj.listResponseMessage.singleSelectReply.selectedRowId.trim()) {
+                text = obj.listResponseMessage.singleSelectReply.selectedRowId.trim();
+            } else if (typeof obj.buttonsResponseMessage?.selectedButtonId === 'string' && obj.buttonsResponseMessage.selectedButtonId.trim()) {
+                text = obj.buttonsResponseMessage.selectedButtonId.trim();
+            } else if (typeof obj.templateButtonReplyMessage?.selectedId === 'string' && obj.templateButtonReplyMessage.selectedId.trim()) {
+                text = obj.templateButtonReplyMessage.selectedId.trim();
             }
         }
     }
 
-    return { msgId, fromMe, text, contactName, phoneCandidates };
+    // Se text estiver vazio mas tivermos selectedButtonId, usa como fallback de text
+    if (!text && selectedButtonId) {
+        text = selectedButtonId;
+    }
+
+    return {
+        msgId,
+        fromMe,
+        text,
+        selectedButtonId: selectedButtonId || undefined,
+        selectedIndex,
+        contactName,
+        phoneCandidates
+    };
 }
 
 export async function GET(req: NextRequest) {
@@ -177,7 +227,7 @@ export async function POST(req: NextRequest) {
             '';
 
         // 1. Extração universal e resiliente da mensagem e remetente
-        const { msgId, fromMe, text, contactName, phoneCandidates } = extractMessageInfo(body);
+        const { msgId, fromMe, text, selectedButtonId, selectedIndex, contactName, phoneCandidates } = extractMessageInfo(body);
 
         const phoneNumber = extractRealPhoneNumber(phoneCandidates);
         const userText = (text || '').trim();
@@ -207,7 +257,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | fromMe=${fromMe}`);
+        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | btnId="${selectedButtonId || ''}" | fromMe=${fromMe}`);
 
         // 2. Localizar o usuário dono desta instância UazAPI
         let targetUserId: string | null = queryUserId;
@@ -369,19 +419,19 @@ export async function POST(req: NextRequest) {
         // 7. Se está em sessão aguardando resposta de um menu:
         if (currentSession && currentSession.status === 'waiting_user_input' && !isRestart) {
             // Tenta processar como escolha de uma das opções do menu
-            const handled = await handleUserMenuResponse(runnerCtx, currentSession, userText);
+            const handled = await handleUserMenuResponse(runnerCtx, currentSession, userText, selectedButtonId, selectedIndex);
             if (handled) {
                 console.log(`[Flow Webhook] Opção de menu selecionada por ${phoneNumber}`);
                 // Atualiza última mensagem na sessão
                 await updateDoc(sessionDocRef, {
-                    lastMessageText: userText,
+                    lastMessageText: userText || selectedButtonId || '',
                     lastInteractionAt: new Date().toISOString(),
                 }).catch(() => {});
                 return NextResponse.json({ handled: 'user_menu_response' }, { status: 200 });
             }
             // Se NÃO bateu com nenhuma opção do menu:
             // A mensagem do usuário é tratada como novo gatilho, reiniciando o fluxo!
-            console.log(`[Flow Webhook] Texto "${userText}" não era opção de menu. Reiniciando fluxo para ${phoneNumber}.`);
+            console.log(`[Flow Webhook] Texto "${userText}" (btnId: "${selectedButtonId || ''}") não era opção de menu. Reiniciando fluxo para ${phoneNumber}.`);
         }
 
         // 8. Determinar qual fluxo disparar
