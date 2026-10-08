@@ -92,10 +92,19 @@ function formatDaysRemaining(val: any): string {
     return `Vencido há ${Math.abs(diffDays)} dias`;
 }
 
+// Cache em memória para busca de clientes por telefone (TTL 3 minutos)
+const clientPhoneCache = new Map<string, { data: any; cachedAt: number }>();
+
 export async function findClientByPhone(db: any, userId: string, rawPhone: string): Promise<any | null> {
     if (!rawPhone || !userId) return null;
     const digits = cleanPhone(rawPhone);
     if (!digits) return null;
+
+    const cacheKey = `${userId}:${digits}`;
+    const cached = clientPhoneCache.get(cacheKey);
+    if (cached && (Date.now() - cached.cachedAt) < 180000) {
+        return cached.data;
+    }
 
     const candidates = [
         rawPhone,
@@ -142,6 +151,7 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
     }
 
     if (matchingDocsMap.size === 0) {
+        clientPhoneCache.set(cacheKey, { data: null, cachedAt: Date.now() });
         return null;
     }
 
@@ -229,6 +239,7 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
     }
 
     mergedClient._allMatchingDocs = matchingList;
+    clientPhoneCache.set(cacheKey, { data: mergedClient, cachedAt: Date.now() });
     return mergedClient;
 }
 
@@ -613,20 +624,39 @@ export async function sendUazapiPresence(
 ): Promise<boolean> {
     try {
         const base = cleanServerUrl(ctx.serverUrl);
-        await fetch(`${base}/send/presence`, {
+        const phone = formatPhoneWith55(ctx.phoneNumber);
+        const headers = {
+            'Content-Type': 'application/json',
+            'token': ctx.instanceToken,
+            'apikey': ctx.instanceToken,
+        };
+
+        // Endpoint oficial da Uazapi: POST /message/presence
+        const res = await fetch(`${base}/message/presence`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'token': ctx.instanceToken,
-                'apikey': ctx.instanceToken,
-            },
+            headers,
             body: JSON.stringify({
-                number: formatPhoneWith55(ctx.phoneNumber),
+                number: phone,
                 presence,
             }),
         });
-        return true;
-    } catch {
+
+        if (res.ok) {
+            return true;
+        }
+
+        // Fallback para variantes legadas de gateway
+        const fallbackRes = await fetch(`${base}/send/presence`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                number: phone,
+                presence,
+            }),
+        });
+        return fallbackRes.ok;
+    } catch (err) {
+        console.error('[sendUazapiPresence] error:', err);
         return false;
     }
 }
@@ -868,8 +898,6 @@ export async function executeFlowNode(
         // Encontrar próximo nó conectado na saída padrão
         const nextEdge = edges.find((e: any) => e.source === nodeId);
         if (nextEdge && nextEdge.target) {
-            // Pequeno delay para garantir entrega sequencial no WhatsApp
-            await new Promise((resolve) => setTimeout(resolve, 1000));
             await executeFlowNode(ctx, flow, nextEdge.target);
         } else {
             // Fim do caminho do fluxo
@@ -915,16 +943,32 @@ export async function executeFlowNode(
         }
 
         const seconds = Math.min(Math.max(totalSeconds, 1), 30);
-        if (nodeData.delayPresence && nodeData.delayPresence !== 'none') {
-            await sendUazapiPresence(ctx, nodeData.delayPresence);
+        const presence = (nodeData.delayPresence || 'composing') as 'composing' | 'recording' | 'none';
+
+        if (presence !== 'none') {
+            await sendUazapiPresence(ctx, presence);
         }
 
-        // Aguarda os segundos definidos
-        await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+        // Aguarda os segundos definidos, renovando a presença no WhatsApp a cada 4 segundos
+        if (seconds > 4 && presence !== 'none') {
+            let elapsed = 0;
+            while (elapsed < seconds) {
+                const step = Math.min(4, seconds - elapsed);
+                await new Promise((resolve) => setTimeout(resolve, step * 1000));
+                elapsed += step;
+                if (elapsed < seconds) {
+                    await sendUazapiPresence(ctx, presence).catch(() => {});
+                }
+            }
+        } else {
+            await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+        }
 
         const nextEdge = edges.find((e: any) => e.source === nodeId);
         if (nextEdge && nextEdge.target) {
             await executeFlowNode(ctx, flow, nextEdge.target);
+        } else if (presence !== 'none') {
+            await sendUazapiPresence(ctx, 'paused').catch(() => {});
         }
         return;
     }

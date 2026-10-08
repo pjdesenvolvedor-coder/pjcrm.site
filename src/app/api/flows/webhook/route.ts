@@ -38,6 +38,150 @@ const db = getFirestore(app);
 // Cache em memória para deduplicação rápida de IDs de mensagens
 const processedMessageIds = new Set<string>();
 
+// Cache em memória de alta performance para credenciais de instâncias (TTL: 10 minutos)
+interface CachedUserCredentials {
+    userId: string;
+    serverUrl: string;
+    instanceToken: string;
+    cachedAt: number;
+}
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const tokenToUserCache = new Map<string, CachedUserCredentials>();
+const userIdToCredsCache = new Map<string, CachedUserCredentials>();
+
+// Cache em memória para configurações de gatilho (flow_config) (TTL: 30 segundos)
+interface CachedFlowConfig {
+    config: FlowTriggerSettings;
+    cachedAt: number;
+}
+const flowConfigCache = new Map<string, CachedFlowConfig>();
+
+// Helper de normalização resiliente de texto para comparação de palavras-chave
+function normalizeTextForMatch(str: string): string {
+    return (str || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // remove acentos
+        .replace(/[\p{Emoji}\p{Symbol}\p{Punctuation}]/gu, ' ') // remove emojis e pontuação
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Resolução instantânea do usuário dono da instância WhatsApp
+async function resolveUserCredentials(
+    queryUserId: string | null,
+    headerToken: string
+): Promise<CachedUserCredentials | null> {
+    const now = Date.now();
+
+    // 1. Se targetUserId foi passado na query e está em cache
+    if (queryUserId) {
+        const cached = userIdToCredsCache.get(queryUserId);
+        if (cached && (now - cached.cachedAt) < CACHE_TTL_MS) {
+            return cached;
+        }
+    }
+
+    // 2. Se headerToken foi passado e está em cache
+    if (headerToken) {
+        const cached = tokenToUserCache.get(headerToken);
+        if (cached && (now - cached.cachedAt) < CACHE_TTL_MS) {
+            return cached;
+        }
+    }
+
+    // 3. Se temos queryUserId, busca direto no Firestore
+    if (queryUserId) {
+        let serverUrl = 'https://travelflow.uazapi.com';
+        let instanceToken = headerToken;
+
+        const flowConnRef = doc(db, 'users', queryUserId, 'settings', 'uazapi_flow');
+        const flowConnSnap = await getDoc(flowConnRef);
+        if (flowConnSnap.exists()) {
+            const data = flowConnSnap.data() as UazapiConnectionConfig;
+            serverUrl = data.serverUrl || serverUrl;
+            if (data.instanceToken) instanceToken = data.instanceToken;
+        } else {
+            const mainConfigRef = doc(db, 'users', queryUserId, 'settings', 'config');
+            const mainConfigSnap = await getDoc(mainConfigRef);
+            if (mainConfigSnap.exists()) {
+                const mainData = mainConfigSnap.data() as Settings;
+                if (mainData.webhookToken) instanceToken = mainData.webhookToken;
+            }
+        }
+
+        if (instanceToken) {
+            const creds: CachedUserCredentials = {
+                userId: queryUserId,
+                serverUrl,
+                instanceToken,
+                cachedAt: now,
+            };
+            userIdToCredsCache.set(queryUserId, creds);
+            tokenToUserCache.set(instanceToken, creds);
+            return creds;
+        }
+    }
+
+    // 4. Se não temos queryUserId ou token específico, busca em paralelo em todos os usuários (0 serial loop)
+    try {
+        const usersSnap = await getDocs(collection(db, 'users'));
+        const userDocs = usersSnap.docs;
+
+        const results = await Promise.all(
+            userDocs.map(async (uDoc) => {
+                const uid = uDoc.id;
+                try {
+                    const flowSnap = await getDoc(doc(db, 'users', uid, 'settings', 'uazapi_flow'));
+                    if (flowSnap.exists()) {
+                        const data = flowSnap.data() as UazapiConnectionConfig;
+                        if (data.instanceToken) {
+                            return {
+                                userId: uid,
+                                serverUrl: data.serverUrl || 'https://travelflow.uazapi.com',
+                                instanceToken: data.instanceToken,
+                                cachedAt: now,
+                            };
+                        }
+                    }
+                    const mainSnap = await getDoc(doc(db, 'users', uid, 'settings', 'config'));
+                    if (mainSnap.exists()) {
+                        const mData = mainSnap.data() as Settings;
+                        if (mData.webhookToken) {
+                            return {
+                                userId: uid,
+                                serverUrl: 'https://travelflow.uazapi.com',
+                                instanceToken: mData.webhookToken,
+                                cachedAt: now,
+                            };
+                        }
+                    }
+                } catch {}
+                return null;
+            })
+        );
+
+        let matchedCreds: CachedUserCredentials | null = null;
+        let firstAvailable: CachedUserCredentials | null = null;
+
+        for (const res of results) {
+            if (!res) continue;
+            tokenToUserCache.set(res.instanceToken, res);
+            userIdToCredsCache.set(res.userId, res);
+
+            if (!firstAvailable) firstAvailable = res;
+            if (headerToken && res.instanceToken === headerToken) {
+                matchedCreds = res;
+            }
+        }
+
+        return matchedCreds || (!headerToken ? firstAvailable : null);
+    } catch (err) {
+        console.error('[Flow Webhook] Erro ao resolver credenciais de usuários:', err);
+        return null;
+    }
+}
+
 // Helper que prioriza JID com @s.whatsapp.net ou @c.us e ignora @lid
 function extractRealPhoneNumber(candidates: any[]): string {
     for (const c of candidates) {
@@ -205,6 +349,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+    let currentMsgId = '';
     try {
         const queryUserId = req.nextUrl.searchParams.get('userId');
         const queryToken = req.nextUrl.searchParams.get('token');
@@ -228,6 +373,7 @@ export async function POST(req: NextRequest) {
 
         // 1. Extração universal e resiliente da mensagem e remetente
         const { msgId, fromMe, text, selectedButtonId, selectedIndex, contactName, phoneCandidates } = extractMessageInfo(body);
+        currentMsgId = msgId;
 
         const phoneNumber = extractRealPhoneNumber(phoneCandidates);
         const userText = (text || '').trim();
@@ -259,68 +405,17 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | btnId="${selectedButtonId || ''}" | fromMe=${fromMe}`);
 
-        // 2. Localizar o usuário dono desta instância UazAPI
-        let targetUserId: string | null = queryUserId;
-        let userServerUrl = 'https://travelflow.uazapi.com';
-        let userInstanceToken = headerToken;
+        // 2. Localizar o usuário dono desta instância UazAPI (alta performance com cache em memória)
+        const userCreds = await resolveUserCredentials(queryUserId, headerToken);
 
-        if (targetUserId) {
-            // Carrega credenciais do usuário direto
-            const flowConnRef = doc(db, 'users', targetUserId, 'settings', 'uazapi_flow');
-            const flowConnSnap = await getDoc(flowConnRef);
-            if (flowConnSnap.exists()) {
-                const data = flowConnSnap.data() as UazapiConnectionConfig;
-                userServerUrl = data.serverUrl || userServerUrl;
-                if (data.instanceToken) userInstanceToken = data.instanceToken;
-            } else {
-                const mainConfigRef = doc(db, 'users', targetUserId, 'settings', 'config');
-                const mainConfigSnap = await getDoc(mainConfigRef);
-                if (mainConfigSnap.exists()) {
-                    const mainData = mainConfigSnap.data() as Settings;
-                    if (mainData.webhookToken) userInstanceToken = mainData.webhookToken;
-                }
-            }
-        } else {
-            // Tenta encontrar por token
-            const usersSnap = await getDocs(collection(db, 'users'));
-            for (const userDoc of usersSnap.docs) {
-                const uid = userDoc.id;
-                const flowConnRef = doc(db, 'users', uid, 'settings', 'uazapi_flow');
-                const flowConnSnap = await getDoc(flowConnRef);
-                if (flowConnSnap.exists()) {
-                    const data = flowConnSnap.data() as UazapiConnectionConfig;
-                    if (headerToken && data.instanceToken === headerToken) {
-                        targetUserId = uid;
-                        userServerUrl = data.serverUrl || userServerUrl;
-                        userInstanceToken = data.instanceToken;
-                        break;
-                    } else if (!headerToken && data.instanceToken) {
-                        targetUserId = uid;
-                        userServerUrl = data.serverUrl || userServerUrl;
-                        userInstanceToken = data.instanceToken;
-                        break;
-                    }
-                }
-
-                if (!targetUserId && headerToken) {
-                    const mainConfigRef = doc(db, 'users', uid, 'settings', 'config');
-                    const mainConfigSnap = await getDoc(mainConfigRef);
-                    if (mainConfigSnap.exists()) {
-                        const mainData = mainConfigSnap.data() as Settings;
-                        if (mainData.webhookToken === headerToken) {
-                            targetUserId = uid;
-                            userInstanceToken = mainData.webhookToken;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!targetUserId || !userInstanceToken) {
+        if (!userCreds || !userCreds.userId || !userCreds.instanceToken) {
             console.warn('[Flow Webhook] Nenhum usuário encontrado para a instância.');
             return NextResponse.json({ error: 'Nenhum usuário configurado para este webhook.' }, { status: 200 });
         }
+
+        const targetUserId = userCreds.userId;
+        const userServerUrl = userCreds.serverUrl;
+        const userInstanceToken = userCreds.instanceToken;
 
         const runnerCtx: FlowRunnerContext = {
             db,
@@ -331,12 +426,20 @@ export async function POST(req: NextRequest) {
             contactName,
         };
 
-        // 3. Checar configurações de gatilho do usuário (`flow_config`)
-        const configDocRef = doc(db, 'users', targetUserId, 'settings', 'flow_config');
-        const configSnap = await getDoc(configDocRef);
-        const flowConfig: FlowTriggerSettings = configSnap.exists()
-            ? (configSnap.data() as FlowTriggerSettings)
-            : { triggerMode: 'all_messages', keywords: [], ignoreIfActiveFlow: false };
+        // 3. Checar configurações de gatilho do usuário (`flow_config`) com cache em memória
+        let flowConfig: FlowTriggerSettings;
+        const cachedCfg = flowConfigCache.get(targetUserId);
+        const now = Date.now();
+        if (cachedCfg && (now - cachedCfg.cachedAt) < 30000) {
+            flowConfig = cachedCfg.config;
+        } else {
+            const configDocRef = doc(db, 'users', targetUserId, 'settings', 'flow_config');
+            const configSnap = await getDoc(configDocRef);
+            flowConfig = configSnap.exists()
+                ? (configSnap.data() as FlowTriggerSettings)
+                : { triggerMode: 'all_messages', keywords: [], ignoreIfActiveFlow: false };
+            flowConfigCache.set(targetUserId, { config: flowConfig, cachedAt: now });
+        }
 
         const resetWord = (flowConfig.resetKeyword || 'reset').toLowerCase().trim();
         const isReset = normalizedText === resetWord || normalizedText === 'reset';
@@ -454,22 +557,42 @@ export async function POST(req: NextRequest) {
         } else {
             // Modo palavras-chave
             const triggers = flowConfig.keywords || [];
-            for (const trig of triggers) {
-                const kw = trig.keyword.toLowerCase().trim();
-                if (!kw) continue;
+            const cleanUserText = normalizeTextForMatch(userText);
 
-                if (trig.matchType === 'exact') {
-                    if (normalizedText === kw) {
-                        flowToTriggerId = trig.flowId;
-                        break;
-                    }
-                } else {
-                    // Contém
-                    if (normalizedText.includes(kw)) {
-                        flowToTriggerId = trig.flowId;
-                        break;
+            for (const trig of triggers) {
+                if (!trig.keyword) continue;
+
+                // Suporta múltiplas palavras-chave separadas por vírgula, ponto e vírgula, barra ou quebra de linha
+                const variants = trig.keyword.split(/[,;\n|]+/);
+
+                for (const rawVar of variants) {
+                    const varTrim = rawVar.trim();
+                    if (!varTrim) continue;
+
+                    const cleanVar = normalizeTextForMatch(varTrim);
+                    const lowerVar = varTrim.toLowerCase();
+
+                    if (trig.matchType === 'exact') {
+                        if (
+                            (cleanVar && cleanUserText === cleanVar) ||
+                            normalizedText === lowerVar
+                        ) {
+                            flowToTriggerId = trig.flowId;
+                            break;
+                        }
+                    } else {
+                        // Contém
+                        if (
+                            (cleanVar && cleanUserText.includes(cleanVar)) ||
+                            normalizedText.includes(lowerVar)
+                        ) {
+                            flowToTriggerId = trig.flowId;
+                            break;
+                        }
                     }
                 }
+
+                if (flowToTriggerId) break;
             }
         }
 
@@ -486,7 +609,7 @@ export async function POST(req: NextRequest) {
         }
 
         const flow = flowDocSnap.data() as FlowDefinition;
-        if (!flow.isActive) {
+        if (flow.isActive === false) {
             return NextResponse.json({ ignored: 'flow_is_inactive' }, { status: 200 });
         }
 
@@ -524,6 +647,9 @@ export async function POST(req: NextRequest) {
 
     } catch (err: any) {
         console.error('[api/flows/webhook] error:', err);
+        if (currentMsgId) {
+            processedMessageIds.delete(currentMsgId);
+        }
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
