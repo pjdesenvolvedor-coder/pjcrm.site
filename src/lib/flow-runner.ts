@@ -837,11 +837,14 @@ export async function sendUazapiMenu(
             ? Object.values(rawOptions)
             : [];
         const menuOptions = optionsList.filter(Boolean).map((opt: any, idx: number) => {
-            if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '' };
+            if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '', type: 'reply', url: '' };
+            const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
             return {
                 id: String(opt.id || `opt_${idx + 1}`),
                 label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? String(opt.description) : '',
+                type: isUrl ? 'url' : 'reply',
+                url: opt.url ? String(opt.url).trim() : '',
             };
         });
 
@@ -850,19 +853,38 @@ export async function sendUazapiMenu(
             let msg = menuData.menuQuestionText || 'Selecione uma opção:\n';
             msg += '\n\n';
             menuOptions.forEach((opt, idx) => {
-                msg += `*${idx + 1}* - ${opt.label}${opt.description ? ` (${opt.description})` : ''}\n`;
+                if (opt.type === 'url' && opt.url) {
+                    msg += `*${idx + 1}* - ${opt.label} 🔗 ${opt.url}\n`;
+                } else {
+                    msg += `*${idx + 1}* - ${opt.label}${opt.description ? ` (${opt.description})` : ''}\n`;
+                }
             });
+            if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
+                msg += `\n_${menuData.menuFooterText.trim()}_`;
+            }
             return await sendUazapiText(ctx, msg.trim());
         }
 
         // Se for lista nativa do WhatsApp UazAPI
         if (menuData.menuType === 'list') {
             const choices = menuOptions.map((opt) => {
+                const targetVal = (opt.type === 'url' && opt.url) ? opt.url : opt.id;
                 if (opt.description) {
-                    return `${opt.label}|${opt.id}|${opt.description}`;
+                    return `${opt.label}|${targetVal}|${opt.description}`;
                 }
-                return `${opt.label}|${opt.id}`;
+                return `${opt.label}|${targetVal}`;
             });
+
+            const payload: any = {
+                number: phone,
+                type: 'list',
+                text: menuData.menuQuestionText || 'Escolha uma opção:',
+                listButton: menuData.menuButtonTitle || 'VER OPÇÕES',
+                choices,
+            };
+            if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
+                payload.footerText = menuData.menuFooterText.trim();
+            }
 
             const res = await fetch(`${base}/send/menu`, {
                 method: 'POST',
@@ -871,30 +893,47 @@ export async function sendUazapiMenu(
                     'token': ctx.instanceToken,
                     'apikey': ctx.instanceToken,
                 },
-                body: JSON.stringify({
-                    number: phone,
-                    type: 'list',
-                    text: menuData.menuQuestionText || 'Escolha uma opção:',
-                    listButton: menuData.menuButtonTitle || 'VER OPÇÕES',
-                    choices,
-                }),
+                body: JSON.stringify(payload),
             });
 
             // Se falhar ou a instância não suportar lista nativa, fallback para menu texto
             if (!res.ok) {
                 let msg = `*${menuData.menuQuestionText || 'Escolha uma opção:'}*\n\n`;
                 menuOptions.forEach((opt, idx) => {
-                    msg += `*${idx + 1}* - ${opt.label}${opt.description ? ` (${opt.description})` : ''}\n`;
+                    if (opt.type === 'url' && opt.url) {
+                        msg += `*${idx + 1}* - ${opt.label} 🔗 ${opt.url}\n`;
+                    } else {
+                        msg += `*${idx + 1}* - ${opt.label}${opt.description ? ` (${opt.description})` : ''}\n`;
+                    }
                 });
+                if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
+                    msg += `\n_${menuData.menuFooterText.trim()}_`;
+                }
                 return await sendUazapiText(ctx, msg.trim());
             }
 
             return true;
         }
 
-        // Se for botões rápidos (type: button)
+        // Se for botões rápidos (type: button) - suporta botões de URL / CTA nativos do WhatsApp (Label|URL)
         if (menuData.menuType === 'button') {
-            const choices = menuOptions.slice(0, 3).map((opt) => `${opt.label}|${opt.id}`);
+            const choices = menuOptions.slice(0, 3).map((opt) => {
+                if (opt.type === 'url' && opt.url) {
+                    return `${opt.label}|${opt.url}`;
+                }
+                return `${opt.label}|${opt.id}`;
+            });
+
+            const payload: any = {
+                number: phone,
+                type: 'button',
+                text: menuData.menuQuestionText || 'Escolha uma opção:',
+                choices,
+            };
+            if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
+                payload.footerText = menuData.menuFooterText.trim();
+            }
+
             const res = await fetch(`${base}/send/menu`, {
                 method: 'POST',
                 headers: {
@@ -902,19 +941,21 @@ export async function sendUazapiMenu(
                     'token': ctx.instanceToken,
                     'apikey': ctx.instanceToken,
                 },
-                body: JSON.stringify({
-                    number: phone,
-                    type: 'button',
-                    text: menuData.menuQuestionText || 'Escolha uma opção:',
-                    choices,
-                }),
+                body: JSON.stringify(payload),
             });
 
             if (!res.ok) {
                 let msg = `*${menuData.menuQuestionText || 'Escolha uma opção:'}*\n\n`;
                 menuOptions.forEach((opt, idx) => {
-                    msg += `*${idx + 1}* - ${opt.label}\n`;
+                    if (opt.type === 'url' && opt.url) {
+                        msg += `*${idx + 1}* - ${opt.label} 🔗 ${opt.url}\n`;
+                    } else {
+                        msg += `*${idx + 1}* - ${opt.label}\n`;
+                    }
                 });
+                if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
+                    msg += `\n_${menuData.menuFooterText.trim()}_`;
+                }
                 return await sendUazapiText(ctx, msg.trim());
             }
 
@@ -1046,18 +1087,25 @@ export async function executeFlowNode(
             ? Object.values(rawOptions)
             : [];
         const processedOptions = optionsList.map((opt: any, idx: number) => {
-            if (typeof opt === 'string') return replaceVars(opt);
+            if (typeof opt === 'string') {
+                return { id: `opt_${idx + 1}`, label: replaceVars(opt), description: '', type: 'reply', url: '' };
+            }
+            const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
             return {
                 ...opt,
                 id: String(opt.id || `opt_${idx + 1}`),
                 label: replaceVars(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? replaceVars(opt.description) : '',
+                type: isUrl ? 'url' : 'reply',
+                url: opt.url ? replaceVars(opt.url) : '',
             };
         });
 
         await sendUazapiMenu(ctx, {
             ...nodeData,
             menuQuestionText: replaceVars(nodeData.menuQuestionText),
+            menuButtonTitle: replaceVars(nodeData.menuButtonTitle),
+            menuFooterText: replaceVars(nodeData.menuFooterText),
             menuOptions: processedOptions,
         });
 

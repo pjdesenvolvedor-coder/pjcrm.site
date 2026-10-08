@@ -23,6 +23,7 @@ import {
     PlayCircle,
     Copy,
     Settings,
+    ExternalLink,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -128,12 +129,14 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
             : [];
         return list.filter(Boolean).map((opt: any, idx: number) => {
             if (typeof opt === 'string') {
-                return { id: `opt_${idx + 1}`, label: opt, description: '' };
+                return { id: `opt_${idx + 1}`, label: opt, description: '', type: 'reply' as const, url: '' };
             }
             return {
                 id: String(opt.id || `opt_${idx + 1}`),
                 label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? String(opt.description) : '',
+                type: (opt.type === 'url' ? 'url' : 'reply') as 'reply' | 'url',
+                url: opt.url ? String(opt.url) : '',
             };
         });
     }, [nodeData?.menuOptions]);
@@ -312,22 +315,41 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                         )}
 
                         <div className="space-y-1.5 pt-1">
-                            {menuOptions.map((opt, idx) => (
-                                <div
-                                    key={opt.id || `opt_${idx}`}
-                                    className="relative flex items-center justify-between p-1.5 px-2.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium border border-slate-200 dark:border-slate-700"
-                                >
-                                    <span className="truncate pr-3">{opt.label}</span>
-                                    {/* Handle individual para cada opção do menu */}
-                                    <Handle
-                                        type="source"
-                                        position={Position.Right}
-                                        id={opt.id}
-                                        className="!w-3.5 !h-3.5 !bg-indigo-500 hover:!bg-indigo-600 !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[19px] cursor-crosshair shadow-sm z-10"
-                                        title={`Clique e arraste para ligar a opção ${opt.label} a outro bloco`}
-                                    />
-                                </div>
-                            ))}
+                            {menuOptions.map((opt, idx) => {
+                                const isUrlButton = opt.type === 'url' || !!opt.url;
+                                return (
+                                    <div
+                                        key={opt.id || `opt_${idx}`}
+                                        className={`relative flex items-center justify-between p-1.5 px-2.5 rounded-md text-[11px] font-medium border ${
+                                            isUrlButton
+                                                ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                                                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-1.5 min-w-0 pr-3">
+                                            {isUrlButton && <ExternalLink className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                                            <span className="truncate">{opt.label}</span>
+                                            {isUrlButton && (
+                                                <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-200/80 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-bold shrink-0">
+                                                    LINK
+                                                </span>
+                                            )}
+                                        </div>
+                                        {/* Handle individual para cada opção do menu */}
+                                        <Handle
+                                            type="source"
+                                            position={Position.Right}
+                                            id={opt.id}
+                                            className={`!w-3.5 !h-3.5 ${
+                                                isUrlButton
+                                                    ? '!bg-emerald-500 hover:!bg-emerald-600'
+                                                    : '!bg-indigo-500 hover:!bg-indigo-600'
+                                            } !border-2 !border-white dark:!border-slate-900 !rounded-full !-mr-[19px] cursor-crosshair shadow-sm z-10`}
+                                            title={`Opção: ${opt.label}${isUrlButton ? ' (Botão de Link Externo CTA)' : ''}`}
+                                        />
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

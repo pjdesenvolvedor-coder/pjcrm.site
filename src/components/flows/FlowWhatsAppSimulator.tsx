@@ -33,6 +33,7 @@ import {
     UserCheck,
     UserX,
     MessageSquare,
+    ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,7 +60,8 @@ interface SimMessage {
         menuType?: 'list' | 'button' | 'numeric';
         menuQuestionText?: string;
         menuButtonTitle?: string;
-        menuOptions?: Array<{ id: string; label: string; description?: string }>;
+        menuFooterText?: string;
+        menuOptions?: Array<{ id: string; label: string; description?: string; type?: 'reply' | 'url'; url?: string }>;
     };
     contactCard?: {
         name: string;
@@ -77,7 +79,7 @@ function getCurrentTime() {
     const d = new Date();
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-function normalizeMenuOptions(options: any): Array<{ id: string; label: string; description?: string }> {
+function normalizeMenuOptions(options: any): Array<{ id: string; label: string; description?: string; type?: 'reply' | 'url'; url?: string }> {
     if (!options) return [];
     const list = Array.isArray(options)
         ? options
@@ -85,11 +87,14 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
         ? Object.values(options)
         : [];
     return list.filter(Boolean).map((opt: any, idx: number) => {
-        if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '' };
+        if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '', type: 'reply', url: '' };
+        const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
         return {
             id: String(opt.id || idx + 1),
             label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
             description: opt.description ? String(opt.description) : '',
+            type: isUrl ? 'url' : 'reply',
+            url: opt.url ? String(opt.url) : '',
         };
     });
 }
@@ -716,10 +721,13 @@ export function FlowWhatsAppSimulator({
                     menuData: {
                         menuType: data.menuType || 'list',
                         menuQuestionText: formatText(data.menuQuestionText) || 'Escolha uma opção:',
+                        menuButtonTitle: formatText(data.menuButtonTitle) || 'VER OPÇÕES',
+                        menuFooterText: formatText(data.menuFooterText),
                         menuOptions: normalizeMenuOptions(data.menuOptions).map((opt) => ({
                             ...opt,
                             label: formatText(opt.label),
                             description: opt.description ? formatText(opt.description) : '',
+                            url: opt.url ? formatText(opt.url) : '',
                         })),
                     },
                     time: getCurrentTime(),
@@ -883,20 +891,41 @@ export function FlowWhatsAppSimulator({
     }, [open, startSimulationWithSnapshot]);
 
     // Tratar clique em opção de menu (com fidelidade estrita às arestas conectadas do snapshot)
-    const handleSelectOption = async (option: { id: string; label: string }, menuNodeId: string) => {
+    const handleSelectOption = async (option: { id: string; label: string; type?: 'reply' | 'url'; url?: string }, menuNodeId: string) => {
         if (!activeMenuNodeId) return;
 
         const currentNodes = activeNodesRef.current;
         const currentEdges = activeEdgesRef.current;
 
-        // 1. Mensagem de resposta do usuário
-        const userMsg: SimMessage = {
-            id: `user_${Date.now()}`,
-            sender: 'user',
-            text: option.label,
-            time: getCurrentTime(),
-        };
-        setMessages((prev) => [...prev, userMsg]);
+        const isUrlBtn = option.type === 'url' || (option.url && String(option.url).trim() !== '');
+
+        if (isUrlBtn) {
+            const cleanUrl = option.url?.trim() || '';
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `sys_${Date.now()}`,
+                    sender: 'system',
+                    text: `🔗 Botão de Link (CTA) clicado: "${option.label}" ➔ ${cleanUrl}`,
+                    time: getCurrentTime(),
+                },
+            ]);
+            if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+                try {
+                    window.open(cleanUrl, '_blank');
+                } catch {}
+            }
+        } else {
+            // 1. Mensagem de resposta do usuário
+            const userMsg: SimMessage = {
+                id: `user_${Date.now()}`,
+                sender: 'user',
+                text: option.label,
+                time: getCurrentTime(),
+            };
+            setMessages((prev) => [...prev, userMsg]);
+        }
+
         setActiveMenuNodeId(null);
         setIsListDrawerOpen(false);
         setCurrentNotice(null);
@@ -922,6 +951,8 @@ export function FlowWhatsAppSimulator({
             if (!executionRef.current.isCancelled) {
                 await executeNode(matchedEdge.target);
             }
+        } else if (isUrlBtn) {
+            setCurrentNotice(`Botão de link "${option.label}" acionado no navegador.`);
         } else {
             // FIDELIDADE TOTAL AO FLUXO: Não há nada conectado a esta opção!
             setCurrentNotice(`Nenhum bloco conectado à opção "${option.label}". O fluxo encerra aqui.`);
@@ -1322,51 +1353,72 @@ export function FlowWhatsAppSimulator({
 
                                         {/* 2. MODO BOTÕES: LISTA DE BOTÕES DO WHATSAPP */}
                                         {msg.menuData.menuType === 'button' && (
-                                            <div className="space-y-1 pt-1">
-                                                {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => (
-                                                    <button
-                                                        key={opt.id || `btn_${idx}`}
-                                                        type="button"
-                                                        disabled={activeMenuNodeId !== msg.nodeId}
-                                                        onClick={() => msg.nodeId && handleSelectOption(opt, msg.nodeId)}
-                                                        className="w-full py-2 px-3 text-center rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-indigo-700 dark:text-indigo-400 font-bold text-xs border border-slate-200 dark:border-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
-                                                    >
-                                                        {opt.label}
-                                                    </button>
-                                                ))}
+                                            <div className="space-y-1.5 pt-1">
+                                                {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => {
+                                                    const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+                                                    return (
+                                                        <button
+                                                            key={opt.id || `btn_${idx}`}
+                                                            type="button"
+                                                            disabled={activeMenuNodeId !== msg.nodeId}
+                                                            onClick={() => msg.nodeId && handleSelectOption(opt, msg.nodeId)}
+                                                            className={`w-full py-2 px-3 text-center rounded-lg font-bold text-xs border transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] flex items-center justify-center gap-1.5 ${
+                                                                isUrl
+                                                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-2xs'
+                                                                    : 'bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-indigo-700 dark:text-indigo-400 border-slate-200 dark:border-slate-700 shadow-2xs'
+                                                            }`}
+                                                        >
+                                                            {isUrl && <ExternalLink className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                                                            <span>{opt.label}</span>
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                         )}
 
                                         {/* 3. MODO NUMÉRICO: OPÇÕES CLICÁVEIS */}
                                         {msg.menuData.menuType === 'numeric' && (
                                             <div className="space-y-1.5 pt-1 font-medium">
-                                                {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => (
-                                                    <button
-                                                        key={opt.id || `num_${idx}`}
-                                                        type="button"
-                                                        disabled={activeMenuNodeId !== msg.nodeId}
-                                                        onClick={() => msg.nodeId && handleSelectOption(opt, msg.nodeId)}
-                                                        className="w-full flex items-center justify-between p-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left text-xs border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        <div>
-                                                            <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1.5">
-                                                                {idx + 1}.
+                                                {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => {
+                                                    const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+                                                    return (
+                                                        <button
+                                                            key={opt.id || `num_${idx}`}
+                                                            type="button"
+                                                            disabled={activeMenuNodeId !== msg.nodeId}
+                                                            onClick={() => msg.nodeId && handleSelectOption(opt, msg.nodeId)}
+                                                            className="w-full flex items-center justify-between p-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-left text-xs border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1">
+                                                                    {idx + 1}.
+                                                                </span>
+                                                                {isUrl && <ExternalLink className="h-3 w-3 text-emerald-600 shrink-0" />}
+                                                                <div>
+                                                                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                                        {opt.label}
+                                                                    </span>
+                                                                    {opt.description && (
+                                                                        <p className="text-[10px] text-muted-foreground italic">
+                                                                            {opt.description}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">
+                                                                {isUrl ? 'Abrir' : 'Enviar'}
                                                             </span>
-                                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                                {opt.label}
-                                                            </span>
-                                                            {opt.description && (
-                                                                <p className="text-[10px] text-muted-foreground italic pl-4">
-                                                                    {opt.description}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">
-                                                            Enviar
-                                                        </span>
-                                                    </button>
-                                                ))}
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
+                                        )}
+
+                                        {/* RODAPÉ DO MENU (OPCIONAL) */}
+                                        {msg.menuData.menuFooterText && (
+                                            <p className="text-[10px] text-muted-foreground italic pt-1 border-t border-slate-100 dark:border-slate-800 leading-tight">
+                                                {msg.menuData.menuFooterText}
+                                            </p>
                                         )}
                                     </div>
                                 )}
@@ -1422,28 +1474,38 @@ export function FlowWhatsAppSimulator({
                     </div>
 
                     <div className="space-y-1.5">
-                        {currentDrawerMenu.options.map((opt) => (
-                            <button
-                                key={opt.id}
-                                type="button"
-                                onClick={() => handleSelectOption(opt, currentDrawerMenu.nodeId)}
-                                className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-800 transition-colors group"
-                            >
-                                <div>
-                                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
-                                        {opt.label}
-                                    </p>
-                                    {opt.description && (
-                                        <p className="text-[10px] text-muted-foreground">
-                                            {opt.description}
-                                        </p>
-                                    )}
-                                </div>
-                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                    Enviar ➔
-                                </span>
-                            </button>
-                        ))}
+                        {currentDrawerMenu.options.map((opt) => {
+                            const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+                            return (
+                                <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => handleSelectOption(opt, currentDrawerMenu.nodeId)}
+                                    className={`w-full flex items-center justify-between p-2 rounded-xl text-left border transition-colors group ${
+                                        isUrl
+                                            ? 'bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                                            : 'bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-800'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                                        {isUrl && <ExternalLink className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                                        <div className="min-w-0">
+                                            <p className={`text-xs font-bold truncate ${isUrl ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-800 dark:text-slate-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400'}`}>
+                                                {opt.label}
+                                            </p>
+                                            {opt.description && (
+                                                <p className="text-[10px] text-muted-foreground truncate">
+                                                    {opt.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                                        {isUrl ? 'Abrir ➔' : 'Enviar ➔'}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             )}

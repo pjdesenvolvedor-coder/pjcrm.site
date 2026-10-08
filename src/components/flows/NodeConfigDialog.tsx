@@ -40,6 +40,8 @@ import {
     CreditCard,
     PlayCircle,
     Layers,
+    Link2,
+    ExternalLink,
 } from 'lucide-react';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
@@ -134,7 +136,7 @@ interface NodeConfigDialogProps {
     onDelete?: (nodeId: string) => void;
 }
 
-function normalizeMenuOptions(options: any): Array<{ id: string; label: string; description?: string }> {
+function normalizeMenuOptions(options: any): Array<{ id: string; label: string; description?: string; type?: 'reply' | 'url'; url?: string }> {
     if (!options) return [];
     let list: any[] = [];
     if (Array.isArray(options)) {
@@ -146,7 +148,7 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
         .filter((item) => item !== null && item !== undefined)
         .map((item, idx) => {
             if (typeof item === 'string') {
-                return { id: `opt_${idx + 1}`, label: item, description: '' };
+                return { id: `opt_${idx + 1}`, label: item, description: '', type: 'reply' as const, url: '' };
             }
             if (typeof item === 'object') {
                 const label =
@@ -157,13 +159,16 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
                         : item.title !== undefined && item.title !== null
                         ? String(item.title)
                         : '';
+                const isUrl = item.type === 'url' || (item.url && String(item.url).trim() !== '');
                 return {
                     id: String(item.id || `opt_${idx + 1}`),
                     label,
                     description: item.description !== undefined && item.description !== null ? String(item.description) : '',
+                    type: isUrl ? ('url' as const) : ('reply' as const),
+                    url: item.url !== undefined && item.url !== null ? String(item.url) : '',
                 };
             }
-            return { id: `opt_${idx + 1}`, label: String(item), description: '' };
+            return { id: `opt_${idx + 1}`, label: String(item), description: '', type: 'reply' as const, url: '' };
         });
 }
 
@@ -199,26 +204,33 @@ export function NodeConfigDialog({
         }
     }, [open]);
 
-    const handleInsertVariable = (field: 'text' | 'menuQuestionText' | 'menuButtonTitle', variable: string) => {
+    const handleInsertVariable = (field: 'text' | 'menuQuestionText' | 'menuButtonTitle' | 'menuFooterText', variable: string) => {
         setFormData((prev) => ({
             ...prev,
             [field]: (prev[field] || '') + ` {${variable}} `,
         }));
     };
 
-    const handleAddMenuOption = () => {
+    const handleAddMenuOption = (type: 'reply' | 'url' = 'reply') => {
         const newId = 'opt_' + Date.now();
         const currentOptions = normalizeMenuOptions(formData.menuOptions);
+        const nextIdx = currentOptions.length + 1;
         setFormData((prev) => ({
             ...prev,
             menuOptions: [
                 ...currentOptions,
-                { id: newId, label: `Opção ${currentOptions.length + 1}`, description: '' },
+                {
+                    id: newId,
+                    label: type === 'url' ? 'SIM, RENOVAR AGORA' : `Opção ${nextIdx}`,
+                    description: '',
+                    type,
+                    url: type === 'url' ? '{link_renovacao}' : '',
+                },
             ],
         }));
     };
 
-    const handleUpdateMenuOption = (index: number, key: 'label' | 'description', value: string) => {
+    const handleUpdateMenuOption = (index: number, key: 'label' | 'description' | 'type' | 'url', value: any) => {
         setFormData((prev) => {
             const list = normalizeMenuOptions(prev.menuOptions);
             if (!list[index]) return prev;
@@ -287,6 +299,7 @@ export function NodeConfigDialog({
         const cleanedOptions = normalized.map((opt, idx) => ({
             ...opt,
             label: opt.label.trim() || `Opção ${idx + 1}`,
+            url: opt.url ? opt.url.trim() : '',
         }));
         onSave(node.id, {
             ...formData,
@@ -479,9 +492,9 @@ export function NodeConfigDialog({
                             </div>
 
                             {/* TÍTULO DO BOTÃO DE LISTA */}
-                            {formData.menuType !== 'numeric' && (
+                            {formData.menuType === 'list' && (
                                 <div className="space-y-2">
-                                    <Label className="text-xs font-semibold">Título do botão</Label>
+                                    <Label className="text-xs font-semibold">Título do botão de abrir a lista</Label>
                                     <div className="relative">
                                         <Input
                                             placeholder="Ex: VER OPÇÕES"
@@ -494,13 +507,28 @@ export function NodeConfigDialog({
                                 </div>
                             )}
 
+                            {/* RODAPÉ DA MENSAGEM (OPCIONAL) */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center justify-between">
+                                    <span>Texto de Rodapé (Opcional)</span>
+                                    <span className="text-[11px] font-normal text-muted-foreground">Aparece embaixo do menu no WhatsApp</span>
+                                </Label>
+                                <Input
+                                    placeholder="Ex: Entrega Automática • ⬇️Clique No Botão⬇️"
+                                    value={formData.menuFooterText || ''}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, menuFooterText: e.target.value })
+                                    }
+                                />
+                            </div>
+
                             {/* SEÇÃO RESPOSTAS / ITENS DO MENU */}
                             <div className="space-y-3 pt-2">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1 w-12" />
                                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            Respostas
+                                            Botões / Opções do Menu
                                         </span>
                                         <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1 w-12" />
                                     </div>
@@ -509,10 +537,11 @@ export function NodeConfigDialog({
                                     </Badge>
                                 </div>
 
-                                <div className="space-y-2.5">
+                                <div className="space-y-3">
                                     {normalizeMenuOptions(formData.menuOptions).map((opt, idx) => {
                                         const isDragging = draggedOptionIndex === idx;
                                         const isDragOver = dragOverIndex === idx && draggedOptionIndex !== idx;
+                                        const isUrlOption = opt.type === 'url';
 
                                         return (
                                             <div
@@ -523,11 +552,13 @@ export function NodeConfigDialog({
                                                 onDragLeave={() => handleDragLeave(idx)}
                                                 onDrop={(e) => handleDrop(e, idx)}
                                                 onDragEnd={handleDragEnd}
-                                                className={`p-3 rounded-xl border transition-all duration-150 relative group overflow-hidden ${
+                                                className={`p-3.5 rounded-xl border transition-all duration-150 relative group overflow-hidden ${
                                                     isDragging
                                                         ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20 scale-[0.98]'
                                                         : isDragOver
                                                         ? 'border-2 border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 shadow-md scale-[1.01]'
+                                                        : isUrlOption
+                                                        ? 'bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/60 hover:border-emerald-300'
                                                         : 'bg-slate-50/50 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-700'
                                                 }`}
                                             >
@@ -540,111 +571,207 @@ export function NodeConfigDialog({
                                                         <GripVertical className="h-4 w-4" />
                                                     </div>
 
-                                                    <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] h-5 px-1.5 mt-1.5 shrink-0 select-none font-mono">
-                                                        #{idx + 1}
-                                                    </Badge>
+                                                    <div className="flex-1 min-w-0 space-y-2.5">
+                                                        {/* CABEÇALHO DA OPÇÃO (TIPO DE BOTÃO) */}
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] h-5 px-1.5 shrink-0 select-none font-mono">
+                                                                    #{idx + 1}
+                                                                </Badge>
+                                                                <div className="flex items-center bg-slate-200/70 dark:bg-slate-800 p-0.5 rounded-lg text-[10.5px]">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleUpdateMenuOption(idx, 'type', 'reply')}
+                                                                        className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                                                                            !isUrlOption
+                                                                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                                                                                : 'text-muted-foreground hover:text-foreground'
+                                                                        }`}
+                                                                    >
+                                                                        Avançar no Fluxo
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            handleUpdateMenuOption(idx, 'type', 'url');
+                                                                            if (!opt.url) {
+                                                                                handleUpdateMenuOption(idx, 'url', '{link_renovacao}');
+                                                                            }
+                                                                        }}
+                                                                        className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+                                                                            isUrlOption
+                                                                                ? 'bg-emerald-600 text-white shadow-2xs'
+                                                                                : 'text-muted-foreground hover:text-emerald-600'
+                                                                        }`}
+                                                                    >
+                                                                        <ExternalLink className="h-3 w-3" />
+                                                                        Abrir Link / URL (CTA)
+                                                                    </button>
+                                                                </div>
+                                                            </div>
 
-                                                    <div className="flex-1 min-w-0 space-y-1.5">
-                                                        <Input
-                                                            placeholder="Título da opção (Ex: Suporte, Vendas...)"
-                                                            value={opt.label}
-                                                            draggable={false}
-                                                            onDragStart={(e) => e.stopPropagation()}
-                                                            onChange={(e) =>
-                                                                handleUpdateMenuOption(idx, 'label', e.target.value)
-                                                            }
-                                                            className="bg-white dark:bg-slate-950 font-medium text-xs h-8 w-full shadow-2xs"
-                                                        />
-
-                                                        <Input
-                                                            placeholder="Descrição (opcional, aparece embaixo no menu lista)"
-                                                            value={opt.description || ''}
-                                                            draggable={false}
-                                                            onDragStart={(e) => e.stopPropagation()}
-                                                            onChange={(e) =>
-                                                                handleUpdateMenuOption(idx, 'description', e.target.value)
-                                                            }
-                                                            className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground w-full shadow-2xs"
-                                                        />
-
-                                                        <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                                                            <span className="text-[9.5px] text-muted-foreground select-none">Variáveis:</span>
-                                                            <button
+                                                            <Button
                                                                 type="button"
-                                                                draggable={false}
-                                                                onDragStart={(e) => e.stopPropagation()}
-                                                                onClick={() =>
-                                                                    handleUpdateMenuOption(
-                                                                        idx,
-                                                                        'description',
-                                                                        (opt.description ? opt.description + ' ' : '') + '{assinaturas_ativas_qtd}'
-                                                                    )
-                                                                }
-                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-mono transition-colors"
-                                                                title="Inserir quantidade de assinaturas ativas"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleRemoveMenuOption(idx)}
+                                                                className="text-destructive h-7 w-7 hover:bg-destructive/10 shrink-0"
+                                                                title="Excluir opção"
                                                             >
-                                                                +{'{assinaturas_ativas_qtd}'}
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                draggable={false}
-                                                                onDragStart={(e) => e.stopPropagation()}
-                                                                onClick={() =>
-                                                                    handleUpdateMenuOption(
-                                                                        idx,
-                                                                        'description',
-                                                                        (opt.description ? opt.description + ' ' : '') + '{assinaturas_vencidas_qtd}'
-                                                                    )
-                                                                }
-                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 font-mono transition-colors"
-                                                                title="Inserir quantidade de assinaturas vencidas"
-                                                            >
-                                                                +{'{assinaturas_vencidas_qtd}'}
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                draggable={false}
-                                                                onDragStart={(e) => e.stopPropagation()}
-                                                                onClick={() =>
-                                                                    handleUpdateMenuOption(
-                                                                        idx,
-                                                                        'description',
-                                                                        (opt.description ? opt.description + ' ' : '') + '{total_assinaturas}'
-                                                                    )
-                                                                }
-                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-mono transition-colors"
-                                                                title="Inserir total de assinaturas"
-                                                            >
-                                                                +{'{total_assinaturas}'}
-                                                            </button>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
                                                         </div>
-                                                    </div>
 
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleRemoveMenuOption(idx)}
-                                                        className="text-destructive h-8 w-8 hover:bg-destructive/10 shrink-0 mt-0.5"
-                                                        title="Excluir resposta"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                        {/* TÍTULO DO BOTÃO / OPÇÃO */}
+                                                        <div>
+                                                            <Input
+                                                                placeholder={isUrlOption ? "Texto do botão (Ex: SIM, RENOVAR AGORA, PAGAR VIA PIX...)" : "Título da opção (Ex: Suporte, Ver Assinaturas...)"}
+                                                                value={opt.label}
+                                                                draggable={false}
+                                                                onDragStart={(e) => e.stopPropagation()}
+                                                                onChange={(e) =>
+                                                                    handleUpdateMenuOption(idx, 'label', e.target.value)
+                                                                }
+                                                                className="bg-white dark:bg-slate-950 font-medium text-xs h-8 w-full shadow-2xs"
+                                                            />
+                                                        </div>
+
+                                                        {/* CAMPO DE LINK / URL QUANDO FOR CTA */}
+                                                        {isUrlOption ? (
+                                                            <div className="space-y-1.5 p-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800">
+                                                                <div className="flex items-center justify-between">
+                                                                    <Label className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
+                                                                        <ExternalLink className="h-3 w-3" />
+                                                                        Link de Destino / URL do Botão:
+                                                                    </Label>
+                                                                </div>
+                                                                <Input
+                                                                    placeholder="Ex: {link_renovacao} ou https://seusite.com"
+                                                                    value={opt.url || ''}
+                                                                    draggable={false}
+                                                                    onDragStart={(e) => e.stopPropagation()}
+                                                                    onChange={(e) =>
+                                                                        handleUpdateMenuOption(idx, 'url', e.target.value)
+                                                                    }
+                                                                    className="bg-white dark:bg-slate-950 font-mono text-xs h-7 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                                                                />
+                                                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                                                    <span className="text-[9.5px] text-muted-foreground select-none">Variáveis de Link:</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleUpdateMenuOption(idx, 'url', '{link_renovacao}')}
+                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 font-mono font-medium transition-colors"
+                                                                        title="Link automático para o cliente escolher e renovar assinaturas"
+                                                                    >
+                                                                        +{'{link_renovacao}'}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleUpdateMenuOption(idx, 'url', '{link_de_acesso}')}
+                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 font-mono transition-colors"
+                                                                        title="Link de acesso à plataforma"
+                                                                    >
+                                                                        +{'{link_de_acesso}'}
+                                                                    </button>
+                                                                </div>
+                                                                <p className="text-[10px] text-emerald-800/80 dark:text-emerald-400 leading-tight">
+                                                                    ⚡ Ao clicar no WhatsApp, este botão abre o link diretamente no navegador (igual ao botão de cobrança)!
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            /* CAMPO DE DESCRIÇÃO QUANDO FOR RESPOSTA DO FLUXO */
+                                                            <div className="space-y-1.5">
+                                                                <Input
+                                                                    placeholder="Descrição (opcional, aparece embaixo no menu lista)"
+                                                                    value={opt.description || ''}
+                                                                    draggable={false}
+                                                                    onDragStart={(e) => e.stopPropagation()}
+                                                                    onChange={(e) =>
+                                                                        handleUpdateMenuOption(idx, 'description', e.target.value)
+                                                                    }
+                                                                    className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground w-full shadow-2xs"
+                                                                />
+
+                                                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                                                    <span className="text-[9.5px] text-muted-foreground select-none">Variáveis:</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        draggable={false}
+                                                                        onDragStart={(e) => e.stopPropagation()}
+                                                                        onClick={() =>
+                                                                            handleUpdateMenuOption(
+                                                                                idx,
+                                                                                'description',
+                                                                                (opt.description ? opt.description + ' ' : '') + '{assinaturas_ativas_qtd}'
+                                                                            )
+                                                                        }
+                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-mono transition-colors"
+                                                                        title="Inserir quantidade de assinaturas ativas"
+                                                                    >
+                                                                        +{'{assinaturas_ativas_qtd}'}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        draggable={false}
+                                                                        onDragStart={(e) => e.stopPropagation()}
+                                                                        onClick={() =>
+                                                                            handleUpdateMenuOption(
+                                                                                idx,
+                                                                                'description',
+                                                                                (opt.description ? opt.description + ' ' : '') + '{assinaturas_vencidas_qtd}'
+                                                                            )
+                                                                        }
+                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 font-mono transition-colors"
+                                                                        title="Inserir quantidade de assinaturas vencidas"
+                                                                    >
+                                                                        +{'{assinaturas_vencidas_qtd}'}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        draggable={false}
+                                                                        onDragStart={(e) => e.stopPropagation()}
+                                                                        onClick={() =>
+                                                                            handleUpdateMenuOption(
+                                                                                idx,
+                                                                                'description',
+                                                                                (opt.description ? opt.description + ' ' : '') + '{total_assinaturas}'
+                                                                            )
+                                                                        }
+                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-mono transition-colors"
+                                                                        title="Inserir total de assinaturas"
+                                                                    >
+                                                                        +{'{total_assinaturas}'}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
                                     })}
                                 </div>
 
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleAddMenuOption}
-                                    className="w-full border-dashed border-2 border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 gap-1.5 py-5"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    Adicionar nova resposta
-                                </Button>
+                                <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => handleAddMenuOption('reply')}
+                                        className="border-dashed border-2 border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 gap-1.5 py-4 text-xs font-medium"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                        + Resposta (Fluxo)
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => handleAddMenuOption('url')}
+                                        className="border-dashed border-2 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30 gap-1.5 py-4 text-xs font-medium"
+                                    >
+                                        <ExternalLink className="h-4 w-4 text-emerald-600" />
+                                        + Botão com Link (CTA)
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}

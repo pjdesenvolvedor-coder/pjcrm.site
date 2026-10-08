@@ -399,7 +399,13 @@ export type FlowNodeData = {
   menuQuestionText?: string;
   menuButtonTitle?: string;
   menuFooterText?: string;
-  menuOptions?: Array<{ id: string; label: string; description?: string }>;
+  menuOptions?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    type?: 'reply' | 'url';
+    url?: string;
+  }>;
   // Atraso inteligente
   delaySeconds?: number;
   delayUnit?: 'seconds' | 'minutes' | 'hours';

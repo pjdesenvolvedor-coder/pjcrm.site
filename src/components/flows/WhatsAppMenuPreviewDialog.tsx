@@ -17,6 +17,7 @@ import {
     Camera,
     Sparkles,
     X,
+    ExternalLink,
 } from 'lucide-react';
 
 export interface WhatsAppMenuPreviewDialogProps {
@@ -27,10 +28,13 @@ export interface WhatsAppMenuPreviewDialogProps {
         menuType?: 'list' | 'numeric' | 'button';
         menuQuestionText?: string;
         menuButtonTitle?: string;
+        menuFooterText?: string;
         menuOptions?: Array<{
             id?: string;
             label: string;
             description?: string;
+            type?: 'reply' | 'url';
+            url?: string;
         }>;
     };
 }
@@ -85,23 +89,27 @@ export function WhatsAppMenuPreviewDialog({
     }, [data?.menuType, open]);
 
     const rawOptions = data?.menuOptions;
-    let normalizedOptions: Array<{ id: string; label: string; description?: string }> = [];
+    let normalizedOptions: Array<{ id: string; label: string; description?: string; type?: 'reply' | 'url'; url?: string }> = [];
     if (Array.isArray(rawOptions)) {
         normalizedOptions = rawOptions.filter(Boolean).map((opt: any, idx: number) => {
-            if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '' };
+            if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '', type: 'reply', url: '' };
             return {
                 id: String(opt.id || idx + 1),
                 label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? String(opt.description) : '',
+                type: (opt.type === 'url' ? 'url' : 'reply') as 'reply' | 'url',
+                url: opt.url ? String(opt.url) : '',
             };
         });
     } else if (typeof rawOptions === 'object' && rawOptions !== null) {
         normalizedOptions = Object.values(rawOptions).filter(Boolean).map((opt: any, idx: number) => {
-            if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '' };
+            if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '', type: 'reply', url: '' };
             return {
                 id: String(opt.id || idx + 1),
                 label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? String(opt.description) : '',
+                type: (opt.type === 'url' ? 'url' : 'reply') as 'reply' | 'url',
+                url: opt.url ? String(opt.url) : '',
             };
         });
     }
@@ -109,13 +117,14 @@ export function WhatsAppMenuPreviewDialog({
     const options = normalizedOptions.length > 0
         ? normalizedOptions
         : [
-              { id: '1', label: 'Opção 1', description: 'Detalhes da primeira opção' },
-              { id: '2', label: 'Opção 2', description: 'Detalhes da segunda opção' },
-              { id: '3', label: 'Opção 3', description: 'Detalhes da terceira opção' },
+              { id: '1', label: 'Opção 1', description: 'Detalhes da primeira opção', type: 'reply' as const, url: '' },
+              { id: '2', label: 'Opção 2', description: 'Detalhes da segunda opção', type: 'reply' as const, url: '' },
+              { id: '3', label: 'Opção 3', description: 'Detalhes da terceira opção', type: 'reply' as const, url: '' },
           ];
 
     const buttonTitle = data?.menuButtonTitle || 'VER OPÇÕES';
     const questionText = data?.menuQuestionText || 'Olá! Por favor, selecione uma das opções abaixo:';
+    const footerText = data?.menuFooterText;
 
     return (
         <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -251,29 +260,57 @@ export function WhatsAppMenuPreviewDialog({
                                     {/* SE FOR MODO NUMÉRICO */}
                                     {selectedType === 'numeric' && (
                                         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5 font-medium">
-                                            {options.map((opt, idx) => (
-                                                <div
-                                                    key={opt.id || idx}
-                                                    onClick={() => setSelectedOptionId(opt.id || idx.toString())}
-                                                    className={`p-1.5 rounded-lg text-[11.5px] cursor-pointer transition-colors ${
-                                                        selectedOptionId === (opt.id || idx.toString())
-                                                            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
-                                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                                                    }`}
-                                                >
-                                                    <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1.5">
-                                                        {idx + 1}️⃣ {opt.label}
-                                                    </span>
-                                                    {opt.description && (
-                                                        <p className="text-[10px] text-muted-foreground italic pl-5">
-                                                            {opt.description}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            ))}
+                                            {options.map((opt, idx) => {
+                                                const isUrl = opt.type === 'url' || !!opt.url;
+                                                return (
+                                                    <div
+                                                        key={opt.id || idx}
+                                                        onClick={() => {
+                                                            if (isUrl && opt.url) {
+                                                                window.open(opt.url, '_blank');
+                                                            } else {
+                                                                setSelectedOptionId(opt.id || idx.toString());
+                                                            }
+                                                        }}
+                                                        className={`p-1.5 rounded-lg text-[11.5px] cursor-pointer transition-colors ${
+                                                            selectedOptionId === (opt.id || idx.toString())
+                                                                ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
+                                                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1.5 flex items-center gap-1">
+                                                                {idx + 1}️⃣ {opt.label}
+                                                            </span>
+                                                            {isUrl && (
+                                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                                                                    <ExternalLink className="h-3 w-3" /> Link
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {opt.description && (
+                                                            <p className="text-[10px] text-muted-foreground italic pl-5">
+                                                                {opt.description}
+                                                            </p>
+                                                        )}
+                                                        {isUrl && opt.url && (
+                                                            <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 truncate pl-5 font-mono">
+                                                                🔗 {opt.url}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                             <p className="text-[10px] text-muted-foreground italic pt-1">
                                                 👉 Digite o número da opção desejada.
                                             </p>
+                                        </div>
+                                    )}
+
+                                    {/* RODAPÉ DO MENU (SE HOUVER) */}
+                                    {footerText && (
+                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/60 leading-tight">
+                                            {formatWhatsAppText(footerText)}
                                         </div>
                                     )}
 
@@ -345,18 +382,26 @@ export function WhatsAppMenuPreviewDialog({
                                         {options.slice(0, 3).map((opt, idx) => {
                                             const optKey = opt.id || idx.toString();
                                             const isSelected = selectedOptionId === optKey;
+                                            const isUrl = opt.type === 'url' || !!opt.url;
                                             return (
                                                 <button
                                                     key={optKey}
                                                     type="button"
-                                                    onClick={() => setSelectedOptionId(optKey)}
-                                                    className={`w-full py-2 px-3 rounded-xl shadow-xs border text-center text-xs font-semibold transition-all cursor-pointer ${
+                                                    onClick={() => {
+                                                        if (isUrl && opt.url) {
+                                                            window.open(opt.url, '_blank');
+                                                        } else {
+                                                            setSelectedOptionId(optKey);
+                                                        }
+                                                    }}
+                                                    className={`w-full py-2 px-3 rounded-xl shadow-xs border text-center text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                                                         isSelected
                                                             ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                                                             : 'bg-white dark:bg-[#1f2c34] text-[#00a884] dark:text-[#00a884] border-slate-200 dark:border-slate-800 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/40'
                                                     }`}
                                                 >
-                                                    {opt.label}
+                                                    {isUrl && <ExternalLink className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                                                    <span>{opt.label}</span>
                                                 </button>
                                             );
                                         })}
