@@ -144,10 +144,18 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
                 return { id: `opt_${idx + 1}`, label: item, description: '' };
             }
             if (typeof item === 'object') {
+                const label =
+                    item.label !== undefined && item.label !== null
+                        ? String(item.label)
+                        : item.text !== undefined && item.text !== null
+                        ? String(item.text)
+                        : item.title !== undefined && item.title !== null
+                        ? String(item.title)
+                        : '';
                 return {
                     id: String(item.id || `opt_${idx + 1}`),
-                    label: String(item.label || item.text || item.title || `Opção ${idx + 1}`),
-                    description: item.description ? String(item.description) : '',
+                    label,
+                    description: item.description !== undefined && item.description !== null ? String(item.description) : '',
                 };
             }
             return { id: `opt_${idx + 1}`, label: String(item), description: '' };
@@ -206,17 +214,20 @@ export function NodeConfigDialog({
     };
 
     const handleUpdateMenuOption = (index: number, key: 'label' | 'description', value: string) => {
-        const updated = [...normalizeMenuOptions(formData.menuOptions)];
-        if (updated[index]) {
-            updated[index] = { ...updated[index], [key]: value };
-            setFormData((prev) => ({ ...prev, menuOptions: updated }));
-        }
+        setFormData((prev) => {
+            const list = normalizeMenuOptions(prev.menuOptions);
+            if (!list[index]) return prev;
+            const updated = list.map((item, i) => (i === index ? { ...item, [key]: value } : item));
+            return { ...prev, menuOptions: updated };
+        });
     };
 
     const handleRemoveMenuOption = (index: number) => {
-        const updated = [...normalizeMenuOptions(formData.menuOptions)];
-        updated.splice(index, 1);
-        setFormData((prev) => ({ ...prev, menuOptions: updated }));
+        setFormData((prev) => {
+            const list = normalizeMenuOptions(prev.menuOptions);
+            const updated = list.filter((_, i) => i !== index);
+            return { ...prev, menuOptions: updated };
+        });
     };
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -267,7 +278,15 @@ export function NodeConfigDialog({
 
     const handleSave = () => {
         if (!node?.id) return;
-        onSave(node.id, formData);
+        const normalized = normalizeMenuOptions(formData.menuOptions);
+        const cleanedOptions = normalized.map((opt, idx) => ({
+            ...opt,
+            label: opt.label.trim() || `Opção ${idx + 1}`,
+        }));
+        onSave(node.id, {
+            ...formData,
+            menuOptions: cleanedOptions,
+        });
         onOpenChange(false);
     };
 
@@ -499,7 +518,7 @@ export function NodeConfigDialog({
                                                 onDragLeave={() => handleDragLeave(idx)}
                                                 onDrop={(e) => handleDrop(e, idx)}
                                                 onDragEnd={handleDragEnd}
-                                                className={`p-3 rounded-xl border transition-all duration-150 space-y-2 relative group ${
+                                                className={`p-3 rounded-xl border transition-all duration-150 relative group overflow-hidden ${
                                                     isDragging
                                                         ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20 scale-[0.98]'
                                                         : isDragOver
@@ -507,52 +526,54 @@ export function NodeConfigDialog({
                                                         : 'bg-slate-50/50 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-700'
                                                 }`}
                                             >
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-start gap-2.5">
                                                     {/* Ícone de arrastar para mudar a ordem */}
                                                     <div
-                                                        className="cursor-grab active:cursor-grabbing p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors shrink-0"
+                                                        className="cursor-grab active:cursor-grabbing p-1 mt-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors shrink-0"
                                                         title="Clique e arraste para mudar a ordem"
                                                     >
                                                         <GripVertical className="h-4 w-4" />
                                                     </div>
 
-                                                    <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] h-5 px-1.5 shrink-0 select-none">
+                                                    <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] h-5 px-1.5 mt-1.5 shrink-0 select-none font-mono">
                                                         #{idx + 1}
                                                     </Badge>
 
-                                                    <Input
-                                                        placeholder="Título da opção (Ex: Renovar Assinatura)"
-                                                        value={opt.label || ''}
-                                                        draggable={false}
-                                                        onDragStart={(e) => e.stopPropagation()}
-                                                        onChange={(e) =>
-                                                            handleUpdateMenuOption(idx, 'label', e.target.value)
-                                                        }
-                                                        className="bg-white dark:bg-slate-950 font-medium text-xs h-8"
-                                                    />
+                                                    <div className="flex-1 min-w-0 space-y-1.5">
+                                                        <Input
+                                                            placeholder="Título da opção (Ex: Suporte, Vendas...)"
+                                                            value={opt.label}
+                                                            draggable={false}
+                                                            onDragStart={(e) => e.stopPropagation()}
+                                                            onChange={(e) =>
+                                                                handleUpdateMenuOption(idx, 'label', e.target.value)
+                                                            }
+                                                            className="bg-white dark:bg-slate-950 font-medium text-xs h-8 w-full shadow-2xs"
+                                                        />
+
+                                                        <Input
+                                                            placeholder="Descrição (opcional, aparece embaixo no menu lista)"
+                                                            value={opt.description || ''}
+                                                            draggable={false}
+                                                            onDragStart={(e) => e.stopPropagation()}
+                                                            onChange={(e) =>
+                                                                handleUpdateMenuOption(idx, 'description', e.target.value)
+                                                            }
+                                                            className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground w-full shadow-2xs"
+                                                        />
+                                                    </div>
 
                                                     <Button
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon"
                                                         onClick={() => handleRemoveMenuOption(idx)}
-                                                        className="text-destructive h-8 w-8 hover:bg-destructive/10 shrink-0"
+                                                        className="text-destructive h-8 w-8 hover:bg-destructive/10 shrink-0 mt-0.5"
                                                         title="Excluir resposta"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
                                                 </div>
-
-                                                <Input
-                                                    placeholder="Descrição (opcional, aparece embaixo no menu lista)"
-                                                    value={opt.description || ''}
-                                                    draggable={false}
-                                                    onDragStart={(e) => e.stopPropagation()}
-                                                    onChange={(e) =>
-                                                        handleUpdateMenuOption(idx, 'description', e.target.value)
-                                                    }
-                                                    className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground ml-6"
-                                                />
                                             </div>
                                         );
                                     })}
