@@ -768,6 +768,8 @@ function FlowCanvasEditorContent() {
     );
 
     // Organizar e alinhar automaticamente os blocos do fluxo no canvas (Arrumar Fluxo)
+    // Segue rigorosamente a ordem dos botões e links para evitar cruzamento de linhas:
+    // Botão 1 -> Informações em cima; Botão 2 -> Informações no meio; Botão 3 -> Informações embaixo
     const handleAutoArrangeFlow = useCallback(() => {
         if (nodes.length === 0) {
             toast({
@@ -782,6 +784,7 @@ function FlowCanvasEditorContent() {
 
             const nodeMap = new Map<string, Node>(nodes.map((n) => [n.id, n]));
 
+            // 1. Estima ou lê as dimensões precisas de cada bloco
             const getNodeDimensions = (node: Node) => {
                 const width = node.measured?.width || 280;
                 let height = node.measured?.height;
@@ -796,78 +799,337 @@ function FlowCanvasEditorContent() {
                             : typeof opts === 'object' && opts
                             ? Object.keys(opts).length
                             : 2;
-                        height = 140 + count * 36;
+                        height = 140 + count * 38;
                     } else if (type === 'delay') height = 130;
-                    else if (type === 'action') height = 140;
+                    else if (type === 'action') height = 150;
                     else if (type === 'flow_connect') height = 130;
                     else height = 160;
                 }
                 return { width, height };
             };
 
-            const getHandlePriority = (srcNode: Node | undefined, sourceHandle?: string | null) => {
-                if (!sourceHandle) return 0;
-                if (sourceHandle === 'not_client') return -100;
-                if (sourceHandle === 'is_client') return 100;
-                if (srcNode && (srcNode.data as any)?.nodeType === 'menu') {
+            // 2. Determina o índice visual do handle de saída no bloco (de cima para baixo: 0, 1, 2...)
+            const getHandleIndex = (srcNode: Node | undefined, sourceHandle?: string | null): number => {
+                if (!srcNode || !sourceHandle) return 0;
+                const type = (srcNode.data as any)?.nodeType;
+
+                if (type === 'menu') {
                     const raw = (srcNode.data as any)?.menuOptions;
                     const list: any[] = Array.isArray(raw)
                         ? raw
                         : typeof raw === 'object' && raw
                         ? Object.values(raw)
                         : [];
-                    const idx = list.findIndex((o: any, i: number) =>
-                        o?.id ? String(o.id) === sourceHandle : `opt_${i + 1}` === sourceHandle
-                    );
-                    if (idx !== -1) return -idx;
+
+                    const idx = list.findIndex((o: any, i: number) => {
+                        if (!o) return false;
+                        if (o.id && String(o.id) === String(sourceHandle)) return true;
+                        if (`opt_${i + 1}` === String(sourceHandle)) return true;
+                        if (String(i + 1) === String(sourceHandle)) return true;
+                        return false;
+                    });
+                    if (idx !== -1) return idx;
+
+                    const match = String(sourceHandle).match(/^opt_(\d+)$/);
+                    if (match) return parseInt(match[1], 10) - 1;
+                    return 999;
                 }
-                const match = sourceHandle.match(/^opt_(\d+)$/);
-                if (match) {
-                    return -parseInt(match[1], 10);
+
+                if (type === 'condition') {
+                    // is_client: Cliente Cadastrado (Fica no topo -> 0)
+                    // not_client: Não Cadastrado (Fica embaixo -> 1)
+                    if (sourceHandle === 'is_client') return 0;
+                    if (sourceHandle === 'not_client') return 1;
                 }
+
+                const numMatch = String(sourceHandle).match(/(\d+)/);
+                if (numMatch) return parseInt(numMatch[1], 10) - 1;
+
                 return 0;
             };
 
-            const sortedEdges = [...edges].sort((a, b) => {
-                if (a.source === b.source) {
-                    const srcNode = nodeMap.get(a.source);
-                    return getHandlePriority(srcNode, a.sourceHandle) - getHandlePriority(srcNode, b.sourceHandle);
+            // 3. Agrupa e ordena as arestas que saem de cada nó estritamente pela ordem dos handles
+            const outgoingEdges = new Map<string, Edge[]>();
+            for (const node of nodes) {
+                outgoingEdges.set(node.id, []);
+            }
+            for (const edge of edges) {
+                if (nodeMap.has(edge.source) && nodeMap.has(edge.target)) {
+                    outgoingEdges.get(edge.source)?.push(edge);
                 }
-                return 0;
-            });
+            }
+            for (const [nodeId, edgeList] of outgoingEdges.entries()) {
+                const srcNode = nodeMap.get(nodeId);
+                edgeList.sort((a, b) => {
+                    const idxA = getHandleIndex(srcNode, a.sourceHandle);
+                    const idxB = getHandleIndex(srcNode, b.sourceHandle);
+                    return idxA - idxB;
+                });
+            }
 
-            const g = new dagre.graphlib.Graph();
-            g.setGraph({
-                rankdir: 'LR',
-                nodesep: 80,
-                ranksep: 120,
-                marginx: 80,
-                marginy: 80,
-            });
-            g.setDefaultEdgeLabel(() => ({}));
-
-            nodes.forEach((node) => {
-                const { width, height } = getNodeDimensions(node);
-                g.setNode(node.id, { width, height });
-            });
-
-            sortedEdges.forEach((edge) => {
-                if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
-                    g.setEdge(edge.source, edge.target);
+            // 4. Identifica raízes e constrói a árvore de expansão (Spanning Forest)
+            const inDegree = new Map<string, number>();
+            for (const node of nodes) inDegree.set(node.id, 0);
+            for (const edge of edges) {
+                if (nodeMap.has(edge.source) && nodeMap.has(edge.target)) {
+                    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
                 }
-            });
+            }
 
-            dagre.layout(g);
+            const roots: string[] = [];
+            // Nós 'start' têm prioridade absoluta como raiz principal
+            const startNodes = nodes.filter((n) => (n.data as any)?.nodeType === 'start').map((n) => n.id);
+            roots.push(...startNodes);
+
+            // Nós sem entrada
+            for (const node of nodes) {
+                if (!roots.includes(node.id) && (inDegree.get(node.id) || 0) === 0) {
+                    roots.push(node.id);
+                }
+            }
+
+            const treeChildren = new Map<string, string[]>();
+            const treeParent = new Map<string, string>();
+            const visited = new Set<string>();
+
+            for (const node of nodes) {
+                treeChildren.set(node.id, []);
+            }
+
+            const processComponent = (rootId: string) => {
+                if (visited.has(rootId)) return;
+                visited.add(rootId);
+                const queue = [rootId];
+
+                while (queue.length > 0) {
+                    const curr = queue.shift()!;
+                    const outEdges = outgoingEdges.get(curr) || [];
+
+                    for (const edge of outEdges) {
+                        const targetId = edge.target;
+                        if (!visited.has(targetId) && targetId !== curr) {
+                            visited.add(targetId);
+                            treeChildren.get(curr)!.push(targetId);
+                            treeParent.set(targetId, curr);
+                            queue.push(targetId);
+                        }
+                    }
+                }
+            };
+
+            for (const rootId of [...roots]) {
+                processComponent(rootId);
+            }
+
+            // Processa blocos isolados ou cíclicos restantes
+            for (const node of nodes) {
+                if (!visited.has(node.id)) {
+                    roots.push(node.id);
+                    processComponent(node.id);
+                }
+            }
+
+            // 5. Calcula colunas horizontais (X) para cada nó
+            const column = new Map<string, number>();
+            for (const rootId of roots) {
+                column.set(rootId, 0);
+            }
+
+            const isAncestor = (ancestorId: string, childId: string): boolean => {
+                let curr: string | undefined = childId;
+                const seen = new Set<string>();
+                while (curr && !seen.has(curr)) {
+                    seen.add(curr);
+                    if (curr === ancestorId) return true;
+                    curr = treeParent.get(curr);
+                }
+                return false;
+            };
+
+            let changed = true;
+            let pass = 0;
+            while (changed && pass < nodes.length + 5) {
+                changed = false;
+                pass++;
+                for (const edge of edges) {
+                    if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) continue;
+                    const u = edge.source;
+                    const v = edge.target;
+                    // Não empurra para a frente se for um link de volta para um ancestral
+                    if (!isAncestor(v, u)) {
+                        const desired = (column.get(u) || 0) + 1;
+                        if ((column.get(v) || 0) < desired) {
+                            column.set(v, desired);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            const colMap = new Map<number, string[]>();
+            for (const node of nodes) {
+                const c = column.get(node.id) || 0;
+                if (!colMap.has(c)) colMap.set(c, []);
+                colMap.get(c)!.push(node.id);
+            }
+
+            const maxCol = Math.max(...Array.from(colMap.keys()), 0);
+            const colWidths = new Map<number, number>();
+            for (let c = 0; c <= maxCol; c++) {
+                const list = colMap.get(c) || [];
+                const maxW = list.length > 0
+                    ? Math.max(...list.map((id) => getNodeDimensions(nodeMap.get(id)!).width))
+                    : 280;
+                colWidths.set(c, maxW);
+            }
+
+            const HORIZONTAL_GAP = 130;
+            const colX = new Map<number, number>();
+            let curX = 80;
+            for (let c = 0; c <= maxCol; c++) {
+                colX.set(c, curX);
+                curX += (colWidths.get(c) || 280) + HORIZONTAL_GAP;
+            }
+
+            const finalX = new Map<string, number>();
+            for (const node of nodes) {
+                const c = column.get(node.id) || 0;
+                finalX.set(node.id, colX.get(c) || 80);
+            }
+
+            // 6. Calcula a altura necessária de cada subárvore e distribui corredores verticais (Y)
+            // Isso garante que o Botão 1 fique em cima, o Botão 2 no meio e o Botão 3 embaixo!
+            const VERTICAL_GAP = 60;
+            const subtreeHeights = new Map<string, number>();
+
+            const calcSubtreeHeight = (nodeId: string, vis = new Set<string>()): number => {
+                if (vis.has(nodeId)) return getNodeDimensions(nodeMap.get(nodeId)!).height;
+                vis.add(nodeId);
+
+                const dims = getNodeDimensions(nodeMap.get(nodeId)!);
+                const kids = treeChildren.get(nodeId) || [];
+
+                if (kids.length === 0) {
+                    subtreeHeights.set(nodeId, dims.height);
+                    return dims.height;
+                }
+
+                let sum = 0;
+                for (let i = 0; i < kids.length; i++) {
+                    const h = calcSubtreeHeight(kids[i], vis);
+                    sum += h;
+                    if (i > 0) sum += VERTICAL_GAP;
+                }
+
+                const total = Math.max(dims.height, sum);
+                subtreeHeights.set(nodeId, total);
+                return total;
+            };
+
+            for (const rootId of roots) {
+                calcSubtreeHeight(rootId);
+            }
+
+            const finalY = new Map<string, number>();
+
+            const assignY = (nodeId: string, yStart: number, vis = new Set<string>()) => {
+                if (vis.has(nodeId)) return;
+                vis.add(nodeId);
+
+                const dims = getNodeDimensions(nodeMap.get(nodeId)!);
+                const totalHeight = subtreeHeights.get(nodeId) || dims.height;
+                const kids = treeChildren.get(nodeId) || [];
+
+                if (kids.length === 0) {
+                    finalY.set(nodeId, yStart);
+                    return;
+                }
+
+                let sumKids = 0;
+                for (let i = 0; i < kids.length; i++) {
+                    sumKids += (subtreeHeights.get(kids[i]) || dims.height);
+                    if (i > 0) sumKids += VERTICAL_GAP;
+                }
+
+                // Centraliza o nó pai verticalmente em relação a todos os seus filhos
+                finalY.set(nodeId, Math.round(yStart + (totalHeight - dims.height) / 2));
+
+                // Ponto inicial para posicionar os filhos
+                let currentKidY = yStart;
+                if (dims.height > sumKids) {
+                    currentKidY = yStart + (dims.height - sumKids) / 2;
+                }
+
+                // Distribui os filhos na ordem exata dos botões/handles:
+                // Filho 0 -> Fica no topo da faixa
+                // Filho 1 -> Fica no meio
+                // Filho 2 -> Fica embaixo
+                for (const kidId of kids) {
+                    const kidHeight = subtreeHeights.get(kidId) || dims.height;
+                    assignY(kidId, currentKidY, vis);
+                    currentKidY += kidHeight + VERTICAL_GAP;
+                }
+            };
+
+            let curRootY = 80;
+            const COMPONENT_GAP = 120;
+            for (const rootId of roots) {
+                assignY(rootId, curRootY);
+                curRootY += (subtreeHeights.get(rootId) || 160) + COMPONENT_GAP;
+            }
+
+            // 7. Passada de segurança anti-colisão por coluna
+            for (let c = 0; c <= maxCol; c++) {
+                const list = colMap.get(c) || [];
+                if (list.length <= 1) continue;
+
+                list.sort((a, b) => (finalY.get(a) || 0) - (finalY.get(b) || 0));
+
+                for (let i = 0; i < list.length - 1; i++) {
+                    const aId = list[i];
+                    const bId = list[i + 1];
+                    const aDims = getNodeDimensions(nodeMap.get(aId)!);
+                    const aY = finalY.get(aId) || 0;
+                    const bY = finalY.get(bId) || 0;
+                    const minBY = aY + aDims.height + 40;
+
+                    if (bY < minBY) {
+                        const diff = minBY - bY;
+                        const q = [bId];
+                        const sVis = new Set<string>();
+                        while (q.length > 0) {
+                            const curr = q.shift()!;
+                            if (sVis.has(curr)) continue;
+                            sVis.add(curr);
+                            finalY.set(curr, (finalY.get(curr) || 0) + diff);
+                            const kList = treeChildren.get(curr) || [];
+                            q.push(...kList);
+                        }
+                    }
+                }
+            }
+
+            // 8. Normalização de coordenadas (garante margem inicial de 80px)
+            let minX = Infinity;
+            let minY = Infinity;
+            for (const node of nodes) {
+                const x = finalX.get(node.id) ?? node.position.x;
+                const y = finalY.get(node.id) ?? node.position.y;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+            }
+
+            const shiftX = 80 - (isFinite(minX) ? minX : 0);
+            const shiftY = 80 - (isFinite(minY) ? minY : 0);
 
             const nextNodes = nodes.map((node) => {
-                const dagreNode = g.node(node.id);
-                if (!dagreNode) return node;
-                const { width, height } = getNodeDimensions(node);
+                const rx = finalX.get(node.id) ?? node.position.x;
+                const ry = finalY.get(node.id) ?? node.position.y;
                 return {
                     ...node,
                     position: {
-                        x: Math.round(dagreNode.x - width / 2),
-                        y: Math.round(dagreNode.y - height / 2),
+                        x: Math.round(rx + shiftX),
+                        y: Math.round(ry + shiftY),
                     },
                 };
             });
@@ -881,7 +1143,7 @@ function FlowCanvasEditorContent() {
 
             toast({
                 title: 'Fluxo arrumado com sucesso!',
-                description: 'Os blocos foram alinhados e organizados automaticamente.',
+                description: 'Os blocos foram organizados seguindo a ordem exata dos botões e links.',
             });
         } catch (err: any) {
             console.error('Erro ao arrumar fluxo:', err);
