@@ -838,13 +838,13 @@ export async function sendUazapiMenu(
             : [];
         const menuOptions = optionsList.filter(Boolean).map((opt: any, idx: number) => {
             if (typeof opt === 'string') return { id: `opt_${idx + 1}`, label: opt, description: '', type: 'reply', url: '' };
-            const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+            const isUrl = opt.type === 'url';
             return {
                 id: String(opt.id || `opt_${idx + 1}`),
                 label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? String(opt.description) : '',
                 type: isUrl ? 'url' : 'reply',
-                url: opt.url ? String(opt.url).trim() : '',
+                url: isUrl && opt.url ? String(opt.url).trim() : '',
             };
         });
 
@@ -1090,14 +1090,14 @@ export async function executeFlowNode(
             if (typeof opt === 'string') {
                 return { id: `opt_${idx + 1}`, label: replaceVars(opt), description: '', type: 'reply', url: '' };
             }
-            const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+            const isUrl = opt.type === 'url';
             return {
                 ...opt,
                 id: String(opt.id || `opt_${idx + 1}`),
                 label: replaceVars(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
                 description: opt.description ? replaceVars(opt.description) : '',
                 type: isUrl ? 'url' : 'reply',
-                url: opt.url ? replaceVars(opt.url) : '',
+                url: isUrl && opt.url ? replaceVars(opt.url) : '',
             };
         });
 

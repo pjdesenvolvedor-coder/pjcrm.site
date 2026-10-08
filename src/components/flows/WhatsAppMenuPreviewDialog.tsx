@@ -261,7 +261,7 @@ export function WhatsAppMenuPreviewDialog({
                                     {selectedType === 'numeric' && (
                                         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5 font-medium">
                                             {options.map((opt, idx) => {
-                                                const isUrl = opt.type === 'url' || !!opt.url;
+                                                const isUrl = opt.type === 'url';
                                                 return (
                                                     <div
                                                         key={opt.id || idx}
@@ -382,7 +382,7 @@ export function WhatsAppMenuPreviewDialog({
                                         {options.slice(0, 3).map((opt, idx) => {
                                             const optKey = opt.id || idx.toString();
                                             const isSelected = selectedOptionId === optKey;
-                                            const isUrl = opt.type === 'url' || !!opt.url;
+                                            const isUrl = opt.type === 'url';
                                             return (
                                                 <button
                                                     key={optKey}

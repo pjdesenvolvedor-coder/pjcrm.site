@@ -316,7 +316,7 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
 
                         <div className="space-y-1.5 pt-1">
                             {menuOptions.map((opt, idx) => {
-                                const isUrlButton = opt.type === 'url' || !!opt.url;
+                                const isUrlButton = opt.type === 'url';
                                 return (
                                     <div
                                         key={opt.id || `opt_${idx}`}

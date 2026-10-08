@@ -159,13 +159,13 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
                         : item.title !== undefined && item.title !== null
                         ? String(item.title)
                         : '';
-                const isUrl = item.type === 'url' || (item.url && String(item.url).trim() !== '');
+                const type: 'reply' | 'url' = item.type === 'url' ? 'url' : 'reply';
                 return {
                     id: String(item.id || `opt_${idx + 1}`),
                     label,
                     description: item.description !== undefined && item.description !== null ? String(item.description) : '',
-                    type: isUrl ? ('url' as const) : ('reply' as const),
-                    url: item.url !== undefined && item.url !== null ? String(item.url) : '',
+                    type,
+                    url: type === 'url' && item.url !== undefined && item.url !== null ? String(item.url) : '',
                 };
             }
             return { id: `opt_${idx + 1}`, label: String(item), description: '', type: 'reply' as const, url: '' };
@@ -234,7 +234,17 @@ export function NodeConfigDialog({
         setFormData((prev) => {
             const list = normalizeMenuOptions(prev.menuOptions);
             if (!list[index]) return prev;
-            const updated = list.map((item, i) => (i === index ? { ...item, [key]: value } : item));
+            const updated = list.map((item, i) => {
+                if (i !== index) return item;
+                if (key === 'type') {
+                    if (value === 'reply') {
+                        return { ...item, type: 'reply' as const, url: '' };
+                    } else if (value === 'url') {
+                        return { ...item, type: 'url' as const, url: item.url && item.url.trim() !== '' ? item.url : '{link_renovacao}' };
+                    }
+                }
+                return { ...item, [key]: value };
+            });
             return { ...prev, menuOptions: updated };
         });
     };
@@ -299,7 +309,8 @@ export function NodeConfigDialog({
         const cleanedOptions = normalized.map((opt, idx) => ({
             ...opt,
             label: opt.label.trim() || `Opção ${idx + 1}`,
-            url: opt.url ? opt.url.trim() : '',
+            type: opt.type === 'url' ? ('url' as const) : ('reply' as const),
+            url: opt.type === 'url' ? (opt.url ? opt.url.trim() : '') : '',
         }));
         onSave(node.id, {
             ...formData,

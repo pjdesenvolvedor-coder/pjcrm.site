@@ -88,13 +88,13 @@ function normalizeMenuOptions(options: any): Array<{ id: string; label: string; 
         : [];
     return list.filter(Boolean).map((opt: any, idx: number) => {
         if (typeof opt === 'string') return { id: String(idx + 1), label: opt, description: '', type: 'reply', url: '' };
-        const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+        const isUrl = opt.type === 'url';
         return {
             id: String(opt.id || idx + 1),
             label: String(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
             description: opt.description ? String(opt.description) : '',
             type: isUrl ? 'url' : 'reply',
-            url: opt.url ? String(opt.url) : '',
+            url: isUrl && opt.url ? String(opt.url) : '',
         };
     });
 }
@@ -972,7 +972,7 @@ export function FlowWhatsAppSimulator({
         const currentNodes = activeNodesRef.current;
         const currentEdges = activeEdgesRef.current;
 
-        const isUrlBtn = option.type === 'url' || (option.url && String(option.url).trim() !== '');
+        const isUrlBtn = option.type === 'url';
 
         if (isUrlBtn) {
             const cleanUrl = option.url?.trim() || '';
@@ -1428,7 +1428,7 @@ export function FlowWhatsAppSimulator({
                                         {msg.menuData.menuType === 'button' && (
                                             <div className="space-y-1.5 pt-1">
                                                 {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => {
-                                                    const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+                                                    const isUrl = opt.type === 'url';
                                                     return (
                                                         <button
                                                             key={opt.id || `btn_${idx}`}
@@ -1453,7 +1453,7 @@ export function FlowWhatsAppSimulator({
                                         {msg.menuData.menuType === 'numeric' && (
                                             <div className="space-y-1.5 pt-1 font-medium">
                                                 {normalizeMenuOptions(msg.menuData.menuOptions).map((opt, idx) => {
-                                                    const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+                                                    const isUrl = opt.type === 'url';
                                                     return (
                                                         <button
                                                             key={opt.id || `num_${idx}`}
@@ -1548,7 +1548,7 @@ export function FlowWhatsAppSimulator({
 
                     <div className="space-y-1.5">
                         {currentDrawerMenu.options.map((opt) => {
-                            const isUrl = opt.type === 'url' || (opt.url && String(opt.url).trim() !== '');
+                            const isUrl = opt.type === 'url';
                             return (
                                 <button
                                     key={opt.id}
