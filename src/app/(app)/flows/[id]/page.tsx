@@ -22,6 +22,7 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import dagre from '@dagrejs/dagre';
 
 import { useFirebase, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, collection, setDoc, updateDoc } from 'firebase/firestore';
@@ -77,7 +78,7 @@ function FlowCanvasEditorContent() {
     const params = useParams();
     const router = useRouter();
     const flowId = params?.id as string;
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, fitView } = useReactFlow();
 
     const { firestore, effectiveUserId } = useFirebase();
     const { toast } = useToast();
@@ -600,6 +601,132 @@ function FlowCanvasEditorContent() {
         [screenToFlowPosition, createNodeAtPosition]
     );
 
+    // Organizar e alinhar automaticamente os blocos do fluxo no canvas (Arrumar Fluxo)
+    const handleAutoArrangeFlow = useCallback(() => {
+        if (nodes.length === 0) {
+            toast({
+                title: 'Nenhum bloco para arrumar',
+                description: 'Adicione blocos ao fluxo antes de organizar.',
+            });
+            return;
+        }
+
+        try {
+            pushHistory();
+
+            const nodeMap = new Map<string, Node>(nodes.map((n) => [n.id, n]));
+
+            const getNodeDimensions = (node: Node) => {
+                const width = node.measured?.width || 280;
+                let height = node.measured?.height;
+                if (!height) {
+                    const type = (node.data as any)?.nodeType;
+                    if (type === 'start') height = 130;
+                    else if (type === 'condition') height = 210;
+                    else if (type === 'menu') {
+                        const opts = (node.data as any)?.menuOptions;
+                        const count = Array.isArray(opts)
+                            ? opts.length
+                            : typeof opts === 'object' && opts
+                            ? Object.keys(opts).length
+                            : 2;
+                        height = 140 + count * 36;
+                    } else if (type === 'delay') height = 130;
+                    else if (type === 'action') height = 140;
+                    else if (type === 'flow_connect') height = 130;
+                    else height = 160;
+                }
+                return { width, height };
+            };
+
+            const getHandlePriority = (srcNode: Node | undefined, sourceHandle?: string | null) => {
+                if (!sourceHandle) return 0;
+                if (sourceHandle === 'not_client') return -100;
+                if (sourceHandle === 'is_client') return 100;
+                if (srcNode && (srcNode.data as any)?.nodeType === 'menu') {
+                    const raw = (srcNode.data as any)?.menuOptions;
+                    const list: any[] = Array.isArray(raw)
+                        ? raw
+                        : typeof raw === 'object' && raw
+                        ? Object.values(raw)
+                        : [];
+                    const idx = list.findIndex((o: any, i: number) =>
+                        o?.id ? String(o.id) === sourceHandle : `opt_${i + 1}` === sourceHandle
+                    );
+                    if (idx !== -1) return -idx;
+                }
+                const match = sourceHandle.match(/^opt_(\d+)$/);
+                if (match) {
+                    return -parseInt(match[1], 10);
+                }
+                return 0;
+            };
+
+            const sortedEdges = [...edges].sort((a, b) => {
+                if (a.source === b.source) {
+                    const srcNode = nodeMap.get(a.source);
+                    return getHandlePriority(srcNode, a.sourceHandle) - getHandlePriority(srcNode, b.sourceHandle);
+                }
+                return 0;
+            });
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: 'LR',
+                nodesep: 80,
+                ranksep: 120,
+                marginx: 80,
+                marginy: 80,
+            });
+            g.setDefaultEdgeLabel(() => ({}));
+
+            nodes.forEach((node) => {
+                const { width, height } = getNodeDimensions(node);
+                g.setNode(node.id, { width, height });
+            });
+
+            sortedEdges.forEach((edge) => {
+                if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+                    g.setEdge(edge.source, edge.target);
+                }
+            });
+
+            dagre.layout(g);
+
+            const nextNodes = nodes.map((node) => {
+                const dagreNode = g.node(node.id);
+                if (!dagreNode) return node;
+                const { width, height } = getNodeDimensions(node);
+                return {
+                    ...node,
+                    position: {
+                        x: Math.round(dagreNode.x - width / 2),
+                        y: Math.round(dagreNode.y - height / 2),
+                    },
+                };
+            });
+
+            setNodes(nextNodes);
+            scheduleAutoSave(600);
+
+            setTimeout(() => {
+                fitView({ duration: 600, padding: 0.18 });
+            }, 50);
+
+            toast({
+                title: 'Fluxo arrumado com sucesso!',
+                description: 'Os blocos foram alinhados e organizados automaticamente.',
+            });
+        } catch (err: any) {
+            console.error('Erro ao arrumar fluxo:', err);
+            toast({
+                variant: 'destructive',
+                title: 'Erro ao organizar fluxo',
+                description: err?.message || 'Não foi possível alinhar os blocos automaticamente.',
+            });
+        }
+    }, [nodes, edges, pushHistory, setNodes, scheduleAutoSave, fitView, toast]);
+
     // Atualizar dados do nó configurado
     const handleSaveNodeData = (nodeId: string, updatedData: FlowNodeData) => {
         pushHistory();
@@ -735,6 +862,19 @@ function FlowCanvasEditorContent() {
                                 </Button>
                             )}
                         </div>
+
+                        {/* BOTÃO ARRUMAR FLUXO */}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAutoArrangeFlow}
+                            className="h-8 px-2.5 text-xs gap-1.5 border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 hover:text-indigo-800 dark:hover:bg-indigo-900/60 shadow-2xs font-semibold transition-all"
+                            title="Organizar e alinhar blocos do fluxo automaticamente"
+                        >
+                            <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                            <span>Arrumar Fluxo</span>
+                        </Button>
                     </div>
                 </div>
 
@@ -986,6 +1126,14 @@ function FlowCanvasEditorContent() {
                     >
                         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#94a3b8" />
                         <Controls className="!bg-card !border-border !shadow-md">
+                            <ControlButton
+                                onClick={handleAutoArrangeFlow}
+                                title="Arrumar Fluxo (alinhar blocos automaticamente)"
+                                aria-label="Arrumar Fluxo"
+                                className="!text-indigo-600 dark:!text-indigo-400 hover:!text-indigo-700"
+                            >
+                                <Sparkles className="h-3.5 w-3.5" />
+                            </ControlButton>
                             <ControlButton
                                 onClick={() => setShowMiniMap((prev) => !prev)}
                                 title={showMiniMap ? 'Minimizar mapa do fluxo' : 'Mostrar mapa do fluxo (olhinho)'}
