@@ -238,6 +238,10 @@ export default function FlowVariablesPage() {
                     <p className="text-muted-foreground dark:text-indigo-300">
                         Quando você adiciona <strong>{`{assinaturas_ativas}`}</strong>, <strong>{`{assinaturas_vencidas}`}</strong> ou <strong>{`{todas_assinaturas}`}</strong> em qualquer bloco de mensagem no Canva, o robô substitui essas variáveis pela lista formatada abaixo. Se o cliente tiver múltiplos planos, cada um será formatado na linha conforme o modelo que você definir aqui!
                     </p>
+                    <div className="mt-2 pt-2 border-t border-indigo-200/50 dark:border-indigo-900/40 flex items-center gap-1.5 flex-wrap text-[11.5px]">
+                        <span className="font-semibold text-indigo-950 dark:text-indigo-100">Contadores Numéricos:</span>
+                        <span>Use <code>{`{assinaturas_ativas_qtd}`}</code>, <code>{`{assinaturas_vencidas_qtd}`}</code> ou <code>{`{total_assinaturas}`}</code> para exibir apenas o número de planos (ideal para o detalhe das opções de menu).</span>
+                    </div>
                 </div>
             </div>
 

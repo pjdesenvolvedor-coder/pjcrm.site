@@ -293,7 +293,29 @@ export function FlowWhatsAppSimulator({
                         .replace(/\{planos_vencidos\}/gi, overdueEmpty)
                         .replace(/\{todas_assinaturas\}/gi, allEmpty)
                         .replace(/\{todas_as_assinaturas\}/gi, allEmpty)
-                        .replace(/\{assinaturas\}/gi, '');
+                        .replace(/\{assinaturas\}/gi, '')
+                        .replace(/\{assinaturas_ativas_qtd\}/gi, '0')
+                        .replace(/\{qtd_assinaturas_ativas\}/gi, '0')
+                        .replace(/\{total_assinaturas_ativas\}/gi, '0')
+                        .replace(/\{numero_assinaturas_ativas\}/gi, '0')
+                        .replace(/\{num_assinaturas_ativas\}/gi, '0')
+                        .replace(/\{quantidade_assinaturas_ativas\}/gi, '0')
+                        .replace(/\{planos_ativos_qtd\}/gi, '0')
+                        .replace(/\{qtd_planos_ativos\}/gi, '0')
+                        .replace(/\{assinaturas_vencidas_qtd\}/gi, '0')
+                        .replace(/\{qtd_assinaturas_vencidas\}/gi, '0')
+                        .replace(/\{total_assinaturas_vencidas\}/gi, '0')
+                        .replace(/\{numero_assinaturas_vencidas\}/gi, '0')
+                        .replace(/\{num_assinaturas_vencidas\}/gi, '0')
+                        .replace(/\{quantidade_assinaturas_vencidas\}/gi, '0')
+                        .replace(/\{planos_vencidos_qtd\}/gi, '0')
+                        .replace(/\{qtd_planos_vencidos\}/gi, '0')
+                        .replace(/\{total_assinaturas\}/gi, '0')
+                        .replace(/\{qtd_assinaturas\}/gi, '0')
+                        .replace(/\{quantidade_assinaturas\}/gi, '0')
+                        .replace(/\{numero_assinaturas\}/gi, '0')
+                        .replace(/\{todas_assinaturas_qtd\}/gi, '0')
+                        .replace(/\{qtd_todas_assinaturas\}/gi, '0');
                 }
 
                 const cName = activeClient?.name || 'Pedro Henrique';
@@ -465,7 +487,29 @@ export function FlowWhatsAppSimulator({
                     .replace(/\{planos_vencidos\}/gi, cOverdueSubs)
                     .replace(/\{todas_assinaturas\}/gi, cAllSubs)
                     .replace(/\{todas_as_assinaturas\}/gi, cAllSubs)
-                    .replace(/\{assinaturas\}/gi, sampleDocs.length > 1 ? cAllSubs : cPlan);
+                    .replace(/\{assinaturas\}/gi, sampleDocs.length > 1 ? cAllSubs : cPlan)
+                    .replace(/\{assinaturas_ativas_qtd\}/gi, String(activeListSim.length))
+                    .replace(/\{qtd_assinaturas_ativas\}/gi, String(activeListSim.length))
+                    .replace(/\{total_assinaturas_ativas\}/gi, String(activeListSim.length))
+                    .replace(/\{numero_assinaturas_ativas\}/gi, String(activeListSim.length))
+                    .replace(/\{num_assinaturas_ativas\}/gi, String(activeListSim.length))
+                    .replace(/\{quantidade_assinaturas_ativas\}/gi, String(activeListSim.length))
+                    .replace(/\{planos_ativos_qtd\}/gi, String(activeListSim.length))
+                    .replace(/\{qtd_planos_ativos\}/gi, String(activeListSim.length))
+                    .replace(/\{assinaturas_vencidas_qtd\}/gi, String(overdueListSim.length))
+                    .replace(/\{qtd_assinaturas_vencidas\}/gi, String(overdueListSim.length))
+                    .replace(/\{total_assinaturas_vencidas\}/gi, String(overdueListSim.length))
+                    .replace(/\{numero_assinaturas_vencidas\}/gi, String(overdueListSim.length))
+                    .replace(/\{num_assinaturas_vencidas\}/gi, String(overdueListSim.length))
+                    .replace(/\{quantidade_assinaturas_vencidas\}/gi, String(overdueListSim.length))
+                    .replace(/\{planos_vencidos_qtd\}/gi, String(overdueListSim.length))
+                    .replace(/\{qtd_planos_vencidos\}/gi, String(overdueListSim.length))
+                    .replace(/\{total_assinaturas\}/gi, String(sampleDocs.length))
+                    .replace(/\{qtd_assinaturas\}/gi, String(sampleDocs.length))
+                    .replace(/\{quantidade_assinaturas\}/gi, String(sampleDocs.length))
+                    .replace(/\{numero_assinaturas\}/gi, String(sampleDocs.length))
+                    .replace(/\{todas_assinaturas_qtd\}/gi, String(sampleDocs.length))
+                    .replace(/\{qtd_todas_assinaturas\}/gi, String(sampleDocs.length));
             };
 
             // 0. START (Ponto de Partida / Início do Fluxo)
@@ -662,8 +706,11 @@ export function FlowWhatsAppSimulator({
                     menuData: {
                         menuType: data.menuType || 'list',
                         menuQuestionText: formatText(data.menuQuestionText) || 'Escolha uma opção:',
-                        menuButtonTitle: data.menuButtonTitle || 'VER OPÇÕES',
-                        menuOptions: normalizeMenuOptions(data.menuOptions),
+                        menuOptions: normalizeMenuOptions(data.menuOptions).map((opt) => ({
+                            ...opt,
+                            label: formatText(opt.label),
+                            description: opt.description ? formatText(opt.description) : '',
+                        })),
                     },
                     time: getCurrentTime(),
                 };

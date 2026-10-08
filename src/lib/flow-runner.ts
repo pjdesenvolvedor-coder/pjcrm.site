@@ -327,6 +327,28 @@ export function formatClientVariables(
             todas_as_assinaturas: allEmptyMsg,
             assinaturas_todas: allEmptyMsg,
             assinaturas: '',
+            assinaturas_ativas_qtd: '0',
+            qtd_assinaturas_ativas: '0',
+            total_assinaturas_ativas: '0',
+            numero_assinaturas_ativas: '0',
+            num_assinaturas_ativas: '0',
+            quantidade_assinaturas_ativas: '0',
+            planos_ativos_qtd: '0',
+            qtd_planos_ativos: '0',
+            assinaturas_vencidas_qtd: '0',
+            qtd_assinaturas_vencidas: '0',
+            total_assinaturas_vencidas: '0',
+            numero_assinaturas_vencidas: '0',
+            num_assinaturas_vencidas: '0',
+            quantidade_assinaturas_vencidas: '0',
+            planos_vencidos_qtd: '0',
+            qtd_planos_vencidos: '0',
+            total_assinaturas: '0',
+            qtd_assinaturas: '0',
+            quantidade_assinaturas: '0',
+            numero_assinaturas: '0',
+            todas_assinaturas_qtd: '0',
+            qtd_todas_assinaturas: '0',
         };
     }
 
@@ -584,6 +606,32 @@ export function formatClientVariables(
         todas_as_assinaturas: allSubsList,
         assinaturas_todas: allSubsList,
         assinaturas: matchingDocs.length > 1 ? allSubsList : planName,
+
+        // Quantidades numéricas de assinaturas (úteis para menus e detalhes)
+        assinaturas_ativas_qtd: String(activeDocs.length),
+        qtd_assinaturas_ativas: String(activeDocs.length),
+        total_assinaturas_ativas: String(activeDocs.length),
+        numero_assinaturas_ativas: String(activeDocs.length),
+        num_assinaturas_ativas: String(activeDocs.length),
+        quantidade_assinaturas_ativas: String(activeDocs.length),
+        planos_ativos_qtd: String(activeDocs.length),
+        qtd_planos_ativos: String(activeDocs.length),
+
+        assinaturas_vencidas_qtd: String(overdueDocs.length),
+        qtd_assinaturas_vencidas: String(overdueDocs.length),
+        total_assinaturas_vencidas: String(overdueDocs.length),
+        numero_assinaturas_vencidas: String(overdueDocs.length),
+        num_assinaturas_vencidas: String(overdueDocs.length),
+        quantidade_assinaturas_vencidas: String(overdueDocs.length),
+        planos_vencidos_qtd: String(overdueDocs.length),
+        qtd_planos_vencidos: String(overdueDocs.length),
+
+        total_assinaturas: String(matchingDocs.length),
+        qtd_assinaturas: String(matchingDocs.length),
+        quantidade_assinaturas: String(matchingDocs.length),
+        numero_assinaturas: String(matchingDocs.length),
+        todas_assinaturas_qtd: String(matchingDocs.length),
+        qtd_todas_assinaturas: String(matchingDocs.length),
     };
 }
 
@@ -786,7 +834,7 @@ export async function sendUazapiMenu(
             if (!res.ok) {
                 let msg = `*${menuData.menuQuestionText || 'Escolha uma opção:'}*\n\n`;
                 menuOptions.forEach((opt, idx) => {
-                    msg += `*${idx + 1}* - ${opt.label}\n`;
+                    msg += `*${idx + 1}* - ${opt.label}${opt.description ? ` (${opt.description})` : ''}\n`;
                 });
                 return await sendUazapiText(ctx, msg.trim());
             }
@@ -937,9 +985,26 @@ export async function executeFlowNode(
 
     // 2. MENU (Aguarda interação do usuário)
     if (nodeData.nodeType === 'menu') {
+        const rawOptions = nodeData.menuOptions;
+        const optionsList = Array.isArray(rawOptions)
+            ? rawOptions
+            : typeof rawOptions === 'object' && rawOptions !== null
+            ? Object.values(rawOptions)
+            : [];
+        const processedOptions = optionsList.map((opt: any, idx: number) => {
+            if (typeof opt === 'string') return replaceVars(opt);
+            return {
+                ...opt,
+                id: String(opt.id || `opt_${idx + 1}`),
+                label: replaceVars(opt.label || opt.text || opt.title || `Opção ${idx + 1}`),
+                description: opt.description ? replaceVars(opt.description) : '',
+            };
+        });
+
         await sendUazapiMenu(ctx, {
             ...nodeData,
             menuQuestionText: replaceVars(nodeData.menuQuestionText),
+            menuOptions: processedOptions,
         });
 
         // Salvar estado na sessão aguardando input do usuário

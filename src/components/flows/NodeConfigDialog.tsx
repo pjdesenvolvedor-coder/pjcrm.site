@@ -106,14 +106,17 @@ export const FLOW_VARIABLE_GROUPS: FlowVariableGroup[] = [
     },
     {
         id: 'multi_subscriptions',
-        title: 'Listas de Assinaturas (Múltiplas)',
+        title: 'Listas e Contagem de Assinaturas',
         icon: Layers,
         colorClass: 'text-amber-600 dark:text-amber-400',
         badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800',
         variables: [
-            { key: 'assinaturas_ativas', label: '{assinaturas_ativas}', desc: 'Lista de todas as assinaturas ativas do cliente' },
-            { key: 'assinaturas_vencidas', label: '{assinaturas_vencidas}', desc: 'Lista de todas as assinaturas vencidas do cliente' },
-            { key: 'todas_assinaturas', label: '{todas_assinaturas}', desc: 'Lista de todas as assinaturas (ativas e vencidas)' },
+            { key: 'assinaturas_ativas', label: '{assinaturas_ativas}', desc: 'Lista formatada de todas as assinaturas ativas' },
+            { key: 'assinaturas_vencidas', label: '{assinaturas_vencidas}', desc: 'Lista formatada de todas as assinaturas vencidas' },
+            { key: 'todas_assinaturas', label: '{todas_assinaturas}', desc: 'Lista formatada de todas as assinaturas (ativas e vencidas)' },
+            { key: 'assinaturas_ativas_qtd', label: '{assinaturas_ativas_qtd}', desc: 'Número de assinaturas ativas (ex: 2)' },
+            { key: 'assinaturas_vencidas_qtd', label: '{assinaturas_vencidas_qtd}', desc: 'Número de assinaturas vencidas (ex: 1)' },
+            { key: 'total_assinaturas', label: '{total_assinaturas}', desc: 'Total geral de assinaturas cadastradas' },
         ],
     },
 ];
@@ -561,6 +564,58 @@ export function NodeConfigDialog({
                                                             }
                                                             className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground w-full shadow-2xs"
                                                         />
+
+                                                        <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                                            <span className="text-[9.5px] text-muted-foreground select-none">Variáveis:</span>
+                                                            <button
+                                                                type="button"
+                                                                draggable={false}
+                                                                onDragStart={(e) => e.stopPropagation()}
+                                                                onClick={() =>
+                                                                    handleUpdateMenuOption(
+                                                                        idx,
+                                                                        'description',
+                                                                        (opt.description ? opt.description + ' ' : '') + '{assinaturas_ativas_qtd}'
+                                                                    )
+                                                                }
+                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-mono transition-colors"
+                                                                title="Inserir quantidade de assinaturas ativas"
+                                                            >
+                                                                +{'{assinaturas_ativas_qtd}'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                draggable={false}
+                                                                onDragStart={(e) => e.stopPropagation()}
+                                                                onClick={() =>
+                                                                    handleUpdateMenuOption(
+                                                                        idx,
+                                                                        'description',
+                                                                        (opt.description ? opt.description + ' ' : '') + '{assinaturas_vencidas_qtd}'
+                                                                    )
+                                                                }
+                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 font-mono transition-colors"
+                                                                title="Inserir quantidade de assinaturas vencidas"
+                                                            >
+                                                                +{'{assinaturas_vencidas_qtd}'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                draggable={false}
+                                                                onDragStart={(e) => e.stopPropagation()}
+                                                                onClick={() =>
+                                                                    handleUpdateMenuOption(
+                                                                        idx,
+                                                                        'description',
+                                                                        (opt.description ? opt.description + ' ' : '') + '{total_assinaturas}'
+                                                                    )
+                                                                }
+                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-mono transition-colors"
+                                                                title="Inserir total de assinaturas"
+                                                            >
+                                                                +{'{total_assinaturas}'}
+                                                            </button>
+                                                        </div>
                                                     </div>
 
                                                     <Button
