@@ -26,7 +26,7 @@ const db = getFirestore(app);
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, clientIds, isSimulation, originUrl } = body;
+    const { userId, clientIds, isSimulation, originUrl, force } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId é obrigatório.' }, { status: 400 });
@@ -90,17 +90,19 @@ export async function POST(req: NextRequest) {
     const nowBr = new Date(Date.now() + offset);
     const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
 
-    // Bloqueio anti-duplicidade: impede cobrar novamente quem já recebeu cobrança hoje (manual ou automático)
-    const alreadyBilled = clientGroup.some((c) => c.lastBilledDate === todayDateBrasilia);
-    if (alreadyBilled) {
-      return NextResponse.json({
-        success: true,
-        skipped: true,
-        tokenUsed: 'Bloqueio Anti-Duplicata (Já cobrado hoje)',
-        clientName: primaryClient.name,
-        phone: primaryClient.phone,
-        message: `Cliente ${primaryClient.name} já foi cobrado hoje (${todayDateBrasilia}). Disparo ignorado para evitar duplicatas.`,
-      });
+    // Bloqueio anti-duplicidade: impede cobrar novamente quem já recebeu cobrança hoje (se não for force manual)
+    if (!force) {
+      const alreadyBilled = clientGroup.some((c) => c.lastBilledDate === todayDateBrasilia);
+      if (alreadyBilled) {
+        return NextResponse.json({
+          success: true,
+          skipped: true,
+          tokenUsed: 'Bloqueio Anti-Duplicata (Já cobrado hoje)',
+          clientName: primaryClient.name,
+          phone: primaryClient.phone,
+          message: `Cliente ${primaryClient.name} já foi cobrado hoje (${todayDateBrasilia}). Disparo ignorado para evitar duplicatas.`,
+        });
+      }
     }
 
     // 4. Cria ou recupera a sessão de renovação
@@ -189,7 +191,7 @@ export async function POST(req: NextRequest) {
         clientName: primaryClient.name,
         target: primaryClient.phone,
         status: sendRes.success ? 'Enviado' : 'Erro',
-        details: `${clientGroup.length} assinatura(s): ${subNames} ${sendRes.error ? `(Erro: ${sendRes.error})` : ''}`,
+        details: `${clientGroup.length} assinatura(s): ${subNamesComma} ${sendRes.error ? `(Erro: ${sendRes.error})` : ''}`,
         timestamp: serverTimestamp(),
       });
     } catch (logErr) {

@@ -58,6 +58,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const clientTypes = ["PACOTE", "REVENDA"] as const;
 const paymentMethods = ["PIX", "Cartão", "Boleto"] as const;
@@ -987,30 +988,6 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
     );
 }
 
-export default function CustomersPage() {
-  const { firestore, effectiveUserId, userProfile } = useFirebase();
-  const { user } = useUser();
-  const { toast } = useToast();
-  const [dialogState, setDialogState] = useState<any>({ view: 'closed' });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState<any>({ key: 'name', direction: 'ascending' });
-  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  
-  const settingsDocRef = useMemoFirebase(() => (effectiveUserId ? doc(firestore, 'users', effectiveUserId, 'settings', 'config') : null), [firestore, effectiveUserId]);
-  const { data: settings } = useDoc<Settings>(settingsDocRef);
-
-  const clientsQuery = useMemoFirebase(() => (effectiveUserId ? collection(firestore, 'users', effectiveUserId, 'clients') : null), [firestore, effectiveUserId]);
-  const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
-
-  const requestSort = (key: string) => {
-    let direction = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-
 function matchesPhone(clientPhone: string, searchInput: string): boolean {
   if (!clientPhone || !searchInput) return false;
   
@@ -1065,6 +1042,242 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
 
   return false;
 }
+
+function SendRenewalMessageDialog({
+  client,
+  allClients,
+  onFinished,
+}: {
+  client: Client;
+  allClients: Client[];
+  onFinished: () => void;
+}) {
+  const { effectiveUserId } = useFirebase();
+  const { toast } = useToast();
+  const [isSending, setIsSending] = useState(false);
+
+  // Busca todas as assinaturas associadas a este cliente / telefone
+  const relatedClients = useMemo(() => {
+    if (!client) return [];
+    const clientPhone = (client.phone || '').trim();
+    if (!clientPhone) return [client];
+
+    const matched = allClients.filter(c => {
+      if (c.id === client.id) return true;
+      return matchesPhone(c.phone || '', clientPhone);
+    });
+
+    return matched.length > 0 ? matched : [client];
+  }, [client, allClients]);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
+    relatedClients.map(c => c.id)
+  );
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === relatedClients.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(relatedClients.map(c => c.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const totalAmount = useMemo(() => {
+    return relatedClients
+      .filter(c => selectedIds.includes(c.id))
+      .reduce((sum, c) => {
+        const val = parseFloat((c.amountPaid || '0').replace(',', '.')) || 0;
+        return sum + val;
+      }, 0);
+  }, [relatedClients, selectedIds]);
+
+  const handleSendRenewal = async () => {
+    if (!effectiveUserId) return;
+    if (selectedIds.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Nenhuma assinatura selecionada",
+        description: "Selecione pelo menos uma assinatura para enviar a renovação.",
+      });
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const response = await fetch('/api/renewal/dispatch-single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: effectiveUserId,
+          clientIds: selectedIds,
+          originUrl: window.location.origin,
+          force: true,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Falha ao enviar mensagem de renovação.');
+      }
+
+      toast({
+        title: "Cobrança Enviada com Sucesso!",
+        description: `Mensagem de renovação PIX disparada para ${client.name} (${client.phone}).`,
+      });
+      onFinished();
+    } catch (error: any) {
+      console.error("Erro ao enviar renovação:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao Enviar",
+        description: error.message || "Não foi possível enviar a mensagem de renovação.",
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Send className="h-5 w-5 text-emerald-600" />
+          Cobrança de Renovação (PIX)
+        </DialogTitle>
+        <DialogDescription>
+          Selecione as assinaturas de <strong>{client.name}</strong> ({client.phone}) que serão cobradas.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+          <span>{relatedClients.length} assinatura(s) vinculada(s)</span>
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            className="text-xs text-primary hover:underline font-medium"
+          >
+            {selectedIds.length === relatedClients.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+          </button>
+        </div>
+
+        <div className="border rounded-md divide-y max-h-[260px] overflow-y-auto">
+          {relatedClients.map((c) => {
+            const isChecked = selectedIds.includes(c.id);
+            const formattedDueDate = c.dueDate ? format((c.dueDate as any).toDate(), 'dd/MM/yyyy') : '-';
+            const price = parseFloat((c.amountPaid || '0').replace(',', '.')) || 0;
+
+            return (
+              <div
+                key={c.id}
+                onClick={() => toggleSelect(c.id)}
+                className={cn(
+                  "flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors",
+                  isChecked && "bg-emerald-50/40 dark:bg-emerald-950/20"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={() => toggleSelect(c.id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div>
+                    <div className="font-medium text-sm text-foreground">
+                      {c.subscription || 'Assinatura'}
+                    </div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                      <span>Vence: <strong className="text-foreground">{formattedDueDate}</strong></span>
+                      <span>•</span>
+                      <span>Login: {formatClientEmailDisplay(c.email)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    R$ {price > 0 ? price.toFixed(2).replace('.', ',') : (c.amountPaid || '0,00')}
+                  </div>
+                  <Badge variant={c.status === 'Ativo' ? 'outline' : 'destructive'} className="text-[10px] h-4 px-1">
+                    {c.status || 'Ativo'}
+                  </Badge>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-muted/60 p-3 rounded-lg flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            Total selecionado ({selectedIds.length} plano{selectedIds.length !== 1 ? 's' : ''}):
+          </div>
+          <div className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+            R$ {totalAmount.toFixed(2).replace('.', ',')}
+          </div>
+        </div>
+
+        <div className="text-xs text-muted-foreground bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-start gap-2">
+          <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+          <span>
+            Ao enviar, o cliente receberá no WhatsApp a mensagem oficial de cobrança com link seguro e botão interativo para pagamento PIX.
+          </span>
+        </div>
+      </div>
+
+      <DialogFooter className="gap-2 sm:gap-0">
+        <Button variant="ghost" onClick={onFinished} disabled={isSending}>
+          Cancelar
+        </Button>
+        <Button
+          onClick={handleSendRenewal}
+          disabled={selectedIds.length === 0 || isSending}
+          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
+          {isSending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Enviando Cobrança...
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4" />
+              Enviar Cobrança ({selectedIds.length})
+            </>
+          )}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+export default function CustomersPage() {
+  const { firestore, effectiveUserId, userProfile } = useFirebase();
+  const { user } = useUser();
+  const { toast } = useToast();
+  const [dialogState, setDialogState] = useState<any>({ view: 'closed' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState<any>({ key: 'name', direction: 'ascending' });
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  
+  const settingsDocRef = useMemoFirebase(() => (effectiveUserId ? doc(firestore, 'users', effectiveUserId, 'settings', 'config') : null), [firestore, effectiveUserId]);
+  const { data: settings } = useDoc<Settings>(settingsDocRef);
+
+  const clientsQuery = useMemoFirebase(() => (effectiveUserId ? collection(firestore, 'users', effectiveUserId, 'clients') : null), [firestore, effectiveUserId]);
+  const { data: clients, isLoading } = useCollection<Client>(clientsQuery);
+
+  const requestSort = (key: string) => {
+    let direction = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
 
 function extractClientEmails(c: any): string {
   if (!c) return '';
@@ -1534,9 +1747,23 @@ function formatClientEmailDisplay(emailVal: any): string {
                             <TooltipContent>Nova Compra (Mesmo Cliente)</TooltipContent>
                         </Tooltip>
 
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => setDialogState({ view: 'message', client })}>
-                            <MessageSquare className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => setDialogState({ view: 'send_renewal', client })}>
+                                    <Send className="h-4 w-4 text-emerald-600" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Cobrar / Enviar Renovação (PIX)</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => setDialogState({ view: 'message', client })}>
+                                    <MessageSquare className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Enviar Mensagem Direta</TooltipContent>
+                        </Tooltip>
                         <Button variant="outline" size="sm" onClick={() => setDialogState({ view: 'renew', client })} className="gap-1 border-green-200 text-green-700 hover:bg-green-50">
                             <RotateCw className="h-3 w-3" />
                             Renovar
@@ -1555,14 +1782,23 @@ function formatClientEmailDisplay(emailVal: any): string {
       </main>
       <Dialog open={dialogState.view !== 'closed'} onOpenChange={(o) => !o && setDialogState({ view: 'closed' })}>
         <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-                <DialogTitle>
-                    {dialogState.view === 'add' && 'Novo Cliente'}
-                    {dialogState.view === 'edit' && 'Editar Cliente'}
-                    {dialogState.view === 'renew' && `Renovar: ${dialogState.client?.name}`}
-                    {dialogState.view === 'message' && 'Iniciar Conversa'}
-                </DialogTitle>
-            </DialogHeader>
+            {dialogState.view !== 'send_renewal' && (
+                <DialogHeader>
+                    <DialogTitle>
+                        {dialogState.view === 'add' && 'Novo Cliente'}
+                        {dialogState.view === 'edit' && 'Editar Cliente'}
+                        {dialogState.view === 'renew' && `Renovar: ${dialogState.client?.name}`}
+                        {dialogState.view === 'message' && 'Iniciar Conversa'}
+                    </DialogTitle>
+                </DialogHeader>
+            )}
+            {dialogState.view === 'send_renewal' && (
+                <SendRenewalMessageDialog
+                    client={dialogState.client}
+                    allClients={clients || []}
+                    onFinished={() => setDialogState({ view: 'closed' })}
+                />
+            )}
             {dialogState.view === 'renew' && (
                 <RenewDialog client={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
             )}
