@@ -905,7 +905,16 @@ export async function executeFlowNode(
 
     // 3. ATRASO INTELIGENTE
     if (nodeData.nodeType === 'delay') {
-        const seconds = Math.min(Math.max(nodeData.delaySeconds || 3, 1), 15);
+        let totalSeconds = nodeData.delaySeconds || 3;
+        if (nodeData.delayUnit === 'hours') {
+            totalSeconds = (nodeData.delayValue || 1) * 3600;
+        } else if (nodeData.delayUnit === 'minutes') {
+            totalSeconds = (nodeData.delayValue || 1) * 60;
+        } else if (nodeData.delayValue) {
+            totalSeconds = nodeData.delayValue;
+        }
+
+        const seconds = Math.min(Math.max(totalSeconds, 1), 30);
         if (nodeData.delayPresence && nodeData.delayPresence !== 'none') {
             await sendUazapiPresence(ctx, nodeData.delayPresence);
         }

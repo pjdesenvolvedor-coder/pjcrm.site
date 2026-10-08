@@ -683,6 +683,8 @@ function FlowCanvasEditorContent() {
                     initialData = {
                         nodeType: 'delay',
                         label: 'Atraso Inteligente',
+                        delayUnit: 'seconds',
+                        delayValue: 3,
                         delaySeconds: 3,
                         delayPresence: 'composing',
                     };

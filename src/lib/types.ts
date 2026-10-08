@@ -402,6 +402,8 @@ export type FlowNodeData = {
   menuOptions?: Array<{ id: string; label: string; description?: string }>;
   // Atraso inteligente
   delaySeconds?: number;
+  delayUnit?: 'seconds' | 'minutes' | 'hours';
+  delayValue?: number;
   delayPresence?: 'composing' | 'recording' | 'none';
   // Ação
   actionType?: 'add_tag' | 'remove_tag' | 'change_status' | 'open_support' | 'notify_attendant' | 'send_contact';

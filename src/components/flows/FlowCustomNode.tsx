@@ -338,7 +338,26 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                         <Clock className="h-4 w-4 text-orange-500 shrink-0" />
                         <div>
                             <p className="font-semibold text-xs">
-                                Esperar {nodeData.delaySeconds || 3} segundo(s)
+                                {(() => {
+                                    const unit =
+                                        nodeData.delayUnit ||
+                                        (nodeData.delaySeconds && nodeData.delaySeconds >= 3600 && nodeData.delaySeconds % 3600 === 0
+                                            ? 'hours'
+                                            : nodeData.delaySeconds && nodeData.delaySeconds >= 60 && nodeData.delaySeconds % 60 === 0
+                                            ? 'minutes'
+                                            : 'seconds');
+                                    const val =
+                                        nodeData.delayValue !== undefined && nodeData.delayValue !== null
+                                            ? nodeData.delayValue
+                                            : unit === 'hours'
+                                            ? Math.round((nodeData.delaySeconds || 3600) / 3600)
+                                            : unit === 'minutes'
+                                            ? Math.round((nodeData.delaySeconds || 60) / 60)
+                                            : nodeData.delaySeconds || 3;
+                                    if (unit === 'hours') return `Esperar ${val} hora(s)`;
+                                    if (unit === 'minutes') return `Esperar ${val} minuto(s)`;
+                                    return `Esperar ${val} segundo(s)`;
+                                })()}
                             </p>
                             <p className="text-[10px] text-muted-foreground">
                                 {nodeData.delayPresence === 'composing' ? 'Simulando "Digitando..."' : nodeData.delayPresence === 'recording' ? 'Simulando "Gravando..."' : 'Sem presença'}

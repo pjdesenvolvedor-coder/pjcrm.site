@@ -385,11 +385,22 @@ export function FlowWhatsAppSimulator({
                     setTypingText('digitando...');
                 }
 
+                // Informa e simula o tempo de espera
+                const unit = data.delayUnit || (data.delaySeconds && data.delaySeconds >= 3600 ? 'hours' : data.delaySeconds && data.delaySeconds >= 60 ? 'minutes' : 'seconds');
+                const val = data.delayValue || (unit === 'hours' ? Math.round((data.delaySeconds || 3600) / 3600) : unit === 'minutes' ? Math.round((data.delaySeconds || 60) / 60) : data.delaySeconds || 2);
+
+                if (unit === 'hours') {
+                    setCurrentNotice(`⏳ Aguardando atraso de ${val} hora(s) (simulação acelerada)...`);
+                } else if (unit === 'minutes') {
+                    setCurrentNotice(`⏳ Aguardando atraso de ${val} minuto(s) (simulação acelerada)...`);
+                }
+
                 // Espera entre 1 e 3 segundos no preview para fluidez
-                const waitSeconds = Math.min(Math.max(data.delaySeconds || 2, 1), 3);
+                const waitSeconds = Math.min(Math.max(unit === 'seconds' ? val : 2, 1), 3);
                 await sleep(waitSeconds * 1000);
                 if (executionRef.current.isCancelled) return;
                 setIsTyping(false);
+                setCurrentNotice(null);
 
                 const nextEdge = edges.find((e) => e.source === nodeId);
                 if (nextEdge && nextEdge.target) {

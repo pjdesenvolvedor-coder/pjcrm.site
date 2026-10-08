@@ -675,18 +675,103 @@ export function NodeConfigDialog({
                     {formData.nodeType === 'delay' && (
                         <div className="space-y-4">
                             <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Tempo de Atraso (em segundos)</Label>
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    max={60}
-                                    value={formData.delaySeconds || 3}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, delaySeconds: parseInt(e.target.value) || 1 })
-                                    }
-                                />
+                                <Label className="text-xs font-semibold">Tempo de Atraso</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={
+                                                (formData.delayUnit || 'seconds') === 'hours'
+                                                    ? 720
+                                                    : (formData.delayUnit || 'seconds') === 'minutes'
+                                                    ? 1440
+                                                    : 3600
+                                            }
+                                            value={(() => {
+                                                if (formData.delayValue !== undefined && formData.delayValue !== null) {
+                                                    return formData.delayValue;
+                                                }
+                                                const unit =
+                                                    formData.delayUnit ||
+                                                    (formData.delaySeconds && formData.delaySeconds >= 3600 && formData.delaySeconds % 3600 === 0
+                                                        ? 'hours'
+                                                        : formData.delaySeconds && formData.delaySeconds >= 60 && formData.delaySeconds % 60 === 0
+                                                        ? 'minutes'
+                                                        : 'seconds');
+                                                if (unit === 'hours' && formData.delaySeconds) {
+                                                    return Math.max(1, Math.round(formData.delaySeconds / 3600));
+                                                }
+                                                if (unit === 'minutes' && formData.delaySeconds) {
+                                                    return Math.max(1, Math.round(formData.delaySeconds / 60));
+                                                }
+                                                return formData.delaySeconds || 3;
+                                            })()}
+                                            onChange={(e) => {
+                                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                const unit = formData.delayUnit || 'seconds';
+                                                let secs = val;
+                                                if (unit === 'hours') secs = val * 3600;
+                                                else if (unit === 'minutes') secs = val * 60;
+                                                setFormData({
+                                                    ...formData,
+                                                    delayValue: val,
+                                                    delayUnit: unit,
+                                                    delaySeconds: secs,
+                                                });
+                                            }}
+                                            placeholder="Tempo..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <Select
+                                            value={
+                                                formData.delayUnit ||
+                                                (formData.delaySeconds && formData.delaySeconds >= 3600 && formData.delaySeconds % 3600 === 0
+                                                    ? 'hours'
+                                                    : formData.delaySeconds && formData.delaySeconds >= 60 && formData.delaySeconds % 60 === 0
+                                                    ? 'minutes'
+                                                    : 'seconds')
+                                            }
+                                            onValueChange={(unit: 'seconds' | 'hours' | 'minutes') => {
+                                                const currentVal =
+                                                    formData.delayValue !== undefined && formData.delayValue !== null
+                                                        ? formData.delayValue
+                                                        : formData.delaySeconds
+                                                        ? (formData.delayUnit === 'hours'
+                                                              ? Math.round(formData.delaySeconds / 3600)
+                                                              : formData.delayUnit === 'minutes'
+                                                              ? Math.round(formData.delaySeconds / 60)
+                                                              : formData.delaySeconds)
+                                                        : 3;
+                                                let secs = currentVal;
+                                                if (unit === 'hours') secs = currentVal * 3600;
+                                                else if (unit === 'minutes') secs = currentVal * 60;
+                                                setFormData({
+                                                    ...formData,
+                                                    delayUnit: unit,
+                                                    delayValue: currentVal,
+                                                    delaySeconds: secs,
+                                                });
+                                            }}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="seconds">⏱️ Segundos</SelectItem>
+                                                <SelectItem value="hours">🕒 Horas</SelectItem>
+                                                <SelectItem value="minutes">⏳ Minutos</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
                                 <p className="text-xs text-muted-foreground">
-                                    Tempo que o bot vai esperar antes de enviar o próximo bloco.
+                                    {(formData.delayUnit || 'seconds') === 'hours'
+                                        ? `O bot vai aguardar ${formData.delayValue || (formData.delaySeconds ? Math.round(formData.delaySeconds / 3600) : 1)} hora(s) antes de enviar o próximo bloco.`
+                                        : (formData.delayUnit || 'seconds') === 'minutes'
+                                        ? `O bot vai aguardar ${formData.delayValue || (formData.delaySeconds ? Math.round(formData.delaySeconds / 60) : 1)} minuto(s) antes de enviar o próximo bloco.`
+                                        : `Tempo que o bot vai esperar antes de enviar o próximo bloco (${formData.delayValue || formData.delaySeconds || 3} segundo(s)).`}
                                 </p>
                             </div>
 
