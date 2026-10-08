@@ -714,8 +714,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows' || (pathname.startsWith('/flows/') && pathname !== '/flows/connection' && pathname !== '/flows/settings' && pathname !== '/flows/kanban')}>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows' || (pathname.startsWith('/flows/') && pathname !== '/flows/connection' && pathname !== '/flows/settings' && pathname !== '/flows/kanban' && pathname !== '/flows/variables')}>
                                         <Link href="/flows">Canva (Criador)</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows/variables'}>
+                                        <Link href="/flows/variables">Personalizar Variáveis</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>

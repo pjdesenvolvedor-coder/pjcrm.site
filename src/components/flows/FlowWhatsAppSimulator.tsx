@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Node, Edge } from '@xyflow/react';
-import type { FlowNodeData } from '@/lib/types';
+import type { FlowNodeData, FlowVariablesConfig } from '@/lib/types';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
 import {
     ArrowLeft,
     Phone,
@@ -131,6 +133,13 @@ export function FlowWhatsAppSimulator({
         return clients.find((c: any) => c.status === 'Ativo') || clients[0];
     }, [clients]);
 
+    const { firestore, effectiveUserId } = useFirebase();
+    const varConfigRef = useMemoFirebase(() => {
+        if (!effectiveUserId) return null;
+        return doc(firestore, 'users', effectiveUserId, 'settings', 'flow_variables');
+    }, [firestore, effectiveUserId]);
+    const { data: varConfig } = useDoc<FlowVariablesConfig>(varConfigRef);
+
     // Rola para a última mensagem automaticamente
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -202,7 +211,53 @@ export function FlowWhatsAppSimulator({
                     { subscription: 'Spotify Premium Família', status: 'Vencido', dueDate: '2026-10-01', amountPaid: '21,90' },
                 ];
 
-                const formatSimSubLine = (c: any, withStatus = false) => {
+                const formatSimSubLine = (c: any, customTemplate?: string, withStatus = false) => {
+                    if (customTemplate && customTemplate.trim()) {
+                        const planName = (c.subscription || c.plan || c.plano || 'Assinatura').trim();
+                        const statusVal = (c.status || '').trim();
+                        let dueVal = '';
+                        if (c.dueDate) {
+                            try {
+                                const d = typeof c.dueDate.toDate === 'function' ? c.dueDate.toDate() : new Date(c.dueDate);
+                                dueVal = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                            } catch {}
+                        }
+                        let amountVal = '';
+                        if (c.amountPaid) {
+                            const raw = String(c.amountPaid);
+                            amountVal = raw.includes('R$') ? raw : `R$ ${raw}`;
+                        }
+                        const payMethod = (c.paymentMethod || 'PIX').trim();
+                        const emailVal = (c.email || 'cliente@email.com').trim();
+                        const passVal = (c.password || c.senha || '********').trim();
+                        const screenVal = (c.screen || 'Tela 1').trim();
+                        const pinVal = (c.pinScreen || c.pin || '1234').trim();
+                        const linkVal = (c.accessLink || 'https://link.com').trim();
+                        const notesVal = (c.notes || '').trim();
+
+                        return customTemplate
+                            .replace(/\{plano\}/gi, planName)
+                            .replace(/\{nome_assinatura\}/gi, planName)
+                            .replace(/\{assinatura\}/gi, planName)
+                            .replace(/\{status\}/gi, statusVal)
+                            .replace(/\{vencimento\}/gi, dueVal)
+                            .replace(/\{data_vencimento\}/gi, dueVal)
+                            .replace(/\{dias_restantes\}/gi, '5 dias restantes')
+                            .replace(/\{valor\}/gi, amountVal)
+                            .replace(/\{mensalidade\}/gi, amountVal)
+                            .replace(/\{metodo_pagamento\}/gi, payMethod)
+                            .replace(/\{forma_pagamento\}/gi, payMethod)
+                            .replace(/\{email\}/gi, emailVal)
+                            .replace(/\{senha\}/gi, passVal)
+                            .replace(/\{tela\}/gi, screenVal)
+                            .replace(/\{pin_tela\}/gi, pinVal)
+                            .replace(/\{pin\}/gi, pinVal)
+                            .replace(/\{link_de_acesso\}/gi, linkVal)
+                            .replace(/\{link\}/gi, linkVal)
+                            .replace(/\{notas\}/gi, notesVal)
+                            .replace(/\{observacoes\}/gi, notesVal);
+                    }
+
                     const name = (c.subscription || c.plan || c.plano || 'Assinatura').trim();
                     const parts: string[] = [];
                     if (withStatus && c.status) parts.push(c.status);
@@ -224,14 +279,16 @@ export function FlowWhatsAppSimulator({
                 const overdueListSim = sampleDocs.filter((c: any) => c.status === 'Vencido');
 
                 const cActiveSubs = activeListSim.length > 0
-                    ? activeListSim.map((c: any) => formatSimSubLine(c, false)).join('\n')
-                    : `• ${cPlan} (Vencimento: ${cDueDate} - ${cAmount})`;
+                    ? activeListSim.map((c: any) => formatSimSubLine(c, varConfig?.activeSubsTemplate, false)).join('\n')
+                    : (varConfig?.activeSubsEmptyMessage || `• ${cPlan} (Vencimento: ${cDueDate} - ${cAmount})`);
 
                 const cOverdueSubs = overdueListSim.length > 0
-                    ? overdueListSim.map((c: any) => formatSimSubLine(c, false)).join('\n')
-                    : 'Nenhuma assinatura vencida encontrada.';
+                    ? overdueListSim.map((c: any) => formatSimSubLine(c, varConfig?.overdueSubsTemplate, false)).join('\n')
+                    : (varConfig?.overdueSubsEmptyMessage || 'Nenhuma assinatura vencida encontrada.');
 
-                const cAllSubs = sampleDocs.map((c: any) => formatSimSubLine(c, true)).join('\n');
+                const cAllSubs = sampleDocs.length > 0
+                    ? sampleDocs.map((c: any) => formatSimSubLine(c, varConfig?.allSubsTemplate, true)).join('\n')
+                    : (varConfig?.allSubsEmptyMessage || 'Nenhuma assinatura cadastrada.');
 
                 return txt
                     .replace(/\{nome\}/gi, cName)

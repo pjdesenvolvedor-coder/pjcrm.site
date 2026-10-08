@@ -448,4 +448,19 @@ export type FlowContactSession = {
   history?: Array<{ nodeId: string; timestamp: number; input?: string }>;
 };
 
+export type FlowVariablesConfig = {
+  // Modelo da linha para assinaturas ativas
+  activeSubsTemplate?: string;
+  activeSubsEmptyMessage?: string;
+
+  // Modelo da linha para assinaturas vencidas
+  overdueSubsTemplate?: string;
+  overdueSubsEmptyMessage?: string;
+
+  // Modelo da linha para todas as assinaturas
+  allSubsTemplate?: string;
+  allSubsEmptyMessage?: string;
+};
+
+
 

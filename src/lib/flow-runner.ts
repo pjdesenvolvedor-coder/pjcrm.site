@@ -1,5 +1,5 @@
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import type { FlowDefinition, FlowNodeData, FlowContactSession, UazapiConnectionConfig, Settings } from './types';
+import type { FlowDefinition, FlowNodeData, FlowContactSession, UazapiConnectionConfig, Settings, FlowVariablesConfig } from './types';
 
 export function cleanPhone(raw: string): string {
     if (!raw) return '';
@@ -232,9 +232,18 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
     return mergedClient;
 }
 
-export function formatClientVariables(client: any, fallbackName?: string, fallbackPhone?: string): Record<string, string> {
+export function formatClientVariables(
+    client: any,
+    fallbackName?: string,
+    fallbackPhone?: string,
+    variablesConfig?: FlowVariablesConfig
+): Record<string, string> {
     if (!client) {
         const name = fallbackName || 'Amigo(a)';
+        const activeEmptyMsg = variablesConfig?.activeSubsEmptyMessage || 'Nenhuma assinatura ativa encontrada.';
+        const overdueEmptyMsg = variablesConfig?.overdueSubsEmptyMessage || 'Nenhuma assinatura vencida encontrada.';
+        const allEmptyMsg = variablesConfig?.allSubsEmptyMessage || 'Nenhuma assinatura cadastrada.';
+
         return {
             nome: name,
             cliente: name,
@@ -276,13 +285,13 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
             notas: '',
             observacoes: '',
             tipo_cliente: '',
-            assinaturas_ativas: 'Nenhuma assinatura ativa encontrada.',
-            planos_ativos: 'Nenhuma assinatura ativa encontrada.',
-            assinaturas_vencidas: 'Nenhuma assinatura vencida encontrada.',
-            planos_vencidos: 'Nenhuma assinatura vencida encontrada.',
-            todas_assinaturas: 'Nenhuma assinatura cadastrada.',
-            todas_as_assinaturas: 'Nenhuma assinatura cadastrada.',
-            assinaturas_todas: 'Nenhuma assinatura cadastrada.',
+            assinaturas_ativas: activeEmptyMsg,
+            planos_ativos: activeEmptyMsg,
+            assinaturas_vencidas: overdueEmptyMsg,
+            planos_vencidos: overdueEmptyMsg,
+            todas_assinaturas: allEmptyMsg,
+            todas_as_assinaturas: allEmptyMsg,
+            assinaturas_todas: allEmptyMsg,
             assinaturas: '',
         };
     }
@@ -375,11 +384,52 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
         ? client._allMatchingDocs
         : [client];
 
-    // Helper para formatar cada linha de assinatura de forma limpa para WhatsApp
-    const formatSubLine = (c: any, withStatus = false) => {
+    // Helper para formatar cada item de assinatura (usando template customizado se configurado)
+    const formatSingleSub = (c: any, customTemplate?: string, defaultWithStatus = false) => {
+        if (customTemplate && customTemplate.trim()) {
+            const planName = (c.subscription || c.plan || c.plano || c.subscriptionName || c.product || c.produto || 'Assinatura').trim();
+            const statusVal = (c.status || '').trim();
+            const dueVal = formatDateSafe(c.dueDate);
+            const daysVal = formatDaysRemaining(c.dueDate);
+            let amountVal = '';
+            if (c.amountPaid !== undefined && c.amountPaid !== null && String(c.amountPaid).trim() !== '') {
+                const raw = String(c.amountPaid).trim();
+                amountVal = raw.includes('R$') ? raw : `R$ ${raw}`;
+            }
+            const payMethod = (c.paymentMethod || c.formaPagamento || '').trim();
+            const emailVal = (c.email || (Array.isArray(c.emails) ? c.emails[0] : c.emails) || '').trim();
+            const passVal = (c.password || c.senha || '').trim();
+            const screenVal = (c.screen || c.tela || '').trim();
+            const pinVal = (c.pinScreen || c.pin || '').trim();
+            const linkVal = (c.accessLink || c.link || c.link_acesso || '').trim();
+            const notesVal = (c.notes || c.observacoes || c.obs || '').trim();
+
+            return customTemplate
+                .replace(/\{plano\}/gi, planName)
+                .replace(/\{nome_assinatura\}/gi, planName)
+                .replace(/\{assinatura\}/gi, planName)
+                .replace(/\{status\}/gi, statusVal)
+                .replace(/\{vencimento\}/gi, dueVal)
+                .replace(/\{data_vencimento\}/gi, dueVal)
+                .replace(/\{dias_restantes\}/gi, daysVal)
+                .replace(/\{valor\}/gi, amountVal)
+                .replace(/\{mensalidade\}/gi, amountVal)
+                .replace(/\{metodo_pagamento\}/gi, payMethod)
+                .replace(/\{forma_pagamento\}/gi, payMethod)
+                .replace(/\{email\}/gi, emailVal)
+                .replace(/\{senha\}/gi, passVal)
+                .replace(/\{tela\}/gi, screenVal)
+                .replace(/\{pin_tela\}/gi, pinVal)
+                .replace(/\{pin\}/gi, pinVal)
+                .replace(/\{link_de_acesso\}/gi, linkVal)
+                .replace(/\{link\}/gi, linkVal)
+                .replace(/\{notas\}/gi, notesVal)
+                .replace(/\{observacoes\}/gi, notesVal);
+        }
+
         const name = (c.subscription || c.plan || c.plano || c.subscriptionName || c.product || c.produto || 'Assinatura').trim();
         const parts: string[] = [];
-        if (withStatus && c.status) {
+        if (defaultWithStatus && c.status) {
             parts.push(c.status);
         }
         const due = formatDateSafe(c.dueDate);
@@ -417,16 +467,16 @@ export function formatClientVariables(client: any, fallbackName?: string, fallba
     });
 
     const activeSubsList = activeDocs.length > 0
-        ? activeDocs.map((c) => formatSubLine(c, false)).join('\n')
-        : 'Nenhuma assinatura ativa encontrada.';
+        ? activeDocs.map((c) => formatSingleSub(c, variablesConfig?.activeSubsTemplate, false)).join('\n')
+        : (variablesConfig?.activeSubsEmptyMessage || 'Nenhuma assinatura ativa encontrada.');
 
     const overdueSubsList = overdueDocs.length > 0
-        ? overdueDocs.map((c) => formatSubLine(c, false)).join('\n')
-        : 'Nenhuma assinatura vencida encontrada.';
+        ? overdueDocs.map((c) => formatSingleSub(c, variablesConfig?.overdueSubsTemplate, false)).join('\n')
+        : (variablesConfig?.overdueSubsEmptyMessage || 'Nenhuma assinatura vencida encontrada.');
 
     const allSubsList = matchingDocs.length > 0
-        ? matchingDocs.map((c) => formatSubLine(c, true)).join('\n')
-        : 'Nenhuma assinatura encontrada.';
+        ? matchingDocs.map((c) => formatSingleSub(c, variablesConfig?.allSubsTemplate, true)).join('\n')
+        : (variablesConfig?.allSubsEmptyMessage || 'Nenhuma assinatura cadastrada.');
 
     return {
         // Nomes
@@ -759,6 +809,19 @@ export async function executeFlowNode(
                     ctx.clientVariables = clientVars;
                 }
             }
+            if (!clientVars && ctx.phoneNumber) {
+                // Tenta carregar do CRM automaticamente com as configurações customizadas de variáveis
+                const client = await findClientByPhone(ctx.db, ctx.userId, ctx.phoneNumber);
+                let varCfg: FlowVariablesConfig | undefined = undefined;
+                try {
+                    const varDoc = await getDoc(doc(ctx.db, 'users', ctx.userId, 'settings', 'flow_variables'));
+                    if (varDoc.exists()) {
+                        varCfg = varDoc.data() as FlowVariablesConfig;
+                    }
+                } catch {}
+                clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg);
+                ctx.clientVariables = clientVars;
+            }
         } catch {}
     }
 
@@ -956,8 +1019,17 @@ export async function executeFlowNode(
 
         console.log(`[FlowRunner] Resultado da verificação no CRM: isClient=${isClient} (Cliente: ${client?.name || 'Não cadastrado'})`);
 
+        // Busca configurações customizadas de variáveis, se houver
+        let varCfg: FlowVariablesConfig | undefined = undefined;
+        try {
+            const varDoc = await getDoc(doc(ctx.db, 'users', ctx.userId, 'settings', 'flow_variables'));
+            if (varDoc.exists()) {
+                varCfg = varDoc.data() as FlowVariablesConfig;
+            }
+        } catch {}
+
         // Formata e salva as variáveis completas do cliente
-        clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber);
+        clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg);
         ctx.clientVariables = clientVars;
         ctx.clientData = client;
 

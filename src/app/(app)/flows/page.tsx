@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useFirebase, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import type { FlowDefinition, FlowTriggerSettings, UazapiConnectionConfig } from '@/lib/types';
@@ -45,6 +45,17 @@ import {
     Zap,
     ExternalLink
 } from 'lucide-react';
+import { FlowVariablesConfigDialog } from '@/components/flows/FlowVariablesConfigDialog';
+
+function VariablesParamListener({ onOpen }: { onOpen: () => void }) {
+    const searchParams = useSearchParams();
+    useEffect(() => {
+        if (searchParams.get('open') === 'variables') {
+            onOpen();
+        }
+    }, [searchParams, onOpen]);
+    return null;
+}
 
 export default function FlowsListPage() {
     const router = useRouter();
@@ -74,6 +85,7 @@ export default function FlowsListPage() {
 
     // Modal de criação
     const [isCreateOpen, setIsCreateOpen] = useState(false);
+    const [isVariablesOpen, setIsVariablesOpen] = useState(false);
     const [newFlowName, setNewFlowName] = useState('');
     const [newFlowDescription, setNewFlowDescription] = useState('');
     const [useTemplate, setUseTemplate] = useState(true);
@@ -251,13 +263,36 @@ export default function FlowsListPage() {
 
     return (
         <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
-            <PageHeader
-                title="Criador de Fluxos (Canva)"
-                description="Crie e gerencie fluxos visuais inteligentes de mensagens, menus e automações com o WhatsApp."
-            />
+            <Suspense fallback={null}>
+                <VariablesParamListener onOpen={() => setIsVariablesOpen(true)} />
+            </Suspense>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <PageHeader
+                    title="Criador de Fluxos (Canva)"
+                    description="Crie e gerencie fluxos visuais inteligentes de mensagens, menus e automações com o WhatsApp."
+                />
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => setIsVariablesOpen(true)}
+                        className="border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 gap-2 shadow-sm text-xs h-9"
+                    >
+                        <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        Personalizar Variáveis ({'{assinaturas}'})
+                    </Button>
+                    <Button
+                        onClick={() => setIsCreateOpen(true)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5 h-9"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Novo Fluxo
+                    </Button>
+                </div>
+            </div>
 
             {/* BANNER INFORMATIVO DE STATUS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="p-4 flex items-center justify-between border shadow-sm">
                     <div className="space-y-1">
                         <p className="text-xs text-muted-foreground font-medium">WhatsApp UazAPI</p>
@@ -293,6 +328,22 @@ export default function FlowsListPage() {
                     >
                         <Settings className="h-3.5 w-3.5" />
                         Ajustar
+                    </Button>
+                </Card>
+
+                <Card className="p-4 flex items-center justify-between border shadow-sm">
+                    <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">Personalizar Variáveis</p>
+                        <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">Listas ({'{assinaturas}'})</p>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsVariablesOpen(true)}
+                        className="text-xs border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 gap-1 h-8"
+                    >
+                        <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                        Configurar
                     </Button>
                 </Card>
 
@@ -499,6 +550,12 @@ export default function FlowsListPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* MODAL DE PERSONALIZAR VARIÁVEIS */}
+            <FlowVariablesConfigDialog
+                open={isVariablesOpen}
+                onOpenChange={setIsVariablesOpen}
+            />
         </div>
     );
 }
