@@ -103,6 +103,22 @@ const sanitizeOptionText = (str: string) => {
         .trim();
 };
 
+function matchesPhone(raw1: string, raw2: string): boolean {
+    const d1 = (raw1 || '').replace(/\D/g, '');
+    const d2 = (raw2 || '').replace(/\D/g, '');
+    if (!d1 || !d2) return false;
+    if (d1 === d2) return true;
+    const loc1 = d1.startsWith('55') && d1.length >= 12 ? d1.slice(2) : d1;
+    const loc2 = d2.startsWith('55') && d2.length >= 12 ? d2.slice(2) : d2;
+    if (loc1 === loc2) return true;
+    const w9_1 = loc1.length === 10 ? loc1.slice(0, 2) + '9' + loc1.slice(2) : loc1;
+    const w9_2 = loc2.length === 10 ? loc2.slice(0, 2) + '9' + loc2.slice(2) : loc2;
+    if (w9_1 === w9_2) return true;
+    const wo9_1 = loc1.length === 11 && loc1[2] === '9' ? loc1.slice(0, 2) + loc1.slice(3) : loc1;
+    const wo9_2 = loc2.length === 11 && loc2[2] === '9' ? loc2.slice(0, 2) + loc2.slice(3) : loc2;
+    return wo9_1 === wo9_2;
+}
+
 export function FlowWhatsAppSimulator({
     open,
     onClose,
@@ -133,6 +149,11 @@ export function FlowWhatsAppSimulator({
     const clientTestModeRef = useRef<'registered' | 'unregistered'>('registered');
     clientTestModeRef.current = clientTestMode;
 
+    // Telefone específico digitado pelo usuário para testar dados reais de um cliente do CRM no preview
+    const [testPhoneNumber, setTestPhoneNumber] = useState('');
+    const testPhoneNumberRef = useRef(testPhoneNumber);
+    testPhoneNumberRef.current = testPhoneNumber;
+
     // Snapshot isolado e estável dos nós e arestas ativos no preview para evitar bugs enquanto edita no Canva
     const [activeNodes, setActiveNodes] = useState<Node[]>(nodes);
     const [activeEdges, setActiveEdges] = useState<Edge[]>(edges);
@@ -144,6 +165,13 @@ export function FlowWhatsAppSimulator({
     useEffect(() => {
         latestPropsRef.current = { nodes, edges };
     }, [nodes, edges]);
+
+    // Busca cliente específico no CRM pelo telefone digitado no preview (reconhece variações brasileiras com/sem 55, com/sem 9)
+    const customMatchedClient = React.useMemo(() => {
+        const cleanInput = (testPhoneNumber || '').replace(/\D/g, '');
+        if (!cleanInput || !clients || clients.length === 0) return null;
+        return clients.find((c: any) => matchesPhone(cleanInput, c.phone || c.telefone || '')) || null;
+    }, [testPhoneNumber, clients]);
 
     // Identifica se o bloco imediatamente após o bloco de início é "Verificar Cliente no CRM"
     const hasInitialCrmCondition = React.useMemo(() => {
@@ -168,7 +196,7 @@ export function FlowWhatsAppSimulator({
         return false;
     }, [activeNodes, activeEdges]);
 
-    // Encontra o melhor cliente ativo da base do CRM para testar com fidelidade máxima
+    // Encontra o melhor cliente ativo da base do CRM para testar caso não tenha digitado um número específico
     const sampleClient = React.useMemo(() => {
         if (!clients || clients.length === 0) return null;
         return clients.find((c: any) => c.status === 'Ativo') || clients[0];
@@ -193,7 +221,20 @@ export function FlowWhatsAppSimulator({
 
             const currentNodes = activeNodesRef.current;
             const currentEdges = activeEdgesRef.current;
-            const isRegistered = clientTestModeRef.current === 'registered';
+
+            const phoneInput = testPhoneNumberRef.current.trim();
+            const cleanInput = phoneInput.replace(/\D/g, '');
+
+            let matchedCustomClient: any = null;
+            if (cleanInput && clients && clients.length > 0) {
+                matchedCustomClient = clients.find((c: any) => matchesPhone(cleanInput, c.phone || c.telefone || '')) || null;
+            }
+
+            const isRegistered = phoneInput
+                ? !!matchedCustomClient
+                : clientTestModeRef.current === 'registered';
+
+            const activeClient = matchedCustomClient || sampleClient;
 
             const node = currentNodes.find((n) => n.id === nodeId);
             if (!node) {
@@ -216,9 +257,9 @@ export function FlowWhatsAppSimulator({
                         .replace(/\{nome\}/gi, fallbackName)
                         .replace(/\{cliente\}/gi, fallbackName)
                         .replace(/\{primeiro_nome\}/gi, 'Visitante')
-                        .replace(/\{telefone\}/gi, '5511999999999')
-                        .replace(/\{numero\}/gi, '5511999999999')
-                        .replace(/\{phone\}/gi, '5511999999999')
+                        .replace(/\{telefone\}/gi, phoneInput || '5511999999999')
+                        .replace(/\{numero\}/gi, phoneInput || '5511999999999')
+                        .replace(/\{phone\}/gi, phoneInput || '5511999999999')
                         .replace(/\{vencimento\}/gi, '')
                         .replace(/\{data_vencimento\}/gi, '')
                         .replace(/\{dias_restantes\}/gi, '')
@@ -255,50 +296,50 @@ export function FlowWhatsAppSimulator({
                         .replace(/\{assinaturas\}/gi, '');
                 }
 
-                const cName = sampleClient?.name || 'Pedro Henrique';
+                const cName = activeClient?.name || 'Pedro Henrique';
                 const cFirstName = cName.split(' ')[0] || 'Pedro';
-                const cPhone = sampleClient?.phone || '5511999999999';
+                const cPhone = activeClient?.phone || phoneInput || '5511999999999';
 
                 let cEmail = 'cliente@email.com';
-                if (sampleClient?.email) {
-                    if (Array.isArray(sampleClient.email)) {
-                        cEmail = sampleClient.email[0] || 'cliente@email.com';
-                    } else if (typeof sampleClient.email === 'string') {
-                        cEmail = sampleClient.email;
+                if (activeClient?.email) {
+                    if (Array.isArray(activeClient.email)) {
+                        cEmail = activeClient.email[0] || 'cliente@email.com';
+                    } else if (typeof activeClient.email === 'string') {
+                        cEmail = activeClient.email;
                     }
                 }
 
-                const cPassword = sampleClient?.password || sampleClient?.senha || '123456';
-                const cScreen = sampleClient?.screen || sampleClient?.tela || 'Tela 1';
-                const cPinScreen = sampleClient?.pinScreen || sampleClient?.pin_tela || '8888';
-                const cPlan = sampleClient?.subscription || sampleClient?.plan || sampleClient?.plano || 'Plano Completo VIP';
-                const cPayment = sampleClient?.paymentMethod || sampleClient?.metodo_pagamento || 'PIX';
+                const cPassword = activeClient?.password || activeClient?.senha || '123456';
+                const cScreen = activeClient?.screen || activeClient?.tela || 'Tela 1';
+                const cPinScreen = activeClient?.pinScreen || activeClient?.pin_tela || '8888';
+                const cPlan = activeClient?.subscription || activeClient?.plan || activeClient?.plano || 'Plano Completo VIP';
+                const cPayment = activeClient?.paymentMethod || activeClient?.metodo_pagamento || 'PIX';
 
                 let cAmount = 'R$ 35,00';
-                if (sampleClient?.amountPaid) {
-                    const raw = String(sampleClient.amountPaid);
+                if (activeClient?.amountPaid) {
+                    const raw = String(activeClient.amountPaid);
                     cAmount = raw.includes('R$') ? raw : `R$ ${raw}`;
                 }
 
                 let cDueDate = '15/10/2026';
-                if (sampleClient?.dueDate) {
+                if (activeClient?.dueDate) {
                     try {
-                        const d = typeof sampleClient.dueDate.toDate === 'function'
-                            ? sampleClient.dueDate.toDate()
-                            : new Date(sampleClient.dueDate);
+                        const d = typeof activeClient.dueDate.toDate === 'function'
+                            ? activeClient.dueDate.toDate()
+                            : new Date(activeClient.dueDate);
                         cDueDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
                     } catch {}
                 }
 
-                const cStatus = sampleClient?.status || 'Ativo';
-                const cLink = sampleClient?.accessLink || sampleClient?.link || 'https://pjcrm.site/acesso';
-                const cNotes = sampleClient?.notes || 'Cliente VIP';
+                const cStatus = activeClient?.status || 'Ativo';
+                const cLink = activeClient?.accessLink || activeClient?.link || 'https://pjcrm.site/acesso';
+                const cNotes = activeClient?.notes || 'Cliente VIP';
 
                 // Buscar registros do mesmo cliente na lista de clientes para simulação realista de múltiplas assinaturas
-                const clientPhoneDigits = (sampleClient?.phone || '').replace(/\D/g, '');
-                const relatedDocs = Array.isArray(clients) && clients.length > 0 && clientPhoneDigits
-                    ? clients.filter((c: any) => (c.phone || '').replace(/\D/g, '') === clientPhoneDigits)
-                    : sampleClient ? [sampleClient] : [];
+                const targetPhone = activeClient?.phone || phoneInput;
+                const relatedDocs = Array.isArray(clients) && clients.length > 0 && targetPhone
+                    ? clients.filter((c: any) => matchesPhone(targetPhone, c.phone || c.telefone || ''))
+                    : activeClient ? [activeClient] : [];
 
                 const sampleDocs = relatedDocs.length > 0 ? relatedDocs : [
                     { subscription: cPlan, status: 'Ativo', dueDate: '2026-10-15', amountPaid: '35,00' },
@@ -647,12 +688,16 @@ export function FlowWhatsAppSimulator({
             // 6. CONDIÇÃO: VERIFICAR CLIENTE NO CRM
             else if (data.nodeType === 'condition') {
                 if (isRegistered) {
+                    const clientName = activeClient?.name || 'Cliente Cadastrado';
+                    const clientPhone = activeClient?.phone || phoneInput || '';
+                    const clientPlan = activeClient?.subscription || activeClient?.plan || activeClient?.plano || 'Plano VIP';
+                    const clientPhoneDisplay = clientPhone ? ` (${clientPhone})` : '';
                     setMessages((prev) => [
                         ...prev,
                         {
                             id: `sys_${Date.now()}`,
                             sender: 'system',
-                            text: '🔍 *Simulação:* Contato verificado no CRM como *Cliente Cadastrado* (Pedro Henrique - Plano VIP). Seguindo rota verde...',
+                            text: `🔍 *Simulação:* Contato verificado no CRM como *Cliente Cadastrado* — ${clientName}${clientPhoneDisplay} [${clientPlan}]. Seguindo rota verde...`,
                             time: getCurrentTime(),
                         },
                     ]);
@@ -670,12 +715,13 @@ export function FlowWhatsAppSimulator({
                         setCurrentNotice('Fim do fluxo após a verificação de cliente CRM (rota de cliente cadastrado não conectada).');
                     }
                 } else {
+                    const searchInfo = phoneInput ? ` para o número ${phoneInput}` : '';
                     setMessages((prev) => [
                         ...prev,
                         {
                             id: `sys_${Date.now()}`,
                             sender: 'system',
-                            text: '🔍 *Simulação:* Contato verificado no CRM como *Não Cadastrado* (Visitante / Lead Novo). Seguindo rota vermelha...',
+                            text: `🔍 *Simulação:* Contato não encontrado no CRM${searchInfo} (*Não Cadastrado* / Lead Novo). Seguindo rota vermelha...`,
                             time: getCurrentTime(),
                         },
                     ]);
@@ -746,6 +792,12 @@ export function FlowWhatsAppSimulator({
         activeEdgesRef.current = latest.edges;
         startSimulationWithSnapshot(latest.nodes, latest.edges);
     }, [startSimulationWithSnapshot]);
+
+    // Aplicar teste com o número digitado
+    const handleApplyPhoneTest = useCallback(() => {
+        testPhoneNumberRef.current = testPhoneNumber;
+        startSimulationWithSnapshot(activeNodesRef.current, activeEdgesRef.current);
+    }, [testPhoneNumber, startSimulationWithSnapshot]);
 
     // Alternar modo de simulação (Cadastrado / Não Cadastrado)
     const handleChangeClientMode = useCallback(
@@ -971,41 +1023,104 @@ export function FlowWhatsAppSimulator({
                 </div>
             </div>
 
-            {/* SELETOR DE CLIENTE CADASTRADO / NÃO CADASTRADO (SOMENTE QUANDO O BLOCO INICIAL FOR CONDIÇÃO CRM) */}
-            {hasInitialCrmCondition && (
-                <div className="bg-[#f0f2f5] dark:bg-[#111b21] border-b border-slate-300 dark:border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 shadow-xs z-10">
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                        <UserCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span>Simular Contato:</span>
+            {/* BARRA DE TESTE POR NÚMERO DO CRM & MODO DE SIMULAÇÃO */}
+            <div className="bg-[#f0f2f5] dark:bg-[#111b21] border-b border-slate-300 dark:border-slate-800 px-3 py-2 space-y-1.5 shrink-0 shadow-xs z-10">
+                {/* LINHA 1: INPUT DE TELEFONE DO CLIENTE */}
+                <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1">
+                        <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                            type="text"
+                            value={testPhoneNumber}
+                            onChange={(e) => {
+                                setTestPhoneNumber(e.target.value);
+                                testPhoneNumberRef.current = e.target.value;
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleApplyPhoneTest();
+                                }
+                            }}
+                            placeholder="Testar com tel do CRM (ex: 77998413534)..."
+                            className="w-full pl-8 pr-7 py-1 text-xs bg-white dark:bg-[#202c33] border border-slate-300 dark:border-slate-700 rounded-md placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-slate-800 dark:text-slate-100"
+                        />
+                        {testPhoneNumber && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setTestPhoneNumber('');
+                                    testPhoneNumberRef.current = '';
+                                    handleManualRestart();
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                title="Limpar telefone"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        )}
                     </div>
-                    <div className="flex items-center bg-slate-200 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700">
-                        <button
-                            type="button"
-                            onClick={() => handleChangeClientMode('registered')}
-                            className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-bold transition-all flex items-center gap-1 ${
-                                clientTestMode === 'registered'
-                                    ? 'bg-emerald-600 text-white shadow-xs'
-                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                            }`}
-                        >
-                            <UserCheck className="h-3 w-3" />
-                            <span>Cadastrado</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleChangeClientMode('unregistered')}
-                            className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-bold transition-all flex items-center gap-1 ${
-                                clientTestMode === 'unregistered'
-                                    ? 'bg-amber-600 text-white shadow-xs'
-                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                            }`}
-                        >
-                            <UserX className="h-3 w-3" />
-                            <span>Não Cadastrado</span>
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={handleApplyPhoneTest}
+                        className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors shrink-0 shadow-xs"
+                        title="Simular fluxo com este número"
+                    >
+                        Testar
+                    </button>
                 </div>
-            )}
+
+                {/* LINHA 2: STATUS DO CLIENTE LOCALIZADO OU SELETOR CADASTRADO / NÃO CADASTRADO */}
+                {testPhoneNumber.trim() ? (
+                    <div className="flex items-center justify-between text-[11px] px-0.5">
+                        {customMatchedClient ? (
+                            <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-medium truncate">
+                                <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">
+                                    CRM: <strong>{customMatchedClient.name}</strong> ({customMatchedClient.subscription || customMatchedClient.plan || customMatchedClient.plano || 'Cliente'})
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium truncate">
+                                <UserX className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">Não cadastrado no CRM (Simulará como Lead Novo)</span>
+                            </div>
+                        )}
+                    </div>
+                ) : hasInitialCrmCondition ? (
+                    <div className="flex items-center justify-between gap-2 px-0.5">
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                            <UserCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>Simular Contato:</span>
+                        </div>
+                        <div className="flex items-center bg-slate-200 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700">
+                            <button
+                                type="button"
+                                onClick={() => handleChangeClientMode('registered')}
+                                className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-bold transition-all flex items-center gap-1 ${
+                                    clientTestMode === 'registered'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                                }`}
+                            >
+                                <UserCheck className="h-3 w-3" />
+                                <span>Cadastrado</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleChangeClientMode('unregistered')}
+                                className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-bold transition-all flex items-center gap-1 ${
+                                    clientTestMode === 'unregistered'
+                                        ? 'bg-amber-600 text-white shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                                }`}
+                            >
+                                <UserX className="h-3 w-3" />
+                                <span>Não Cadastrado</span>
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
 
             {/* ÁREA DE MENSAGENS COM BACKGROUND TÍPICO DO WHATSAPP */}
             <div className="flex-1 p-3 overflow-y-auto space-y-2.5 relative kanban-scroll">

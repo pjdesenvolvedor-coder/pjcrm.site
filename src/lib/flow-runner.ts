@@ -106,11 +106,34 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
         return cached.data;
     }
 
+    let local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+    let with9 = local;
+    let without9 = local;
+    if (local.length === 10) {
+        with9 = local.slice(0, 2) + '9' + local.slice(2);
+    } else if (local.length === 11 && local[2] === '9') {
+        without9 = local.slice(0, 2) + local.slice(3);
+    }
+
+    const maskedWith9 = with9.length === 11 ? `(${with9.slice(0, 2)}) ${with9.slice(2, 7)}-${with9.slice(7)}` : '';
+    const maskedWithout9 = without9.length === 10 ? `(${without9.slice(0, 2)}) ${without9.slice(2, 6)}-${without9.slice(6)}` : '';
+    const maskedWithSpace = with9.length === 11 ? `${with9.slice(0, 2)} ${with9.slice(2, 7)}-${with9.slice(7)}` : '';
+
     const candidates = [
         rawPhone,
         digits,
-        formatPhoneWith55(digits),
-        digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : `55${digits}`,
+        local,
+        with9,
+        without9,
+        `55${local}`,
+        `55${with9}`,
+        `55${without9}`,
+        `+55${local}`,
+        `+55${with9}`,
+        `+55${without9}`,
+        maskedWith9,
+        maskedWithout9,
+        maskedWithSpace,
     ];
     const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean)));
 
