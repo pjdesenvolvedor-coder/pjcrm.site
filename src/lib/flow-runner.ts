@@ -92,6 +92,36 @@ function formatDaysRemaining(val: any): string {
     return `Vencido há ${Math.abs(diffDays)} dias`;
 }
 
+// Converte qualquer valor vindo do CRM (string, número, lista, objeto {value}) em string segura e já aparada
+export function safeStr(v: any): string {
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'string') return v.trim();
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v).trim();
+    if (Array.isArray(v)) {
+        return v
+            .map((item) => safeStr(item))
+            .filter(Boolean)
+            .join(', ');
+    }
+    if (typeof v === 'object') {
+        if (typeof v.value === 'string' || typeof v.value === 'number') return String(v.value).trim();
+        if (typeof v.label === 'string') return v.label.trim();
+        if (typeof v.name === 'string') return v.name.trim();
+        return '';
+    }
+    return '';
+}
+
+// Retorna o primeiro valor não vazio (já convertido para string segura)
+function firstStr(...vals: any[]): string {
+    for (const v of vals) {
+        const s = safeStr(v);
+        if (s) return s;
+    }
+    return '';
+}
+
+
 // Cache em memória para busca de clientes por telefone (TTL 3 minutos)
 const clientPhoneCache = new Map<string, { data: any; cachedAt: number }>();
 
@@ -140,15 +170,22 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
     const clientsCol = collection(db, 'users', userId, 'clients');
     const matchingDocsMap = new Map<string, any>();
 
-    // 1. Busca direta por telefone exato
-    for (const cand of uniqueCandidates) {
-        try {
-            const q = query(clientsCol, where('phone', '==', cand));
-            const snap = await getDocs(q);
-            for (const d of snap.docs) {
-                matchingDocsMap.set(d.id, { id: d.id, ...d.data() });
+    // 1. Busca direta por telefone exato (todas as variações em paralelo)
+    const directResults = await Promise.all(
+        uniqueCandidates.map(async (cand) => {
+            try {
+                const q = query(clientsCol, where('phone', '==', cand));
+                return await getDocs(q);
+            } catch {
+                return null;
             }
-        } catch {}
+        })
+    );
+    for (const snap of directResults) {
+        if (!snap) continue;
+        for (const d of snap.docs) {
+            matchingDocsMap.set(d.id, { id: d.id, ...d.data() });
+        }
     }
 
     // 2. Busca fallback com canonical phone (caso o telefone esteja salvo com máscara, ex: (11) 98765-4321)
@@ -253,7 +290,7 @@ export async function findClientByPhone(db: any, userId: string, rawPhone: strin
         new Set(
             matchingList
                 .filter((c) => c.status === 'Ativo' || matchingList.length === 1)
-                .map((c) => (c.subscription || c.plan || c.plano || '').trim())
+                .map((c) => firstStr(c.subscription, c.plan, c.plano))
                 .filter(Boolean)
         )
     );
@@ -352,63 +389,44 @@ export function formatClientVariables(
         };
     }
 
-    const fullName = (client.name || fallbackName || 'Cliente').trim();
+    const fullName = firstStr(client.name, fallbackName) || 'Cliente';
     const firstName = fullName.split(' ')[0] || fullName;
-    const phone = (client.phone || fallbackPhone || '').trim();
+    const phone = firstStr(client.phone, fallbackPhone);
 
     // Extrair email com segurança (suporta array de strings, array de objetos {value: string}, ou string direta)
-    let emailStr = '';
-    if (Array.isArray(client.email)) {
-        emailStr = client.email
-            .map((e: any) => (typeof e === 'object' && e ? (e.value || '') : String(e || '')))
-            .filter(Boolean)
-            .join(', ');
-    } else if (Array.isArray(client.emails)) {
-        emailStr = client.emails
-            .map((e: any) => (typeof e === 'object' && e ? (e.value || '') : String(e || '')))
-            .filter(Boolean)
-            .join(', ');
-    } else if (typeof client.email === 'string') {
-        emailStr = client.email.trim();
-    } else if (typeof client.emails === 'string') {
-        emailStr = client.emails.trim();
-    } else if (client.login && typeof client.login === 'string') {
-        emailStr = client.login.trim();
-    }
+    const emailStr = firstStr(client.email, client.emails, client.login);
 
     // Primeiro e-mail (caso seja lista) ou o e-mail completo
     const firstEmail = emailStr.split(',')[0]?.trim() || emailStr;
 
     // Senha da conta
-    const password = (client.password || client.senha || client.pass || '').trim();
+    const password = firstStr(client.password, client.senha, client.pass);
 
     // Tela de acesso
-    const screen = (client.screen || client.tela || '').trim();
+    const screen = firstStr(client.screen, client.tela);
 
     // PIN da tela
-    const pinScreen = (client.pinScreen || client.pin_tela || client.pin || '').trim();
+    const pinScreen = firstStr(client.pinScreen, client.pin_tela, client.pin);
 
     // Plano / Assinatura (busca nas chaves subscription, plan, plano ou allSubscriptions)
-    const planName = (
-        client.subscription ||
-        client.plan ||
-        client.plano ||
-        client.subscriptionName ||
-        client.produto ||
-        client.product ||
-        client.allSubscriptions ||
-        ''
-    ).trim();
+    const planName = firstStr(
+        client.subscription,
+        client.plan,
+        client.plano,
+        client.subscriptionName,
+        client.produto,
+        client.product,
+        client.allSubscriptions
+    );
 
     // Método de pagamento
-    const paymentMethod = (
-        client.paymentMethod ||
-        client.metodo_pagamento ||
-        client.forma_pagamento ||
-        client.formaPagamento ||
-        client.pagamento ||
-        ''
-    ).trim();
+    const paymentMethod = firstStr(
+        client.paymentMethod,
+        client.metodo_pagamento,
+        client.forma_pagamento,
+        client.formaPagamento,
+        client.pagamento
+    );
 
     // Valor pago / Valor
     let amountStr = '';
@@ -422,19 +440,19 @@ export function formatClientVariables(
     const daysRemainingStr = formatDaysRemaining(client.dueDate);
 
     // Link de acesso
-    const accessLink = (client.accessLink || client.link || client.link_acesso || '').trim();
+    const accessLink = firstStr(client.accessLink, client.link, client.link_acesso);
 
     // Status
-    const statusStr = (client.status || 'Ativo').trim();
+    const statusStr = safeStr(client.status) || 'Ativo';
 
     // Quantidade
     const quantityStr = client.quantity ? String(client.quantity) : '';
 
     // Observações / Notas
-    const notesStr = (client.notes || client.observacoes || client.obs || '').trim();
+    const notesStr = firstStr(client.notes, client.observacoes, client.obs);
 
     // Tipo de cliente
-    const clientTypeStr = (client.clientType || '').trim();
+    const clientTypeStr = safeStr(client.clientType);
 
     const matchingDocs: any[] = Array.isArray(client._allMatchingDocs) && client._allMatchingDocs.length > 0
         ? client._allMatchingDocs
@@ -443,8 +461,8 @@ export function formatClientVariables(
     // Helper para formatar cada item de assinatura (usando template customizado se configurado)
     const formatSingleSub = (c: any, customTemplate?: string, defaultWithStatus = false) => {
         if (customTemplate && customTemplate.trim()) {
-            const planName = (c.subscription || c.plan || c.plano || c.subscriptionName || c.product || c.produto || 'Assinatura').trim();
-            const statusVal = (c.status || '').trim();
+            const planName = firstStr(c.subscription, c.plan, c.plano, c.subscriptionName, c.product, c.produto) || 'Assinatura';
+            const statusVal = safeStr(c.status);
             const dueVal = formatDateSafe(c.dueDate);
             const daysVal = formatDaysRemaining(c.dueDate);
             let amountVal = '';
@@ -452,13 +470,13 @@ export function formatClientVariables(
                 const raw = String(c.amountPaid).trim();
                 amountVal = raw.includes('R$') ? raw : `R$ ${raw}`;
             }
-            const payMethod = (c.paymentMethod || c.formaPagamento || '').trim();
-            const emailVal = (c.email || (Array.isArray(c.emails) ? c.emails[0] : c.emails) || '').trim();
-            const passVal = (c.password || c.senha || '').trim();
-            const screenVal = (c.screen || c.tela || '').trim();
-            const pinVal = (c.pinScreen || c.pin || '').trim();
-            const linkVal = (c.accessLink || c.link || c.link_acesso || '').trim();
-            const notesVal = (c.notes || c.observacoes || c.obs || '').trim();
+            const payMethod = firstStr(c.paymentMethod, c.formaPagamento);
+            const emailVal = firstStr(c.email, c.emails);
+            const passVal = firstStr(c.password, c.senha);
+            const screenVal = firstStr(c.screen, c.tela);
+            const pinVal = firstStr(c.pinScreen, c.pin);
+            const linkVal = firstStr(c.accessLink, c.link, c.link_acesso);
+            const notesVal = firstStr(c.notes, c.observacoes, c.obs);
 
             return customTemplate
                 .replace(/\{plano\}/gi, planName)
@@ -483,10 +501,10 @@ export function formatClientVariables(
                 .replace(/\{observacoes\}/gi, notesVal);
         }
 
-        const name = (c.subscription || c.plan || c.plano || c.subscriptionName || c.product || c.produto || 'Assinatura').trim();
+        const name = firstStr(c.subscription, c.plan, c.plano, c.subscriptionName, c.product, c.produto) || 'Assinatura';
         const parts: string[] = [];
-        if (defaultWithStatus && c.status) {
-            parts.push(c.status);
+        if (defaultWithStatus && safeStr(c.status)) {
+            parts.push(safeStr(c.status));
         }
         const due = formatDateSafe(c.dueDate);
         if (due) {
@@ -504,7 +522,7 @@ export function formatClientVariables(
 
     // Assinaturas ativas
     const activeDocs = matchingDocs.filter((c) => {
-        const st = (c.status || '').trim().toLowerCase();
+        const st = safeStr(c.status).toLowerCase();
         if (st === 'ativo' || st === 'active') return true;
         if (st === 'vencido' || st === 'cancelado') return false;
         const dueMs = getTimestampMs(c.dueDate);
@@ -514,7 +532,7 @@ export function formatClientVariables(
 
     // Assinaturas vencidas
     const overdueDocs = matchingDocs.filter((c) => {
-        const st = (c.status || '').trim().toLowerCase();
+        const st = safeStr(c.status).toLowerCase();
         if (st === 'vencido' || st === 'expired' || st === 'atrasado') return true;
         if (st === 'ativo') return false;
         const dueMs = getTimestampMs(c.dueDate);
@@ -1155,7 +1173,12 @@ export async function executeFlowNode(
     // 6. CONDIÇÃO (Verificar Cliente no CRM)
     if (nodeData.nodeType === 'condition') {
         console.log(`[FlowRunner] Verificando se ${ctx.phoneNumber} é cliente cadastrado no CRM...`);
-        const client = await findClientByPhone(ctx.db, ctx.userId, ctx.phoneNumber);
+        let client: any = null;
+        try {
+            client = await findClientByPhone(ctx.db, ctx.userId, ctx.phoneNumber);
+        } catch (err) {
+            console.error('[FlowRunner] Erro ao buscar cliente no CRM:', err);
+        }
         const isClient = !!client;
 
         console.log(`[FlowRunner] Resultado da verificação no CRM: isClient=${isClient} (Cliente: ${client?.name || 'Não cadastrado'})`);
@@ -1170,7 +1193,16 @@ export async function executeFlowNode(
         } catch {}
 
         // Formata e salva as variáveis completas do cliente
-        clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg);
+        // (se algum dado do CRM vier em formato inesperado, não deixa o fluxo travar)
+        try {
+            clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg);
+        } catch (err) {
+            console.error('[FlowRunner] Erro ao formatar variáveis do cliente, usando fallback básico:', err);
+            clientVars = formatClientVariables(null, client?.name || ctx.contactName, ctx.phoneNumber, varCfg);
+            if (client) {
+                clientVars.status = 'Ativo';
+            }
+        }
         ctx.clientVariables = clientVars;
         ctx.clientData = client;
 
