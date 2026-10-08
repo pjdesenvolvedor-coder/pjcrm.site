@@ -21,6 +21,8 @@ import {
     UserCheck,
     UserX,
     PlayCircle,
+    Copy,
+    Settings,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -114,7 +116,7 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
     const config = nodeTypeConfigs[nodeData?.nodeType || 'content'] || nodeTypeConfigs.content;
     const Icon = config.icon;
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-    const { onDeleteNode } = useFlowNodeActions();
+    const { onDeleteNode, onDuplicateNode, onConfigureNode } = useFlowNodeActions();
 
     const menuOptions = useMemo(() => {
         const raw = nodeData?.menuOptions;
@@ -169,6 +171,21 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                         {config.title}
                     </span>
 
+                    {/* BOTÃO CONFIGURAR BLOCO */}
+                    <button
+                        type="button"
+                        className="nodrag nopan p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+                        title="Configurar bloco"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onConfigureNode) {
+                                onConfigureNode(id);
+                            }
+                        }}
+                    >
+                        <Settings className="h-3.5 w-3.5" />
+                    </button>
+
                     {/* BOTÃO LIXEIRINHA PARA APAGAR O BLOCO */}
                     <button
                         type="button"
@@ -196,7 +213,31 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                                 <MoreVertical className="h-3.5 w-3.5" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40 nodrag nopan">
+                        <DropdownMenuContent align="end" className="w-44 nodrag nopan">
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onConfigureNode) {
+                                        onConfigureNode(id);
+                                    }
+                                }}
+                                className="text-xs gap-2 cursor-pointer font-medium"
+                            >
+                                <Settings className="h-3.5 w-3.5 text-slate-500" />
+                                Configurar bloco
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onDuplicateNode) {
+                                        onDuplicateNode(id);
+                                    }
+                                }}
+                                className="text-xs gap-2 cursor-pointer font-medium"
+                            >
+                                <Copy className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                                Duplicar bloco
+                            </DropdownMenuItem>
                             {nodeData?.nodeType === 'menu' && (
                                 <DropdownMenuItem
                                     onClick={(e) => {

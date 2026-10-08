@@ -160,6 +160,13 @@ function FlowCanvasEditorContent() {
     // Confirmação antes de excluir nó
     const [nodePendingDelete, setNodePendingDelete] = useState<string | null>(null);
 
+    // Rastreamento do mouse para colar blocos na coordenada exata do cursor
+    const mousePosRef = useRef<{ clientX: number; clientY: number } | null>(null);
+    // Bloco copiado para a área de transferência interna (Ctrl+C / Ctrl+V)
+    const copiedNodeRef = useRef<Node | null>(null);
+    // Bloco atualmente sob o ponteiro do mouse
+    const hoveredNodeRef = useRef<Node | null>(null);
+
     // Histórico de alterações para Voltar (Desfazer / Ctrl+Z) e Refazer (Ctrl+Y)
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
     const redoStackRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -301,7 +308,86 @@ function FlowCanvasEditorContent() {
         setCanRedo(redoStackRef.current.length > 0);
     }, [setNodes, setEdges, scheduleAutoSave, toast]);
 
-    // Atalhos globais de teclado (Ctrl+Z para Voltar / Ctrl+Y ou Ctrl+Shift+Z para Refazer)
+    // Duplicar um bloco no canvas (via menu de 3 pontinhos, Ctrl+C / Ctrl+V ou Ctrl+D)
+    const duplicateNode = useCallback(
+        (nodeIdOrNode: string | Node, customPosition?: { x: number; y: number }) => {
+            let sourceNode: Node | undefined;
+            if (typeof nodeIdOrNode === 'string') {
+                sourceNode = nodes.find((n) => n.id === nodeIdOrNode);
+            } else {
+                sourceNode = nodeIdOrNode;
+            }
+
+            if (!sourceNode) return;
+
+            pushHistory();
+
+            const newId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+            // Clona profundamente os dados
+            const clonedData: FlowNodeData = JSON.parse(JSON.stringify(sourceNode.data || {}));
+
+            // Se for um nó de menu, gerar novos IDs únicos para as opções
+            if (Array.isArray(clonedData.menuOptions)) {
+                clonedData.menuOptions = clonedData.menuOptions.map((opt: any, idx: number) => ({
+                    ...opt,
+                    id: `opt_${Date.now()}_${idx + 1}`,
+                }));
+            }
+
+            // Posição informada (ex: Ctrl+V na coordenada do cursor) ou deslocada do original
+            const targetPos = customPosition || {
+                x: Math.round(sourceNode.position.x + 50),
+                y: Math.round(sourceNode.position.y + 50),
+            };
+
+            const newNode: Node = {
+                id: newId,
+                type: sourceNode.type || 'customFlow',
+                position: targetPos,
+                data: clonedData,
+                selected: true,
+            };
+
+            // Desmarcar os outros nós e selecionar o bloco recém-duplicado
+            setNodes((nds) => [
+                ...nds.map((n) => ({ ...n, selected: false })),
+                newNode,
+            ]);
+            setSelectedNode(newNode);
+
+            scheduleAutoSave(500);
+
+            toast({
+                title: 'Bloco duplicado!',
+                description: 'O novo bloco foi criado com sucesso.',
+            });
+        },
+        [nodes, pushHistory, setNodes, scheduleAutoSave, toast]
+    );
+
+    // Abrir modal de configuração para um bloco específico (usado pelo menu de 3 pontinhos)
+    const handleConfigureNode = useCallback(
+        (nodeId: string) => {
+            const node = nodes.find((n) => n.id === nodeId);
+            if (node) {
+                setSelectedNode(node);
+                setIsConfigOpen(true);
+            }
+        },
+        [nodes]
+    );
+
+    // Rastrear posição do cursor na tela para posicionar o bloco no Ctrl+V
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            mousePosRef.current = { clientX: e.clientX, clientY: e.clientY };
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+    }, []);
+
+    // Atalhos globais de teclado (Ctrl+Z Voltar / Ctrl+Y Refazer / Ctrl+C Copiar / Ctrl+V Colar no cursor / Ctrl+D Duplicar)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
@@ -309,7 +395,16 @@ function FlowCanvasEditorContent() {
                 return;
             }
 
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            // Ignorar atalhos de canvas se modais de configuração ou teste estiverem abertos
+            if (isConfigOpen || isSimulatorOpen || isTestOpen || !!nodePendingDelete) {
+                return;
+            }
+
+            const isCtrl = e.ctrlKey || e.metaKey;
+            const key = e.key.toLowerCase();
+
+            // Desfazer (Ctrl+Z) e Refazer (Ctrl+Y ou Ctrl+Shift+Z)
+            if (isCtrl && key === 'z') {
                 if (e.shiftKey) {
                     e.preventDefault();
                     handleRedo();
@@ -317,15 +412,68 @@ function FlowCanvasEditorContent() {
                     e.preventDefault();
                     handleUndo();
                 }
-            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+            } else if (isCtrl && key === 'y') {
                 e.preventDefault();
                 handleRedo();
+            } else if (isCtrl && key === 'c') {
+                // Copiar bloco selecionado ou sob o ponteiro do mouse
+                const activeNode =
+                    selectedNode ||
+                    nodes.find((n) => n.selected) ||
+                    hoveredNodeRef.current;
+                if (activeNode) {
+                    e.preventDefault();
+                    copiedNodeRef.current = activeNode;
+                    toast({
+                        title: 'Bloco copiado!',
+                        description: 'Mova o mouse para onde deseja colar e pressione Ctrl+V.',
+                    });
+                }
+            } else if (isCtrl && key === 'v') {
+                // Colar bloco duplicado exatamente na posição do cursor do mouse
+                if (copiedNodeRef.current) {
+                    e.preventDefault();
+                    let pastePos: { x: number; y: number } | undefined;
+                    if (mousePosRef.current) {
+                        const flowPos = screenToFlowPosition({
+                            x: mousePosRef.current.clientX,
+                            y: mousePosRef.current.clientY,
+                        });
+                        pastePos = {
+                            x: Math.round(flowPos.x - 140),
+                            y: Math.round(flowPos.y - 45),
+                        };
+                    }
+                    duplicateNode(copiedNodeRef.current, pastePos);
+                }
+            } else if (isCtrl && key === 'd') {
+                // Duplicar rapidamente (Ctrl+D)
+                const activeNode =
+                    selectedNode ||
+                    nodes.find((n) => n.selected) ||
+                    hoveredNodeRef.current;
+                if (activeNode) {
+                    e.preventDefault();
+                    duplicateNode(activeNode);
+                }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleUndo, handleRedo]);
+    }, [
+        handleUndo,
+        handleRedo,
+        isConfigOpen,
+        isSimulatorOpen,
+        isTestOpen,
+        nodePendingDelete,
+        selectedNode,
+        nodes,
+        screenToFlowPosition,
+        duplicateNode,
+        toast,
+    ]);
 
     // Solicitar exclusão do nó (abre modal de confirmação)
     const handleDeleteNode = useCallback(
@@ -427,9 +575,10 @@ function FlowCanvasEditorContent() {
         [setEdges, pushHistory, scheduleAutoSave, toast]
     );
 
-    // Desmarcar aresta selecionada ao clicar no fundo
+    // Desmarcar aresta e nó selecionados ao clicar no fundo
     const onPaneClick = useCallback(() => {
         setSelectedEdgeId(null);
+        setSelectedNode(null);
     }, []);
 
     // Mapear arestas com destaque em vermelho para a selecionada e cores para saídas de condição
@@ -459,8 +608,13 @@ function FlowCanvasEditorContent() {
         });
     }, [edges, selectedEdgeId]);
 
-    // Ao clicar em um nó no canvas
+    // Ao clicar em um nó no canvas (seleciona o bloco)
     const onNodeClick = useCallback((_: any, node: Node) => {
+        setSelectedNode(node);
+    }, []);
+
+    // Ao dar duplo clique em um nó no canvas (abre o modal de configuração)
+    const onNodeDoubleClick = useCallback((_: any, node: Node) => {
         setSelectedNode(node);
         setIsConfigOpen(true);
     }, []);
@@ -551,7 +705,7 @@ function FlowCanvasEditorContent() {
 
             setNodes((nds) => [...nds, newNode]);
             scheduleAutoSave(500);
-            toast({ title: 'Bloco adicionado!', description: 'Clique no bloco para configurar.' });
+            toast({ title: 'Bloco adicionado!', description: 'Dê dois cliques no bloco ou use o menu (⋮) para configurar.' });
         },
         [pushHistory, setNodes, scheduleAutoSave, toast]
     );
@@ -937,6 +1091,9 @@ function FlowCanvasEditorContent() {
                 className="relative flex-1 w-full min-h-0 overflow-hidden"
                 onDragOver={onDragOver}
                 onDrop={onDrop}
+                onPointerMove={(e) => {
+                    mousePosRef.current = { clientX: e.clientX, clientY: e.clientY };
+                }}
             >
                 {/* SIMULADOR CLONADO DO WHATSAPP (DROPDOWN NO CANTO DIREITO SOB O BOTÃO) */}
                 <FlowWhatsAppSimulator
@@ -1096,7 +1253,13 @@ function FlowCanvasEditorContent() {
                 )}
 
                 {/* REACT FLOW CANVAS */}
-                <FlowNodeActionsContext.Provider value={{ onDeleteNode: handleDeleteNode }}>
+                <FlowNodeActionsContext.Provider
+                    value={{
+                        onDeleteNode: handleDeleteNode,
+                        onDuplicateNode: duplicateNode,
+                        onConfigureNode: handleConfigureNode,
+                    }}
+                >
                     <ReactFlow
                         nodes={nodes}
                         edges={displayEdges}
@@ -1104,6 +1267,13 @@ function FlowCanvasEditorContent() {
                         onEdgesChange={handleEdgesChange}
                         onConnect={onConnect}
                         onNodeClick={onNodeClick}
+                        onNodeDoubleClick={onNodeDoubleClick}
+                        onNodeMouseEnter={(_, node) => {
+                            hoveredNodeRef.current = node;
+                        }}
+                        onNodeMouseLeave={() => {
+                            hoveredNodeRef.current = null;
+                        }}
                         onEdgeClick={onEdgeClick}
                         onEdgeDoubleClick={onEdgeDoubleClick}
                         onPaneClick={onPaneClick}
