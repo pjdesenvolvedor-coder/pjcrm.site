@@ -34,7 +34,6 @@ import { FlowWhatsAppSimulator } from '@/components/flows/FlowWhatsAppSimulator'
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
@@ -708,20 +707,6 @@ function FlowCanvasEditorContent() {
                             }}
                             className="font-bold text-sm h-8 max-w-[260px] bg-transparent border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-background"
                         />
-                        <Badge
-                            variant="outline"
-                            className={`text-[11px] cursor-pointer ${
-                                isActive
-                                    ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20'
-                                    : 'text-muted-foreground'
-                            }`}
-                            onClick={() => {
-                                setIsActive(!isActive);
-                                scheduleAutoSave(300);
-                            }}
-                        >
-                            {isActive ? '🟢 Ativo' : '⚪ Pausado'}
-                        </Badge>
 
                         {/* BOTÕES VOLTAR (DESFAZER) E REFAZER */}
                         <div className="flex items-center border-l pl-2 ml-1 gap-1 border-border/70">
