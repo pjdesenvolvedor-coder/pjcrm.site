@@ -1,15 +1,14 @@
-
 'use client';
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, Suspense } from "react";
-import { MessageSquare, Mail, Lock } from "lucide-react";
+import { MessageSquare, Mail, Lock, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, serverTimestamp, getDoc } from "firebase/firestore";
+import { doc, serverTimestamp } from "firebase/firestore";
 import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
@@ -60,7 +59,8 @@ function SignupForm() {
         dashboard: true, customers: true, inbox: true, automations: true,
         groups: true, shot: true, zapconnect: true, settings: true, users: false,
         attendants: false, notes: true, ads: true, pix: true, usage: true, estoque: true,
-        logs: true, dbCleaner: true, zapVendas: true, calendario: true, linksClaro: true
+        logs: true, dbCleaner: true, zapVendas: true, calendario: true, linksClaro: true,
+        flows: true
       };
 
       const profileData: any = {
@@ -79,10 +79,26 @@ function SignupForm() {
 
       setDocumentNonBlocking(userDocRef, profileData, { merge: true });
 
-      toast({ title: "Conta criada!", description: "Bem-vindo ao sistema." });
-    } catch (error) {
-      console.error(error);
-      toast({ variant: "destructive", title: "Falha no cadastro" });
+      toast({ title: "Conta criada com sucesso!", description: "Bem-vindo ao CRM." });
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      let description = "Ocorreu um erro ao criar sua conta.";
+      if (error instanceof FirebaseError) {
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            description = "Este e-mail já está cadastrado. Faça login.";
+            break;
+          case 'auth/invalid-email':
+            description = "E-mail inválido.";
+            break;
+          case 'auth/weak-password':
+            description = "A senha é muito fraca. Use pelo menos 6 caracteres.";
+            break;
+          default:
+            description = error.message || description;
+        }
+      }
+      toast({ variant: "destructive", title: "Falha no cadastro", description });
     }
   };
 
@@ -107,10 +123,10 @@ function SignupForm() {
           </div>
           <div>
             <CardTitle className="text-2xl font-semibold">
-                {ref ? "Cadastro de Atendente" : "Criar sua Conta"}
+                Criar sua Conta
             </CardTitle>
             <CardDescription className="pt-1">
-              {ref ? "Você foi convidado para trabalhar nesta equipe." : "Insira seus dados para começar."}
+              Insira seus dados para começar no CRM.
             </CardDescription>
           </div>
         </CardHeader>
@@ -132,7 +148,7 @@ function SignupForm() {
                     <FormItem><FormLabel>Senha</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} /></FormControl><FormMessage /></FormItem>
                 )}/>
                 <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                    {form.formState.isSubmitting ? 'Processando...' : 'Finalizar Cadastro'}
+                    {form.formState.isSubmitting ? 'Criando conta...' : 'Finalizar Cadastro'}
                 </Button>
             </form>
           </Form>
@@ -142,7 +158,7 @@ function SignupForm() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 export default function SignupPage() {
