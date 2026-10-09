@@ -149,20 +149,27 @@ export default function FlowSettingsPage() {
             .map((s) => s.trim().toLowerCase())
             .filter(Boolean);
 
-        const payload: FlowTriggerSettings = {
+        const rawPayload: Record<string, any> = {
             triggerMode,
-            defaultFlowId: defaultFlowId || undefined,
+            defaultFlowId: defaultFlowId || '',
             keywords,
             ignoreIfActiveFlow,
             restartKeywords: restartKeywordsList,
             resetKeyword: resetKeyword.trim().toLowerCase() || 'reset',
-            invalidOptionMessage: invalidOptionMessage.trim() || undefined,
-            humanSupportKeywords: humanSupportKeywordsList.length > 0 ? humanSupportKeywordsList : undefined,
-            humanSupportPhone: humanSupportPhone.trim() || undefined,
-            humanSupportName: humanSupportName.trim() || undefined,
-            humanSupportOrg: humanSupportOrg.trim() || undefined,
+            invalidOptionMessage: invalidOptionMessage.trim() || 'Selecione a opção acima',
+            humanSupportKeywords: humanSupportKeywordsList,
+            humanSupportPhone: humanSupportPhone.trim(),
+            humanSupportName: humanSupportName.trim() || 'Suporte Oficial',
+            humanSupportOrg: humanSupportOrg.trim(),
             updatedAt: new Date().toISOString(),
         };
+
+        const payload: Record<string, any> = {};
+        for (const [key, val] of Object.entries(rawPayload)) {
+            if (val !== undefined) {
+                payload[key] = val;
+            }
+        }
 
         try {
             await setDoc(configDocRef!, payload, { merge: true });
