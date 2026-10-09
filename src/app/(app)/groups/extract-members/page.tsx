@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, useMemoFirebase, addDocumentNonBlocking, useCollection, deleteDocumentNonBlocking } from '@/firebase';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, RefreshCw, Copy, Trash2, Download, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Users, RefreshCw, Copy, Trash2, Download, CheckCircle2, ChevronRight, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings, ExtractedGroup } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -43,6 +43,7 @@ function ExtractMembersContent() {
 
   const [isLoadingMyGroups, setIsLoadingMyGroups] = useState(false);
   const [myGroups, setMyGroups] = useState<ListedGroup[] | null>(null);
+  const [groupSearchQuery, setGroupSearchQuery] = useState('');
 
   useEffect(() => {
     if (initialJid && !jid) {
@@ -165,6 +166,16 @@ function ExtractMembersContent() {
       setIsLoadingMyGroups(false);
     }
   };
+
+  const filteredMyGroups = useMemo(() => {
+    if (!myGroups) return [];
+    if (!groupSearchQuery.trim()) return myGroups;
+    const term = groupSearchQuery.toLowerCase().trim();
+    return myGroups.filter(g => 
+      g.name.toLowerCase().includes(term) || 
+      g.jid.toLowerCase().includes(term)
+    );
+  }, [myGroups, groupSearchQuery]);
   
   const handleSaveExtraction = () => {
     if (!currentExtraction || !user) return;
@@ -247,7 +258,7 @@ function ExtractMembersContent() {
                   />
                 </div>
 
-                {/* Seletor rápido de grupos da conta */}
+                {/* Seletor rápido de grupos da conta com pesquisa */}
                 <div className="pt-2">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-muted-foreground uppercase">
@@ -266,25 +277,55 @@ function ExtractMembersContent() {
                     </Button>
                   </div>
 
-                  {myGroups && myGroups.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-2 bg-muted/20">
-                      {myGroups.map((g) => (
-                        <button
-                          key={g.jid}
-                          type="button"
-                          onClick={() => {
-                            setJid(g.jid);
-                            handleExtractMembers(g.jid);
-                          }}
-                          className="flex items-center justify-between p-2 rounded text-left border bg-card hover:bg-muted/60 transition-colors text-xs"
-                        >
-                          <div className="min-w-0 flex-1 pr-2">
-                            <div className="font-medium truncate">{g.name}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono truncate">{g.jid}</div>
-                          </div>
-                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        </button>
-                      ))}
+                  {myGroups && (
+                    <div className="space-y-2 border rounded-md p-2.5 bg-muted/20">
+                      {/* Campo de Busca Rápida de Grupos */}
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          placeholder="Pesquisar grupo por nome ou JID..."
+                          value={groupSearchQuery}
+                          onChange={(e) => setGroupSearchQuery(e.target.value)}
+                          className="h-8 pl-8 pr-7 text-xs bg-card"
+                        />
+                        {groupSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setGroupSearchQuery('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {filteredMyGroups.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pt-1">
+                          {filteredMyGroups.map((g) => (
+                            <button
+                              key={g.jid}
+                              type="button"
+                              onClick={() => {
+                                setJid(g.jid);
+                                handleExtractMembers(g.jid);
+                              }}
+                              className="flex items-center justify-between p-2 rounded text-left border bg-card hover:bg-muted/80 transition-colors text-xs"
+                            >
+                              <div className="min-w-0 flex-1 pr-2">
+                                <div className="font-semibold truncate">{g.name}</div>
+                                <div className="text-[10px] text-muted-foreground font-mono truncate">{g.jid}</div>
+                              </div>
+                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {filteredMyGroups.length === 0 && myGroups.length > 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-3 italic">
+                          Nenhum grupo encontrado com o termo "{groupSearchQuery}".
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

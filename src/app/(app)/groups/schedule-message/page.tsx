@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
+import { useState, useRef, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, ChevronRight } from 'lucide-react';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, Search, Check, CheckCircle2, X } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,6 +124,8 @@ function ScheduleMessageForm({
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
     const [availableGroups, setAvailableGroups] = useState<ListedGroup[] | null>(null);
     const [showGroupPicker, setShowGroupPicker] = useState(false);
+    const [groupSearchQuery, setGroupSearchQuery] = useState('');
+    const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
 
     const form = useForm<ScheduleFormData>({
         resolver: zodResolver(scheduleSchema),
@@ -186,13 +188,45 @@ function ScheduleMessageForm({
                 throw new Error(data.error || 'Falha ao buscar grupos.');
             }
 
-            setAvailableGroups(data.groups || []);
+            const groups = data.groups || [];
+            setAvailableGroups(groups);
             setShowGroupPicker(true);
+
+            // Atualiza nome do grupo selecionado se já houver JID
+            const currentJid = form.getValues('jid');
+            if (currentJid) {
+                const found = groups.find((g: ListedGroup) => g.jid === currentJid);
+                if (found) setSelectedGroupName(found.name);
+            }
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Erro ao listar grupos', description: err.message });
         } finally {
             setIsLoadingGroups(false);
         }
+    };
+
+    // Auto-carrega grupos ao abrir o formulário
+    useEffect(() => {
+        if (!availableGroups && user) {
+            handleFetchConnectedGroups();
+        }
+    }, [user]);
+
+    const filteredGroups = useMemo(() => {
+        if (!availableGroups) return [];
+        if (!groupSearchQuery.trim()) return availableGroups;
+        const queryNorm = groupSearchQuery.toLowerCase().trim();
+        return availableGroups.filter(g => 
+            g.name.toLowerCase().includes(queryNorm) || 
+            g.jid.toLowerCase().includes(queryNorm)
+        );
+    }, [availableGroups, groupSearchQuery]);
+
+    const handleSelectGroup = (group: ListedGroup) => {
+        form.setValue('jid', group.jid);
+        setSelectedGroupName(group.name);
+        setGroupSearchQuery('');
+        setShowGroupPicker(false);
     };
 
     const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,13 +351,14 @@ function ScheduleMessageForm({
                         </AlertDescription>
                     </Alert>
 
+                    {/* Campo de Grupo com Pesquisa Integrada */}
                     <FormField
                         control={form.control}
                         name="jid"
                         render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <FormLabel>Grupo (JID)</FormLabel>
+                                    <FormLabel>Grupo de Destino (JID)</FormLabel>
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -333,34 +368,111 @@ function ScheduleMessageForm({
                                         className="h-6 text-xs text-primary gap-1 px-1.5"
                                     >
                                         <ListFilter className="h-3 w-3" />
-                                        {isLoadingGroups ? 'Buscando...' : 'Selecionar de Meus Grupos'}
+                                        {isLoadingGroups ? 'Buscando...' : (availableGroups ? 'Atualizar Grupos' : 'Buscar Meus Grupos')}
                                     </Button>
                                 </div>
+
                                 <FormControl>
-                                    <Input placeholder="Ex: 120363153742561022@g.us" {...field} />
+                                    <div className="relative">
+                                        <Input 
+                                            placeholder="Digite o JID ou pesquise pelo nome do grupo..." 
+                                            {...field}
+                                            onChange={(e) => {
+                                                field.onChange(e.target.value);
+                                                setGroupSearchQuery(e.target.value);
+                                                if (availableGroups && availableGroups.length > 0) {
+                                                    setShowGroupPicker(true);
+                                                }
+                                                // Se digitou diretamente um JID que coincide com um grupo conhecido
+                                                if (availableGroups) {
+                                                    const match = availableGroups.find(g => g.jid === e.target.value || g.name.toLowerCase() === e.target.value.toLowerCase());
+                                                    if (match) {
+                                                        setSelectedGroupName(match.name);
+                                                    } else {
+                                                        setSelectedGroupName(null);
+                                                    }
+                                                }
+                                            }}
+                                            onFocus={() => {
+                                                if (availableGroups && availableGroups.length > 0) {
+                                                    setShowGroupPicker(true);
+                                                }
+                                            }}
+                                        />
+                                    </div>
                                 </FormControl>
+
+                                {selectedGroupName && (
+                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-0.5">
+                                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                        <span>Grupo selecionado: <strong>{selectedGroupName}</strong></span>
+                                    </div>
+                                )}
                                 <FormMessage />
 
+                                {/* Menu Dropdown com Busca e Grupos Conectados */}
                                 {showGroupPicker && availableGroups && (
-                                    <div className="mt-2 border rounded-md p-2 bg-muted/20 max-h-36 overflow-y-auto space-y-1">
-                                        <div className="flex justify-between items-center text-[11px] font-semibold text-muted-foreground mb-1">
-                                            <span>Grupos Conectados:</span>
-                                            <button type="button" onClick={() => setShowGroupPicker(false)} className="hover:underline">Fechar</button>
-                                        </div>
-                                        {availableGroups.map(g => (
-                                            <button
-                                                key={g.jid}
-                                                type="button"
-                                                onClick={() => {
-                                                    form.setValue('jid', g.jid);
-                                                    setShowGroupPicker(false);
-                                                }}
-                                                className="w-full flex items-center justify-between p-1.5 rounded text-left hover:bg-muted text-xs transition-colors"
+                                    <div className="mt-2 border rounded-lg p-2.5 bg-card shadow-lg max-h-60 overflow-hidden flex flex-col space-y-2 z-50 border-primary/20">
+                                        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground pb-1 border-b">
+                                            <span className="flex items-center gap-1">
+                                                <Search className="h-3.5 w-3.5 text-primary" />
+                                                Buscar nos Grupos Conectados ({filteredGroups.length})
+                                            </span>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setShowGroupPicker(false)} 
+                                                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
                                             >
-                                                <span className="font-medium truncate mr-2">{g.name}</span>
-                                                <span className="text-[10px] font-mono text-muted-foreground shrink-0">{g.jid}</span>
+                                                Fechar ✕
                                             </button>
-                                        ))}
+                                        </div>
+
+                                        {/* Barra de Pesquisa Rápida */}
+                                        <div className="relative">
+                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                                            <Input
+                                                placeholder="Digite para filtrar por nome ou JID..."
+                                                value={groupSearchQuery}
+                                                onChange={(e) => setGroupSearchQuery(e.target.value)}
+                                                className="h-8 pl-8 pr-7 text-xs bg-muted/30"
+                                                autoFocus
+                                            />
+                                            {groupSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setGroupSearchQuery('')}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                >
+                                                    <X className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Lista de Grupos Filtrada */}
+                                        <div className="overflow-y-auto max-h-36 space-y-1 pr-1">
+                                            {filteredGroups.map(g => (
+                                                <button
+                                                    key={g.jid}
+                                                    type="button"
+                                                    onClick={() => handleSelectGroup(g)}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between p-2 rounded text-left hover:bg-muted text-xs transition-colors",
+                                                        field.value === g.jid && "bg-primary/10 border border-primary/40 text-primary font-medium"
+                                                    )}
+                                                >
+                                                    <div className="min-w-0 flex-1 pr-2">
+                                                        <div className="font-semibold truncate">{g.name}</div>
+                                                        <div className="text-[10px] font-mono text-muted-foreground truncate">{g.jid}</div>
+                                                    </div>
+                                                    {field.value === g.jid && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                                                </button>
+                                            ))}
+                                            {filteredGroups.length === 0 && (
+                                                <p className="text-xs text-muted-foreground text-center py-3 italic">
+                                                    Nenhum grupo encontrado para "{groupSearchQuery}".
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </FormItem>

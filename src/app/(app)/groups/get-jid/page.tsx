@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { doc } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Send, RefreshCw, Copy, Users, Calendar, ArrowRight, MessageSquare } from 'lucide-react';
+import { Send, RefreshCw, Copy, Users, Calendar, ArrowRight, MessageSquare, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,7 @@ export default function GetJidPage() {
 
   const [isLoadingMyGroups, setIsLoadingMyGroups] = useState(false);
   const [myGroups, setMyGroups] = useState<ListedGroup[] | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const settingsDocRef = useMemoFirebase(() => {
     if (!user) return null;
@@ -172,11 +173,21 @@ export default function GetJidPage() {
     }
   };
 
+  const filteredMyGroups = useMemo(() => {
+    if (!myGroups) return [];
+    if (!searchTerm.trim()) return myGroups;
+    const term = searchTerm.toLowerCase().trim();
+    return myGroups.filter(g => 
+      g.name.toLowerCase().includes(term) || 
+      g.jid.toLowerCase().includes(term)
+    );
+  }, [myGroups, searchTerm]);
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
         title="Obter JID do Grupo"
-        description="Consulte o JID de qualquer grupo via link de convite ou liste os grupos do seu WhatsApp conectado."
+        description="Consulte o JID de qualquer grupo via link de convite ou liste e pesquise os grupos do seu WhatsApp conectado."
       />
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
         <div className="w-full max-w-3xl mx-auto space-y-6">
@@ -277,7 +288,7 @@ export default function GetJidPage() {
               <div>
                 <CardTitle className="text-base">Grupos do WhatsApp Conectado</CardTitle>
                 <CardDescription className="text-xs">
-                  Carregue todos os grupos da sua conta diretamente da UazAPI para pegar seus JIDs.
+                  Carregue e pesquise os grupos da sua conta diretamente da UazAPI para pegar seus JIDs.
                 </CardDescription>
               </div>
               <Button
@@ -296,53 +307,83 @@ export default function GetJidPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              {myGroups && myGroups.length > 0 && (
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                  {myGroups.map((g) => (
-                    <div
-                      key={g.jid}
-                      className="flex items-center justify-between p-2.5 rounded-md border text-sm hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1 pr-3">
-                        <div className="font-medium truncate">{g.name}</div>
-                        <div className="text-[11px] font-mono text-muted-foreground truncate">{g.jid}</div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCopyJid(g.jid)}
-                          className="h-8 px-2 text-xs"
-                          title="Copiar JID"
-                        >
-                          <Copy className="h-3.5 w-3.5 mr-1" />
-                          Copiar
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          asChild
-                          className="h-8 px-2 text-xs"
-                        >
-                          <Link href={`/groups/extract-members?jid=${encodeURIComponent(g.jid)}`}>
-                            Extrair
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {myGroups && (
+                <div className="space-y-3">
+                  {/* Campo de Pesquisa em Tempo Real */}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Pesquisar grupo por nome ou JID..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9 pr-8 text-xs bg-muted/20"
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
 
-              {myGroups && myGroups.length === 0 && (
-                <p className="text-sm text-center text-muted-foreground py-4">
-                  Nenhum grupo encontrado na conta conectada.
-                </p>
+                  {filteredMyGroups.length > 0 && (
+                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                      {filteredMyGroups.map((g) => (
+                        <div
+                          key={g.jid}
+                          className="flex items-center justify-between p-2.5 rounded-md border text-sm hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1 pr-3">
+                            <div className="font-medium truncate">{g.name}</div>
+                            <div className="text-[11px] font-mono text-muted-foreground truncate">{g.jid}</div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCopyJid(g.jid)}
+                              className="h-8 px-2 text-xs"
+                              title="Copiar JID"
+                            >
+                              <Copy className="h-3.5 w-3.5 mr-1" />
+                              Copiar
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              asChild
+                              className="h-8 px-2 text-xs"
+                            >
+                              <Link href={`/groups/extract-members?jid=${encodeURIComponent(g.jid)}`}>
+                                Extrair
+                              </Link>
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {filteredMyGroups.length === 0 && myGroups.length > 0 && (
+                    <p className="text-sm text-center text-muted-foreground py-4">
+                      Nenhum grupo encontrado com o termo "{searchTerm}".
+                    </p>
+                  )}
+
+                  {myGroups.length === 0 && (
+                    <p className="text-sm text-center text-muted-foreground py-4">
+                      Nenhum grupo encontrado na conta conectada.
+                    </p>
+                  )}
+                </div>
               )}
 
               {!myGroups && !isLoadingMyGroups && (
                 <p className="text-xs text-muted-foreground text-center py-2">
-                  Clique no botão acima para listar os grupos do WhatsApp conectado.
+                  Clique no botão acima para listar e pesquisar os grupos do WhatsApp conectado.
                 </p>
               )}
             </CardContent>
