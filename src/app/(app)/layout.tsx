@@ -952,8 +952,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               
               {permissions.users && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/users'} tooltip="Sua Equipe">
-                      <Link href="/users"><Users className="h-4 w-4" /><span className="text-[13px] font-medium">Sua Equipe</span></Link>
+                  <SidebarMenuButton asChild isActive={pathname === '/users'} tooltip="Gerenciar Usuários">
+                      <Link href="/users"><Users className="h-4 w-4 text-sky-600 dark:text-sky-400" /><span className="text-[13px] font-medium">Gerenciar Usuários</span></Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
