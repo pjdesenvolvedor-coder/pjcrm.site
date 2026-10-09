@@ -25,6 +25,23 @@ function formatPhoneWith55(phone: string): string {
   return digits;
 }
 
+function cleanSiteUrl(url: string): string {
+  let clean = url.trim();
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+    clean = `https://${clean}`;
+  }
+  return clean;
+}
+
+function formatSupportUrl(support: string): string {
+  const raw = support.trim();
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+  const digits = formatPhoneWith55(raw);
+  return `https://wa.me/${digits}`;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -42,16 +59,97 @@ export async function POST(request: Request) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    let finalMessage = String(message).trim();
-    if (siteLink && !finalMessage.includes(siteLink.trim())) {
-      finalMessage = `${finalMessage}\n\n${siteLink.trim()}`;
+    const finalMessage = String(message).trim();
+
+    // Monta os botões interativos (choices) para /send/menu
+    const choices: string[] = [];
+
+    if (siteLink && String(siteLink).trim()) {
+      const siteUrl = cleanSiteUrl(String(siteLink));
+      choices.push(`Comprar Agora|${siteUrl}`);
     }
 
+    if (supportNumber && String(supportNumber).trim()) {
+      const supportUrl = formatSupportUrl(String(supportNumber));
+      choices.push(`Preciso de Suporte|${supportUrl}`);
+    }
+
+    const hasButtons = choices.length > 0;
     let uazapiRes: Response;
 
     try {
-      if (imageUrl && String(imageUrl).trim()) {
-        // Envio com Imagem via /send/media
+      if (hasButtons) {
+        // Envio com Botões Interativos via /send/menu
+        const menuPayload: any = {
+          number: destinationJid,
+          type: 'button',
+          text: finalMessage,
+          choices,
+        };
+
+        if (imageUrl && String(imageUrl).trim()) {
+          menuPayload.imageButton = String(imageUrl).trim();
+        }
+
+        uazapiRes = await fetch(`${baseUrl}/send/menu`, {
+          method: 'POST',
+          headers: {
+            'token': token,
+            'apikey': token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(menuPayload),
+          signal: controller.signal,
+        });
+
+        // Se /send/menu falhar na instância, tenta fallback com links no texto
+        if (!uazapiRes.ok) {
+          console.warn(`[send-group-message] /send/menu falhou (${uazapiRes.status}), tentando fallback...`);
+          let fallbackMessage = finalMessage;
+          if (siteLink && String(siteLink).trim()) {
+            fallbackMessage += `\n\n🛒 Comprar Agora: ${cleanSiteUrl(String(siteLink))}`;
+          }
+          if (supportNumber && String(supportNumber).trim()) {
+            fallbackMessage += `\n\n💬 Preciso de Suporte: ${formatSupportUrl(String(supportNumber))}`;
+          }
+
+          if (imageUrl && String(imageUrl).trim()) {
+            uazapiRes = await fetch(`${baseUrl}/send/media`, {
+              method: 'POST',
+              headers: {
+                'token': token,
+                'apikey': token,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
+                number: destinationJid,
+                type: 'image',
+                file: String(imageUrl).trim(),
+                text: fallbackMessage,
+              }),
+              signal: controller.signal,
+            });
+          } else {
+            uazapiRes = await fetch(`${baseUrl}/send/text`, {
+              method: 'POST',
+              headers: {
+                'token': token,
+                'apikey': token,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
+                number: destinationJid,
+                text: fallbackMessage,
+              }),
+              signal: controller.signal,
+            });
+          }
+        }
+      } else if (imageUrl && String(imageUrl).trim()) {
+        // Envio com Imagem via /send/media (sem botões)
         uazapiRes = await fetch(`${baseUrl}/send/media`, {
           method: 'POST',
           headers: {
@@ -69,7 +167,7 @@ export async function POST(request: Request) {
           signal: controller.signal,
         });
       } else {
-        // Envio de Texto via /send/text
+        // Envio de Texto via /send/text (sem botões)
         uazapiRes = await fetch(`${baseUrl}/send/text`, {
           method: 'POST',
           headers: {
@@ -103,29 +201,6 @@ export async function POST(request: Request) {
         { error: responseData.error || responseData.message || 'Falha ao enviar mensagem para o grupo via UAZAPI.', details: responseData },
         { status: uazapiRes.status }
       );
-    }
-
-    // Se houver número de suporte informado, envia o cartão de contato via /send/contact
-    if (supportNumber && String(supportNumber).trim()) {
-      try {
-        const formattedSupport = formatPhoneWith55(String(supportNumber).trim());
-        await fetch(`${baseUrl}/send/contact`, {
-          method: 'POST',
-          headers: {
-            'token': token,
-            'apikey': token,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            number: destinationJid,
-            fullName: 'Suporte',
-            phoneNumber: formattedSupport,
-          }),
-        }).catch(err => console.error('Erro ao enviar contato de suporte no grupo:', err));
-      } catch (err) {
-        console.error('Erro ao processar contato de suporte:', err);
-      }
     }
 
     return NextResponse.json({ success: true, data: responseData });

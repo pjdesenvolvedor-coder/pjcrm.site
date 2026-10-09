@@ -120,6 +120,8 @@ export function ScheduledMessageHandler() {
                             message: msg.message,
                             imageUrl: msg.imageUrl,
                             token: msgToken,
+                            supportNumber: msg.supportNumber,
+                            siteLink: msg.siteLink,
                         }),
                     });
 
