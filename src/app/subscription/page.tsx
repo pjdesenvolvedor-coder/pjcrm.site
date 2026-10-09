@@ -164,41 +164,13 @@ export default function SubscriptionPage() {
   
     try {
       const userDocRef = doc(firestore, 'users', user.uid);
-
-      // If it's not a trial, we might need to find a token
-      if (!isTrial) {
-        const userSettingsDoc = await getDoc(doc(firestore, 'users', user.uid, 'settings', 'config'));
-        // If it's a regular subscription payment and the user already has a token, just extend the date.
-        if (userSettingsDoc.exists() && userSettingsDoc.data().webhookToken) {
-            const currentUserDoc = await getDoc(userDocRef);
-            const currentEndDate = currentUserDoc.exists() && currentUserDoc.data().subscriptionEndDate 
-                ? currentUserDoc.data().subscriptionEndDate.toDate() 
-                : new Date();
-            
-            const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), 30);
-            
-            await setDocumentNonBlocking(userDocRef, {
-              subscriptionEndDate: Timestamp.fromDate(newEndDate),
-              subscriptionPlan: plan,
-            }, { merge: true });
-            return;
-        }
-      }
-
-      // Logic to assign a new token (for first-time trial or a user re-subscribing after token was revoked)
-      const tokensRef = collection(firestore, 'tokens');
-      const q = query(tokensRef, where('status', '==', 'available'), limit(1));
-      const availableTokenSnap = await getDocs(q);
-  
-      if (availableTokenSnap.empty) {
-        throw new Error('Nenhum token de conexão disponível no momento. Contate o suporte.');
-      }
-  
-      const tokenDoc = availableTokenSnap.docs[0];
-      const tokenData = tokenDoc.data() as Token;
+      const currentUserDoc = await getDoc(userDocRef);
+      const currentEndDate = currentUserDoc.exists() && currentUserDoc.data().subscriptionEndDate 
+          ? currentUserDoc.data().subscriptionEndDate.toDate() 
+          : new Date();
       
-      const userSettingsRef = doc(firestore, 'users', user.uid, 'settings', 'config');
-  
+      const newEndDate = addDays(currentEndDate > new Date() ? currentEndDate : new Date(), isTrial ? 3 : 30);
+
       const allPermissionsFalse: UserPermissions = {
         dashboard: false, customers: false, inbox: false, automations: false,
         groups: false, shot: false, zapconnect: false, settings: false, users: false, estoque: false,
@@ -207,39 +179,25 @@ export default function SubscriptionPage() {
   
       let newPermissions: UserPermissions;
       if (plan === 'basic') {
-        newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, shot: true, zapconnect: true };
+        newPermissions = { ...allPermissionsFalse, dashboard: true, groups: true, shot: true, zapconnect: true, calendario: true, linksClaro: true, dbCleaner: true, zapVendas: true };
       } else { // pro
-        newPermissions = { ...allPermissionsFalse, dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, estoque: true, linksClaro: true };
+        newPermissions = { ...allPermissionsFalse, dashboard: true, customers: true, inbox: true, automations: true, groups: true, shot: true, zapconnect: true, settings: true, estoque: true, linksClaro: true, calendario: true, dbCleaner: true, zapVendas: true, pix: true, ads: true, notes: true, usage: true, logs: true };
       }
   
-      const subscriptionEndDate = Timestamp.fromDate(addDays(new Date(), isTrial ? 3 : 30));
-  
-      const dataForTransaction: any = {
+      const dataToUpdate: any = {
         subscriptionPlan: plan,
         permissions: newPermissions,
-        subscriptionEndDate: subscriptionEndDate,
+        subscriptionEndDate: Timestamp.fromDate(newEndDate),
       };
 
       if (isTrial) {
-        dataForTransaction.trialActivated = true;
+        dataToUpdate.trialActivated = true;
       }
   
-      await runTransaction(firestore, async (transaction) => {
-        transaction.update(tokenDoc.ref, {
-          status: 'in_use',
-          assignedTo: user.uid,
-          assignedEmail: user.email,
-        });
-  
-        transaction.set(userDocRef, dataForTransaction, { merge: true });
-  
-        transaction.set(userSettingsRef, {
-          webhookToken: tokenData.value
-        }, { merge: true });
-      });
+      await setDocumentNonBlocking(userDocRef, dataToUpdate, { merge: true });
   
     } catch(e: any) {
-      console.error("Token assignment or subscription update failed:", e);
+      console.error("Subscription update failed:", e);
       toast({
         variant: 'destructive',
         title: 'Falha na Ativação',

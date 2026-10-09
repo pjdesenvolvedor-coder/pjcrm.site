@@ -116,11 +116,8 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
   }, [userAuthState.user, firestore]);
 
   const effectiveUserId = useMemo(() => {
-    if (userProfile?.parentId) {
-      return userProfile.parentId;
-    }
     return userAuthState.user?.uid || '';
-  }, [userAuthState.user, userProfile]);
+  }, [userAuthState.user]);
 
   // Memoize the context value
   const contextValue = useMemo((): FirebaseContextState => {

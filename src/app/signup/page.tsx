@@ -33,10 +33,7 @@ function SignupForm() {
   const { firestore } = useFirebase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
-
-  const ref = searchParams.get('ref');
 
   const form = useForm<z.infer<typeof signupSchema>>({
     resolver: zodResolver(signupSchema),
@@ -60,10 +57,10 @@ function SignupForm() {
       
       // Default permissions for new accounts
       const defaultPermissions: UserPermissions = {
-        dashboard: true, customers: false, inbox: false, automations: false,
-        groups: false, shot: false, zapconnect: false, settings: false, users: false,
-        attendants: false, notes: true, ads: false, pix: false, usage: false, estoque: false,
-        logs: false, dbCleaner: false, zapVendas: false, calendario: false, linksClaro: false
+        dashboard: true, customers: true, inbox: true, automations: true,
+        groups: true, shot: true, zapconnect: true, settings: true, users: false,
+        attendants: false, notes: true, ads: true, pix: true, usage: true, estoque: true,
+        logs: true, dbCleaner: true, zapVendas: true, calendario: true, linksClaro: true
       };
 
       const profileData: any = {
@@ -72,24 +69,13 @@ function SignupForm() {
         lastName: values.lastName,
         email: firebaseUser.email,
         createdAt: serverTimestamp(),
-        role: ref ? "Agent" : "User", // If invited, it's an agent
-        parentId: ref || null, // Link to owner
+        role: "User",
         permissions: defaultPermissions,
         avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/40/40`,
         status: 'active',
         subscriptionPlan: null,
         subscriptionEndDate: null,
       };
-
-      // If it's an attendant, copy parent's plan info
-      if (ref) {
-          const parentDoc = await getDoc(doc(firestore, "users", ref));
-          if (parentDoc.exists()) {
-              const parentData = parentDoc.data();
-              profileData.subscriptionPlan = parentData.subscriptionPlan ?? null;
-              profileData.subscriptionEndDate = parentData.subscriptionEndDate ?? null;
-          }
-      }
 
       setDocumentNonBlocking(userDocRef, profileData, { merge: true });
 

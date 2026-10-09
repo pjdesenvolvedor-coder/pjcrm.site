@@ -49,6 +49,7 @@ import {
   Webhook,
   DollarSign,
   RefreshCcw,
+  Save,
   SaveAll,
   Link2,
   ShieldCheck,
@@ -98,8 +99,10 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useUser, useAuth, useDoc, useFirebase, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where } from 'firebase/firestore';
+import { doc, collection, query, where, setDoc } from 'firebase/firestore';
 import type { UserProfile, Settings, Client, Lead } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -197,6 +200,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'qr_code' | 'error'>('disconnected');
   const [qrCode, setQrCode] = useState<string | null>(null);
   
+  const [hubTokenInput, setHubTokenInput] = useState('');
+  const [isSavingHubToken, setIsSavingHubToken] = useState(false);
+
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -209,6 +215,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [firestore, effectiveUserId]);
 
   const { data: settings, isLoading: isLoadingSettings } = useDoc<Settings>(settingsDocRef);
+
+  useEffect(() => {
+    if (settings?.webhookToken !== undefined) {
+      setHubTokenInput(settings.webhookToken || '');
+    }
+  }, [settings?.webhookToken]);
 
   const supportClientsQuery = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
@@ -409,15 +421,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   
   const userAvatar = (liveStatus?.status === 'connected' && liveStatus.profilePicUrl) ? liveStatus.profilePicUrl : (userProfile?.avatarUrl || "https://picsum.photos/seed/1/40/40");
 
+  const handleSaveHubToken = async () => {
+    if (!effectiveUserId) return;
+    const tokenClean = hubTokenInput.trim();
+    if (!tokenClean) {
+      toast({
+        variant: 'destructive',
+        title: 'Token inválido',
+        description: 'Digite ou cole o token antes de salvar.',
+      });
+      return;
+    }
+    setIsSavingHubToken(true);
+    try {
+      await setDoc(doc(firestore, 'users', effectiveUserId, 'settings', 'config'), { webhookToken: tokenClean }, { merge: true });
+      toast({
+        title: 'Token Salvo com Sucesso!',
+        description: 'Seu token do Hub Principal foi atualizado.',
+      });
+      fetchStatus();
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar',
+        description: e.message || 'Falha ao salvar token.',
+      });
+    } finally {
+      setIsSavingHubToken(false);
+    }
+  };
+
   const handleConnect = async () => {
-    if (!settings?.webhookToken) {
+    const effectiveToken = (hubTokenInput || settings?.webhookToken || '').trim();
+    if (!effectiveToken) {
         toast({
             variant: 'destructive',
-            title: 'Token não encontrado',
-            description: 'Seu token de autenticação não foi configurado.',
+            title: 'Token não informado',
+            description: 'Por favor, digite ou cole seu token antes de conectar.',
         });
         setConnectionStatus('error');
         return;
+    }
+
+    // Se o token digitado for diferente do salvo, salva automaticamente no banco
+    if (effectiveUserId && effectiveToken !== settings?.webhookToken) {
+        setDoc(doc(firestore, 'users', effectiveUserId, 'settings', 'config'), { webhookToken: effectiveToken }, { merge: true }).catch(() => {});
     }
 
     setConnectionStatus('connecting');
@@ -427,7 +475,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const response = await fetch('/api/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: settings.webhookToken }),
+            body: JSON.stringify({ token: effectiveToken }),
         });
 
         const data = await response.json().catch(() => ({}));
@@ -453,13 +501,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
   
   const handleDisconnect = async () => {
-    if (!settings?.webhookToken) return;
+    const effectiveToken = (hubTokenInput || settings?.webhookToken || '').trim();
+    if (!effectiveToken) return;
     setIsDisconnecting(true);
     try {
         await fetch('/api/disconnect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: settings.webhookToken }),
+            body: JSON.stringify({ token: effectiveToken }),
         });
         toast({ title: 'Desconectado!' });
         setLiveStatus({ status: 'disconnected' });
@@ -921,11 +970,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       <CollapsibleContent>
                           <SidebarMenuSub>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings'}><Link href="/settings">Geral</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/attendants'}><Link href="/settings/attendants">Atendentes (Vendas)</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token">Tokens n8n</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              {userProfile?.role === 'Admin' && (
-                                  <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/tokens'}><Link href="/settings/tokens">Estoque de Tokens</Link></SidebarMenuSubButton></SidebarMenuSubItem>
-                              )}
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Planos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Predefinições</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                           </SidebarMenuSub>
@@ -966,36 +1011,58 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     )}
                 </DialogHeader>
 
-                {/* Bloco de exibição do Token do Hub Principal */}
-                <div className="px-6 pt-4 pb-0">
-                  <div className="flex items-center justify-between gap-2 p-3 rounded-lg border bg-muted/40 border-border text-xs">
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                {/* Bloco de edição/exibição do Token do Hub Principal */}
+                <div className="px-6 pt-4 pb-0 space-y-2">
+                  <div className="flex flex-col gap-1.5 p-3 rounded-lg border bg-muted/40 border-border">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                         <Key className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wider">Token UAZAPI</span>
-                      </div>
-                      <span className="font-mono text-xs font-bold text-foreground mt-0.5 truncate" title={typeof settings?.webhookToken === 'string' ? settings.webhookToken : 'Não configurado'}>
-                        {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `${settings.webhookToken.slice(0, 10)}...${settings.webhookToken.slice(-4)}` : 'Não configurado'}
-                      </span>
+                        Token UAZAPI
+                      </Label>
+                      {settings?.webhookToken && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                          Salvo
+                        </Badge>
+                      )}
                     </div>
-                    {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 && (
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        type="text"
+                        placeholder="Cole aqui seu token..."
+                        value={hubTokenInput}
+                        onChange={(e) => setHubTokenInput(e.target.value)}
+                        className="font-mono text-xs h-8 bg-background"
+                      />
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground hover:bg-background/80"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (settings?.webhookToken) {
-                            navigator.clipboard.writeText(settings.webhookToken);
-                            toast({ title: 'Token copiado!', description: 'O token do Hub Principal foi copiado.' });
-                          }
-                        }}
-                        title="Copiar token completo"
+                        variant="default"
+                        size="sm"
+                        className="h-8 px-3 shrink-0 gap-1 text-xs"
+                        onClick={handleSaveHubToken}
+                        disabled={isSavingHubToken}
                       >
-                        <Copy className="h-3.5 w-3.5" />
+                        {isSavingHubToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                        Salvar
                       </Button>
-                    )}
+                      {hubTokenInput && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            navigator.clipboard.writeText(hubTokenInput);
+                            toast({ title: 'Token copiado!', description: 'O token foi copiado para a área de transferência.' });
+                          }}
+                          title="Copiar token"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-1">
+                      Insira o token gerado na UAZAPI e clique em Salvar para conectar seu WhatsApp.
+                    </p>
                   </div>
                 </div>
 
