@@ -677,7 +677,7 @@ export async function GET(request: Request) {
                             ? settings.billingWebhookToken : settings.webhookToken;
                         const response = await fetch(`${originUrl}/api/send-group-message`, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken, supportNumber: msg.supportNumber, siteLink: msg.siteLink }),
+                            body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken, buttons: msg.buttons, supportNumber: msg.supportNumber, siteLink: msg.siteLink }),
                         });
                         if (response.ok) {
                             if (msg.repeatDaily) {

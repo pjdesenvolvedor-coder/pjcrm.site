@@ -247,21 +247,29 @@ export type Subscription = {
   value: string;
 };
 
+export type ScheduledGroupButton = {
+  id: string;
+  label: string;
+  type: 'url' | 'contact';
+  value: string;
+};
+
 export type ScheduledMessage = {
   id: string;
   userId: string;
   jid: string;
   message: string;
-  imageUrl?: string;
+  imageUrl?: string | null;
   sendAt: Timestamp;
   repeatDaily: boolean;
   status: 'Scheduled' | 'Sent' | 'Error' | 'Sending';
   claimedAt?: Timestamp | null;
   useBillingZap?: boolean;
-  errorReason?: string;
+  errorReason?: string | null;
   retryCount?: number;
-  supportNumber?: string;
-  siteLink?: string;
+  supportNumber?: string | null;
+  siteLink?: string | null;
+  buttons?: ScheduledGroupButton[];
 };
 
 export type Token = {

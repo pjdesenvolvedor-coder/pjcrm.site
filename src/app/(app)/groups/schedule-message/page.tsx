@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, Search, Check, CheckCircle2, X } from 'lucide-react';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, Search, Check, CheckCircle2, X, Plus, ExternalLink, MousePointerClick } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
-import type { ScheduledMessage, Settings } from '@/lib/types';
+import type { ScheduledMessage, Settings, ScheduledGroupButton } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -39,6 +39,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const compressImage = (file: File, maxWidth = 1024, maxHeight = 1024, quality = 0.7): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -127,6 +128,26 @@ function ScheduleMessageForm({
     const [groupSearchQuery, setGroupSearchQuery] = useState('');
     const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
 
+    const [buttons, setButtons] = useState<ScheduledGroupButton[]>(() => {
+        if (initialMessage?.buttons && initialMessage.buttons.length > 0) {
+            return initialMessage.buttons;
+        }
+        if (initialMessage?.siteLink || initialMessage?.supportNumber) {
+            const legacy: ScheduledGroupButton[] = [];
+            if (initialMessage.siteLink) {
+                legacy.push({ id: 'btn-1', label: 'Comprar Agora', type: 'url', value: initialMessage.siteLink });
+            }
+            if (initialMessage.supportNumber) {
+                legacy.push({ id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: initialMessage.supportNumber });
+            }
+            return legacy;
+        }
+        return [
+            { id: 'btn-1', label: 'Comprar Agora', type: 'url', value: '' },
+            { id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: '' },
+        ];
+    });
+
     const form = useForm<ScheduleFormData>({
         resolver: zodResolver(scheduleSchema),
         defaultValues: {
@@ -159,10 +180,64 @@ function ScheduleMessageForm({
                 siteLink: initialMessage.siteLink || '',
             });
             setImagePreview(initialMessage.imageUrl || null);
+
+            if (initialMessage.buttons && initialMessage.buttons.length > 0) {
+                setButtons(initialMessage.buttons);
+            } else if (initialMessage.siteLink || initialMessage.supportNumber) {
+                const legacy: ScheduledGroupButton[] = [];
+                if (initialMessage.siteLink) {
+                    legacy.push({ id: 'btn-1', label: 'Comprar Agora', type: 'url', value: initialMessage.siteLink });
+                }
+                if (initialMessage.supportNumber) {
+                    legacy.push({ id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: initialMessage.supportNumber });
+                }
+                setButtons(legacy);
+            } else {
+                setButtons([
+                    { id: 'btn-1', label: 'Comprar Agora', type: 'url', value: '' },
+                    { id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: '' },
+                ]);
+            }
         } else if (initialJid) {
             form.setValue('jid', initialJid);
+            setButtons([
+                { id: 'btn-1', label: 'Comprar Agora', type: 'url', value: '' },
+                { id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: '' },
+            ]);
+        } else {
+            setButtons([
+                { id: 'btn-1', label: 'Comprar Agora', type: 'url', value: '' },
+                { id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: '' },
+            ]);
         }
     }, [initialMessage, initialJid, form]);
+
+    const handleAddButton = () => {
+        if (buttons.length >= 3) {
+            toast({ variant: 'destructive', title: 'Limite de botões', description: 'O WhatsApp suporta no máximo 3 botões por mensagem.' });
+            return;
+        }
+        setButtons(prev => [
+            ...prev,
+            {
+                id: `btn-${Date.now()}`,
+                label: `Botão ${prev.length + 1}`,
+                type: 'url',
+                value: '',
+            }
+        ]);
+    };
+
+    const handleRemoveButton = (id: string) => {
+        setButtons(prev => prev.filter(b => b.id !== id));
+    };
+
+    const handleUpdateButton = (id: string, field: 'label' | 'type' | 'value', val: string) => {
+        setButtons(prev => prev.map(b => {
+            if (b.id !== id) return b;
+            return { ...b, [field]: val };
+        }));
+    };
 
     const handleFetchConnectedGroups = async () => {
         if (!user) return;
@@ -293,6 +368,18 @@ function ScheduleMessageForm({
             finalImageUrl = imagePreview;
         }
 
+        const validButtons = buttons
+            .filter(b => b.label.trim() && b.value.trim())
+            .map(b => ({
+                id: b.id,
+                label: b.label.trim(),
+                type: b.type,
+                value: b.value.trim()
+            }));
+
+        const legacySiteLink = validButtons.find(b => b.type === 'url')?.value || null;
+        const legacySupportNumber = validButtons.find(b => b.type === 'contact')?.value || null;
+
         try {
             if (isEditMode && initialMessage) {
                 const docRef = doc(firestore, 'users', user.uid, 'scheduled_messages', initialMessage.id);
@@ -304,8 +391,9 @@ function ScheduleMessageForm({
                     status: 'Scheduled' as const,
                     imageUrl: finalImageUrl || null,
                     useBillingZap: Boolean(values.useBillingZap),
-                    supportNumber: values.supportNumber?.trim() || null,
-                    siteLink: values.siteLink?.trim() || null,
+                    buttons: validButtons,
+                    supportNumber: legacySupportNumber,
+                    siteLink: legacySiteLink,
                     errorReason: null,
                     retryCount: 0
                 });
@@ -320,8 +408,9 @@ function ScheduleMessageForm({
                     status: 'Scheduled' as const,
                     imageUrl: finalImageUrl || null,
                     useBillingZap: Boolean(values.useBillingZap),
-                    supportNumber: values.supportNumber?.trim() || null,
-                    siteLink: values.siteLink?.trim() || null,
+                    buttons: validButtons,
+                    supportNumber: legacySupportNumber,
+                    siteLink: legacySiteLink,
                     errorReason: null,
                     retryCount: 0,
                 };
@@ -548,33 +637,97 @@ function ScheduleMessageForm({
                         )}
                     />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                            control={form.control}
-                            name="supportNumber"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Contato de Suporte (Opcional)</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Ex: 5511999998888" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="siteLink"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Link do Site (Opcional)</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Ex: https://seusite.com" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                    {/* Seção de Botões Interativos */}
+                    <div className="space-y-3 rounded-lg border p-3.5 bg-muted/20">
+                        <div className="flex items-center justify-between gap-2">
+                            <div>
+                                <div className="text-sm font-semibold flex items-center gap-1.5">
+                                    <ExternalLink className="h-4 w-4 text-primary" />
+                                    Botões Interativos ({buttons.length}/3)
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Adicione até 3 botões com link do site ou WhatsApp direto.
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAddButton}
+                                disabled={buttons.length >= 3}
+                                className="h-8 text-xs gap-1 shrink-0"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                Adicionar Botão
+                            </Button>
+                        </div>
+
+                        {buttons.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic text-center py-2">
+                                Nenhum botão adicionado. A mensagem será enviada sem botões.
+                            </p>
+                        ) : (
+                            <div className="space-y-2.5 pt-1">
+                                {buttons.map((btn, index) => (
+                                    <div key={btn.id} className="p-2.5 border rounded-md bg-card space-y-2 shadow-sm">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                                Botão #{index + 1}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleRemoveButton(btn.id)}
+                                                className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
+                                                title="Remover botão"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <div>
+                                                <Label className="text-xs">Texto do Botão</Label>
+                                                <Input
+                                                    value={btn.label}
+                                                    onChange={(e) => handleUpdateButton(btn.id, 'label', e.target.value)}
+                                                    placeholder="Ex: Comprar Agora"
+                                                    className="h-8 text-xs mt-1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label className="text-xs">Tipo de Ação</Label>
+                                                <Select
+                                                    value={btn.type}
+                                                    onValueChange={(val: 'url' | 'contact') => handleUpdateButton(btn.id, 'type', val)}
+                                                >
+                                                    <SelectTrigger className="h-8 text-xs mt-1">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="url">🔗 Link do Site (URL)</SelectItem>
+                                                        <SelectItem value="contact">💬 Contato WhatsApp</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label className="text-xs">
+                                                {btn.type === 'contact' ? 'Número WhatsApp de Suporte' : 'Endereço do Link (URL)'}
+                                            </Label>
+                                            <Input
+                                                value={btn.value}
+                                                onChange={(e) => handleUpdateButton(btn.id, 'value', e.target.value)}
+                                                placeholder={btn.type === 'contact' ? 'Ex: 5511999998888' : 'Ex: https://seusite.com'}
+                                                className="h-8 text-xs mt-1"
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className='space-y-2'>
@@ -789,6 +942,7 @@ function ScheduleMessageContent() {
                 message: msg.message,
                 imageUrl: msg.imageUrl,
                 token: msgToken,
+                buttons: msg.buttons,
                 supportNumber: msg.supportNumber,
                 siteLink: msg.siteLink
             })
@@ -871,7 +1025,7 @@ function ScheduleMessageContent() {
                 <PlusCircle className="h-4 w-4" />
                 Agendar Mensagem
             </Button>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
                 <ScheduleMessageForm 
                     onFinished={() => setIsDialogOpen(false)} 
                     initialMessage={dialogConfig.message}
@@ -910,7 +1064,31 @@ function ScheduleMessageContent() {
                      {!isLoading && scheduledMessages?.map((msg) => (
                         <TableRow key={msg.id}>
                             <TableCell className="font-medium truncate max-w-xs">{msg.jid}</TableCell>
-                            <TableCell className="truncate max-w-xs">{msg.message}</TableCell>
+                            <TableCell className="max-w-xs">
+                                <div className="truncate font-medium">{msg.message}</div>
+                                {msg.buttons && msg.buttons.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {msg.buttons.map(b => (
+                                            <span key={b.id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground border">
+                                                {b.type === 'contact' ? '💬' : '🔗'} {b.label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (msg.siteLink || msg.supportNumber) ? (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {msg.siteLink && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground border">
+                                                🔗 Comprar Agora
+                                            </span>
+                                        )}
+                                        {msg.supportNumber && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground border">
+                                                💬 Preciso de Suporte
+                                            </span>
+                                        )}
+                                    </div>
+                                ) : null}
+                            </TableCell>
                             <TableCell>
                                 <Badge variant="outline" className="text-xs font-normal">
                                     {msg.useBillingZap ? 'ZAP Cobrança' : 'Hub Principal'}

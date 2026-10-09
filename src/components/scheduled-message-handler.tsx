@@ -120,6 +120,7 @@ export function ScheduledMessageHandler() {
                             message: msg.message,
                             imageUrl: msg.imageUrl,
                             token: msgToken,
+                            buttons: msg.buttons,
                             supportNumber: msg.supportNumber,
                             siteLink: msg.siteLink,
                         }),

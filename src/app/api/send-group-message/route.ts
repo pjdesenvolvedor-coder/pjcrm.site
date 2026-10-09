@@ -45,7 +45,7 @@ function formatSupportUrl(support: string): string {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { jid, message, token, imageUrl, supportNumber, siteLink, serverUrl } = body;
+    const { jid, message, token, imageUrl, buttons, supportNumber, siteLink, serverUrl } = body;
 
     if (!jid || !message || !token) {
       return NextResponse.json(
@@ -63,15 +63,37 @@ export async function POST(request: Request) {
 
     // Monta os botões interativos (choices) para /send/menu
     const choices: string[] = [];
+    const fallbackLinks: { label: string; url: string }[] = [];
 
-    if (siteLink && String(siteLink).trim()) {
-      const siteUrl = cleanSiteUrl(String(siteLink));
-      choices.push(`Comprar Agora|${siteUrl}`);
-    }
+    if (Array.isArray(buttons) && buttons.length > 0) {
+      for (const btn of buttons) {
+        const label = (btn.label || '').trim();
+        const val = (btn.value || '').trim();
+        if (!label || !val) continue;
 
-    if (supportNumber && String(supportNumber).trim()) {
-      const supportUrl = formatSupportUrl(String(supportNumber));
-      choices.push(`Preciso de Suporte|${supportUrl}`);
+        if (btn.type === 'contact') {
+          const supportUrl = formatSupportUrl(val);
+          choices.push(`${label}|${supportUrl}`);
+          fallbackLinks.push({ label, url: supportUrl });
+        } else {
+          const siteUrl = cleanSiteUrl(val);
+          choices.push(`${label}|${siteUrl}`);
+          fallbackLinks.push({ label, url: siteUrl });
+        }
+      }
+    } else {
+      // Suporte legado a siteLink e supportNumber
+      if (siteLink && String(siteLink).trim()) {
+        const siteUrl = cleanSiteUrl(String(siteLink));
+        choices.push(`Comprar Agora|${siteUrl}`);
+        fallbackLinks.push({ label: 'Comprar Agora', url: siteUrl });
+      }
+
+      if (supportNumber && String(supportNumber).trim()) {
+        const supportUrl = formatSupportUrl(String(supportNumber));
+        choices.push(`Preciso de Suporte|${supportUrl}`);
+        fallbackLinks.push({ label: 'Preciso de Suporte', url: supportUrl });
+      }
     }
 
     const hasButtons = choices.length > 0;
@@ -107,11 +129,8 @@ export async function POST(request: Request) {
         if (!uazapiRes.ok) {
           console.warn(`[send-group-message] /send/menu falhou (${uazapiRes.status}), tentando fallback...`);
           let fallbackMessage = finalMessage;
-          if (siteLink && String(siteLink).trim()) {
-            fallbackMessage += `\n\n🛒 Comprar Agora: ${cleanSiteUrl(String(siteLink))}`;
-          }
-          if (supportNumber && String(supportNumber).trim()) {
-            fallbackMessage += `\n\n💬 Preciso de Suporte: ${formatSupportUrl(String(supportNumber))}`;
+          for (const item of fallbackLinks) {
+            fallbackMessage += `\n\n🔗 ${item.label}: ${item.url}`;
           }
 
           if (imageUrl && String(imageUrl).trim()) {
