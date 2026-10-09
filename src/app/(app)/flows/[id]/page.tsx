@@ -166,6 +166,8 @@ function FlowCanvasEditorContent() {
     const copiedNodeRef = useRef<Node | null>(null);
     // Bloco atualmente sob o ponteiro do mouse
     const hoveredNodeRef = useRef<Node | null>(null);
+    // Flag de controle para evitar criação duplicada durante arrastar e soltar da paleta
+    const isDraggingPaletteBlockRef = useRef(false);
 
     // Histórico de alterações para Voltar (Desfazer / Ctrl+Z) e Refazer (Ctrl+Y)
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -724,9 +726,10 @@ function FlowCanvasEditorContent() {
         [pushHistory, setNodes, scheduleAutoSave, toast]
     );
 
-    // Adicionar novo bloco através do clique na paleta flutuante
+    // Adicionar novo bloco através do clique na paleta flutuante (ignora se for término de arraste)
     const handleAddBlock = useCallback(
         (type: FlowNodeData['nodeType']) => {
+            if (isDraggingPaletteBlockRef.current) return;
             createNodeAtPosition(type);
         },
         [createNodeAtPosition]
@@ -734,8 +737,16 @@ function FlowCanvasEditorContent() {
 
     // Handlers para Arrastar e Soltar (Drag and Drop) da paleta para o Canva
     const onDragStart = (event: React.DragEvent, nodeType: FlowNodeData['nodeType']) => {
+        isDraggingPaletteBlockRef.current = true;
         event.dataTransfer.setData('application/reactflow', nodeType);
         event.dataTransfer.effectAllowed = 'move';
+    };
+
+    const onDragEnd = () => {
+        // Pequeno atraso para impedir que evento de clique sintético crie um segundo bloco
+        setTimeout(() => {
+            isDraggingPaletteBlockRef.current = false;
+        }, 200);
     };
 
     const onDragOver = useCallback((event: React.DragEvent) => {
@@ -746,11 +757,17 @@ function FlowCanvasEditorContent() {
     const onDrop = useCallback(
         (event: React.DragEvent) => {
             event.preventDefault();
+            event.stopPropagation();
 
             const type = event.dataTransfer.getData('application/reactflow') as FlowNodeData['nodeType'];
             if (!type) {
                 return;
             }
+
+            // Limpa o dataTransfer para evitar qualquer disparo duplicado
+            try {
+                event.dataTransfer.clearData();
+            } catch {}
 
             // Converter a coordenada do mouse da tela para a coordenada interna do canva (com zoom/pan)
             const position = screenToFlowPosition({
@@ -1365,8 +1382,6 @@ function FlowCanvasEditorContent() {
             {/* ÁREA CENTRAL DO CANVA COM PALETA FLUTUANTE */}
             <div
                 className="relative flex-1 w-full min-h-0 overflow-hidden"
-                onDragOver={onDragOver}
-                onDrop={onDrop}
                 onPointerMove={(e) => {
                     mousePosRef.current = { clientX: e.clientX, clientY: e.clientY };
                 }}
@@ -1419,6 +1434,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'start')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('start')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
@@ -1435,6 +1451,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'condition')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('condition')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
@@ -1451,6 +1468,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'content')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('content')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
@@ -1467,6 +1485,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'menu')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('menu')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
@@ -1483,6 +1502,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'action')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('action')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
@@ -1499,6 +1519,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'flow_connect')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('flow_connect')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
@@ -1515,6 +1536,7 @@ function FlowCanvasEditorContent() {
                             type="button"
                             draggable
                             onDragStart={(e) => onDragStart(e, 'delay')}
+                            onDragEnd={onDragEnd}
                             onClick={() => handleAddBlock('delay')}
                             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
                             title="Clique para adicionar ou arraste para dentro do canva"
