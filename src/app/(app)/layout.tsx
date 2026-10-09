@@ -56,6 +56,10 @@ import {
   Bug,
   Copy,
   Key,
+  Eye,
+  EyeOff,
+  ChevronUp,
+  ChevronDown,
   Workflow,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -202,6 +206,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   
   const [hubTokenInput, setHubTokenInput] = useState('');
   const [isSavingHubToken, setIsSavingHubToken] = useState(false);
+  const [isTokenSectionOpen, setIsTokenSectionOpen] = useState(false);
+  const [showTokenText, setShowTokenText] = useState(false);
 
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1018,59 +1024,104 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     )}
                 </DialogHeader>
 
-                {/* Bloco de edição/exibição do Token do Hub Principal */}
-                <div className="p-4 sm:p-5 pb-2">
-                  <div className="flex flex-col gap-1.5 p-3 rounded-xl border bg-muted/40 border-border">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                        <Key className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                        Token UAZAPI
-                      </Label>
+                {/* Bloco de edição/exibição do Token do Hub Principal com opção de Ocultar/Mostrar */}
+                <div className="p-4 sm:p-5 pb-1">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Key className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-semibold text-foreground leading-tight">Token UAZAPI</span>
+                        <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[190px] sm:max-w-[240px]">
+                          {hubTokenInput ? (showTokenText ? hubTokenInput : `${hubTokenInput.slice(0, 8)}••••••••${hubTokenInput.slice(-4)}`) : 'Não configurado'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
                       {settings?.webhookToken && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 font-semibold">
                           Salvo
                         </Badge>
                       )}
-                    </div>
-                    <div className="flex gap-1.5 mt-0.5">
-                      <Input
-                        type="text"
-                        placeholder="Cole aqui seu token..."
-                        value={hubTokenInput}
-                        onChange={(e) => setHubTokenInput(e.target.value)}
-                        className="font-mono text-xs h-8 bg-background flex-1 min-w-0"
-                      />
                       <Button
                         type="button"
-                        variant="default"
+                        variant="ghost"
                         size="sm"
-                        className="h-8 px-2.5 shrink-0 gap-1 text-xs"
-                        onClick={handleSaveHubToken}
-                        disabled={isSavingHubToken}
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                        onClick={() => setIsTokenSectionOpen(!isTokenSectionOpen)}
+                        title={isTokenSectionOpen ? "Ocultar configurações do token" : "Mostrar/Editar token"}
                       >
-                        {isSavingHubToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                        <span className="hidden sm:inline">Salvar</span>
+                        {isTokenSectionOpen ? (
+                          <>
+                            <EyeOff className="h-3.5 w-3.5" />
+                            <span className="text-[11px]">Ocultar</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-3.5 w-3.5" />
+                            <span className="text-[11px]">Editar</span>
+                          </>
+                        )}
                       </Button>
-                      {hubTokenInput && (
+                    </div>
+                  </div>
+
+                  {isTokenSectionOpen && (
+                    <div className="flex flex-col gap-2 p-3 mt-2 rounded-xl border bg-muted/40 border-border animate-in fade-in-0 duration-150">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                          <Key className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                          Inserir / Alterar Token
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => setShowTokenText(!showTokenText)}
+                          className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                          title={showTokenText ? 'Ocultar caracteres' : 'Mostrar caracteres'}
+                        >
+                          {showTokenText ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          <span>{showTokenText ? 'Ocultar' : 'Revelar'}</span>
+                        </button>
+                      </div>
+                      <div className="flex gap-1.5 mt-0.5">
+                        <Input
+                          type={showTokenText ? 'text' : 'password'}
+                          placeholder="Cole aqui seu token..."
+                          value={hubTokenInput}
+                          onChange={(e) => setHubTokenInput(e.target.value)}
+                          className="font-mono text-xs h-8 bg-background flex-1 min-w-0"
+                        />
                         <Button
                           type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            navigator.clipboard.writeText(hubTokenInput);
-                            toast({ title: 'Token copiado!', description: 'O token foi copiado para a área de transferência.' });
-                          }}
-                          title="Copiar token"
+                          variant="default"
+                          size="sm"
+                          className="h-8 px-2.5 shrink-0 gap-1 text-xs"
+                          onClick={handleSaveHubToken}
+                          disabled={isSavingHubToken}
                         >
-                          <Copy className="h-3.5 w-3.5" />
+                          {isSavingHubToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          <span className="hidden sm:inline">Salvar</span>
                         </Button>
-                      )}
+                        {hubTokenInput && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              navigator.clipboard.writeText(hubTokenInput);
+                              toast({ title: 'Token copiado!', description: 'O token foi copiado para a área de transferência.' });
+                            }}
+                            title="Copiar token"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                        Insira o token da UAZAPI e clique em Salvar para conectar seu WhatsApp.
+                      </p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-                      Insira o token da UAZAPI e clique em Salvar para conectar seu WhatsApp.
-                    </p>
-                  </div>
+                  )}
                 </div>
 
                 <div className="px-4 sm:px-5">
