@@ -68,6 +68,7 @@ import {
     UserCheck,
     GripVertical,
     PlayCircle,
+    PauseCircle,
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -706,6 +707,15 @@ function FlowCanvasEditorContent() {
                     initialData = {
                         nodeType: 'flow_connect',
                         label: 'Conectar Fluxo',
+                    };
+                    break;
+                case 'pause_automation':
+                    initialData = {
+                        nodeType: 'pause_automation',
+                        label: 'Pausar Automação',
+                        pauseDurationValue: 1,
+                        pauseDurationUnit: 'hours',
+                        text: '',
                     };
                     break;
                 default:
@@ -1545,6 +1555,23 @@ function FlowCanvasEditorContent() {
                                 <Clock className="h-3.5 w-3.5" />
                             </div>
                             <span className="flex-1 truncate">Atraso inteligente</span>
+                            <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
+                        </button>
+
+                        {/* 6. PAUSAR AUTOMAÇÃO (COOLDOWN / BLOCO FINAL) */}
+                        <button
+                            type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'pause_automation')}
+                            onDragEnd={onDragEnd}
+                            onClick={() => handleAddBlock('pause_automation')}
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Clique para adicionar ou arraste para dentro do canva"
+                        >
+                            <div className="p-1 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform shrink-0">
+                                <PauseCircle className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="flex-1 truncate">Pausar automação</span>
                             <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
                         </button>
                     </div>

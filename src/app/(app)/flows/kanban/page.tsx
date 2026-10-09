@@ -33,6 +33,7 @@ import {
     ArrowRight,
     Sparkles,
     Settings,
+    PauseCircle,
 } from 'lucide-react';
 
 type ColumnDef = {
@@ -68,6 +69,14 @@ const COLUMNS: ColumnDef[] = [
         color: 'text-amber-600',
         bgColor: 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900',
         badgeColor: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+    },
+    {
+        id: 'paused',
+        title: 'Pausados (Cooldown)',
+        icon: PauseCircle,
+        color: 'text-purple-600',
+        bgColor: 'bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900',
+        badgeColor: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
     },
     {
         id: 'completed',
@@ -275,7 +284,7 @@ export default function FlowKanbanPage() {
             </div>
 
             {/* KANBAN BOARD */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start min-h-[600px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-start min-h-[600px]">
                 {COLUMNS.map((col) => {
                     const colSessions = sessions.filter((s) => (s.status || 'active') === col.id);
                     const ColIcon = col.icon;
@@ -379,6 +388,18 @@ export default function FlowKanbanPage() {
                                                         </Badge>
                                                     )}
                                                 </div>
+
+                                                {/* STATUS DE PAUSA / COOLDOWN */}
+                                                {(session.status === 'paused' || session.pausedUntil) && (
+                                                    <div className="bg-purple-50 dark:bg-purple-950/40 p-2 rounded-lg border border-purple-200 dark:border-purple-800 text-[11px] text-purple-900 dark:text-purple-200 flex items-center gap-1.5 font-medium">
+                                                        <PauseCircle className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                                                        <span className="truncate">
+                                                            {session.pausedUntil
+                                                                ? `Pausado até ${new Date(session.pausedUntil).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+                                                                : 'Automação pausada temporariamente'}
+                                                        </span>
+                                                    </div>
+                                                )}
 
                                                 {/* ÚLTIMA MENSAGEM */}
                                                 {session.lastMessageText && (

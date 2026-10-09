@@ -1336,6 +1336,48 @@ export async function executeFlowNode(
         return;
     }
 
+    // 7. PAUSAR AUTOMAÇÃO (Cooldown / Pausa temporária por X tempo)
+    if (nodeData.nodeType === 'pause_automation') {
+        const text = replaceVars(nodeData.text || nodeData.pauseMessage);
+        if (text) {
+            await sendUazapiText(ctx, text);
+        }
+
+        const value = Math.max(1, Number(nodeData.pauseDurationValue) || 1);
+        const unit = nodeData.pauseDurationUnit || 'hours';
+
+        let durationMs = value * 60 * 60 * 1000; // padrão: horas
+        if (unit === 'minutes') {
+            durationMs = value * 60 * 1000;
+        } else if (unit === 'days') {
+            durationMs = value * 24 * 60 * 60 * 1000;
+        }
+
+        const pausedUntilMs = Date.now() + durationMs;
+        const pausedUntilIso = new Date(pausedUntilMs).toISOString();
+
+        console.log(`[FlowRunner] Pausando automação para ${ctx.phoneNumber} por ${value} ${unit} (até ${new Date(pausedUntilMs).toLocaleString('pt-BR')})`);
+
+        await setDoc(
+            sessionDocRef,
+            {
+                userId: ctx.userId,
+                flowId: flow.id,
+                currentNodeId: nodeId,
+                currentNodeLabel: nodeData.label || 'Pausar Automação',
+                status: 'paused',
+                pausedUntil: pausedUntilIso,
+                pausedUntilMs: pausedUntilMs,
+                pausedDurationValue: value,
+                pausedDurationUnit: unit,
+                lastInteractionAt: new Date().toISOString(),
+            },
+            { merge: true }
+        );
+
+        return;
+    }
+
     // Fallback: avança para a próxima aresta se existir
     const defaultNextEdge = edges.find((e: any) => e.source === nodeId);
     if (defaultNextEdge && defaultNextEdge.target) {

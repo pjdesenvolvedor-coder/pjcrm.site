@@ -506,6 +506,29 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, reset: true }, { status: 200 });
         }
 
+        // 5.1 VERIFICAR SE O CONTATO ESTÁ EM PAUSA TEMPORÁRIA / COOLDOWN (Bloco Pausar Automação)
+        if (currentSession && (currentSession.status === 'paused' || currentSession.pausedUntilMs || currentSession.pausedUntil)) {
+            const untilMs = currentSession.pausedUntilMs || (currentSession.pausedUntil ? Date.parse(currentSession.pausedUntil) : 0);
+            const nowMs = Date.now();
+            if (untilMs && nowMs < untilMs) {
+                const remainingMinutes = Math.ceil((untilMs - nowMs) / (60 * 1000));
+                console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ignorada: automação pausada até ${currentSession.pausedUntil} (${remainingMinutes} min restantes).`);
+                return NextResponse.json({
+                    ignored: 'automation_paused',
+                    pausedUntil: currentSession.pausedUntil,
+                    remainingMinutes,
+                }, { status: 200 });
+            } else if (untilMs && nowMs >= untilMs) {
+                // A pausa expirou! Despausa e permite reiniciar normalmente
+                console.log(`[Flow Webhook] Tempo de pausa para ${phoneNumber} expirou. Reativando automação normalmente.`);
+                await updateDoc(sessionDocRef, {
+                    status: 'completed',
+                    pausedUntil: null,
+                    pausedUntilMs: null,
+                }).catch(() => {});
+            }
+        }
+
         // 6. Palavras de forçar reinício do menu
         const restartKeywords = (flowConfig.restartKeywords || ['menu', 'reiniciar', 'voltar', 'sair']).map((k) =>
             k.toLowerCase().trim()

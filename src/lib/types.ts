@@ -388,7 +388,7 @@ export type FlowTriggerSettings = {
 
 export type FlowNodeData = {
   label?: string;
-  nodeType: 'start' | 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'randomizer';
+  nodeType: 'start' | 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'pause_automation' | 'randomizer';
   // Conteúdo
   contentType?: 'text' | 'image' | 'audio' | 'video' | 'document';
   text?: string;
@@ -411,6 +411,10 @@ export type FlowNodeData = {
   delayUnit?: 'seconds' | 'minutes' | 'hours';
   delayValue?: number;
   delayPresence?: 'composing' | 'recording' | 'none';
+  // Pausar automação / Cooldown temporário
+  pauseDurationValue?: number;
+  pauseDurationUnit?: 'minutes' | 'hours' | 'days';
+  pauseMessage?: string;
   // Ação
   actionType?: 'add_tag' | 'remove_tag' | 'change_status' | 'open_support' | 'notify_attendant' | 'send_contact';
   actionValue?: string;
@@ -451,6 +455,11 @@ export type FlowContactSession = {
   currentNodeLabel?: string;
   lastMessageText?: string;
   status: 'active' | 'waiting_user_input' | 'support' | 'completed' | 'paused';
+  pausedUntil?: string;
+  pausedUntilMs?: number;
+  pausedReason?: string;
+  pausedDurationValue?: number;
+  pausedDurationUnit?: 'minutes' | 'hours' | 'days';
   variables?: Record<string, any>;
   lastInteractionAt?: any;
   history?: Array<{ nodeId: string; timestamp: number; input?: string }>;

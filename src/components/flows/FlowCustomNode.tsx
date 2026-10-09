@@ -24,6 +24,8 @@ import {
     Copy,
     Settings,
     ExternalLink,
+    PauseCircle,
+    TimerOff,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -82,6 +84,15 @@ const nodeTypeConfigs: Record<
         bgClass: 'bg-orange-50/30 dark:bg-orange-950/20',
         badgeClass: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
         iconClass: 'text-orange-500',
+    },
+    pause_automation: {
+        title: 'Pausar Automação',
+        icon: PauseCircle,
+        color: '#8b5cf6',
+        borderClass: 'border-purple-300 dark:border-purple-800 ring-1 ring-purple-400/20',
+        bgClass: 'bg-purple-50/40 dark:bg-purple-950/20',
+        badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 font-semibold',
+        iconClass: 'text-purple-600 dark:text-purple-400',
     },
     action: {
         title: 'Ação',
@@ -481,10 +492,49 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
                         </div>
                     </div>
                 )}
+
+                {/* 7. NÓ DE PAUSAR AUTOMAÇÃO (COOLDOWN / BLOCO FINAL) */}
+                {nodeData?.nodeType === 'pause_automation' && (
+                    <div className="p-2.5 bg-purple-50/60 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-900/60 space-y-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1 rounded-md bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
+                                <PauseCircle className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-xs text-purple-950 dark:text-purple-200">
+                                    {(() => {
+                                        const unit = nodeData.pauseDurationUnit || 'hours';
+                                        const val = Math.max(1, Number(nodeData.pauseDurationValue) || 1);
+                                        if (unit === 'days') return `Pausar por ${val} dia(s)`;
+                                        if (unit === 'minutes') return `Pausar por ${val} minuto(s)`;
+                                        return `Pausar por ${val} hora(s)`;
+                                    })()}
+                                </p>
+                                <p className="text-[10px] text-purple-700/80 dark:text-purple-300/80 font-medium">
+                                    🛑 Bloco Finalizador do Fluxo
+                                </p>
+                            </div>
+                        </div>
+
+                        {nodeData.text ? (
+                            <p className="line-clamp-2 text-slate-700 dark:text-slate-300 font-normal leading-relaxed bg-white/70 dark:bg-slate-900/60 p-1.5 rounded border border-purple-100 dark:border-purple-900/40 text-[11px]">
+                                {nodeData.text}
+                            </p>
+                        ) : (
+                            <p className="text-[10px] text-muted-foreground italic px-0.5">
+                                Sem mensagem final configurada.
+                            </p>
+                        )}
+
+                        <div className="text-[10px] text-purple-800 dark:text-purple-300/90 bg-purple-100/50 dark:bg-purple-950/50 p-1.5 rounded text-center font-medium border border-purple-200/50 dark:border-purple-900/30">
+                            Novas mensagens serão ignoradas até o tempo passar.
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* SAÍDA PADRÃO (Source Handle para nós que não possuem múltiplas saídas) */}
-            {nodeData?.nodeType !== 'menu' && nodeData?.nodeType !== 'condition' && (
+            {/* SAÍDA PADRÃO (Source Handle para nós que não possuem múltiplas saídas e não são blocos finais de pausa) */}
+            {nodeData?.nodeType !== 'menu' && nodeData?.nodeType !== 'condition' && nodeData?.nodeType !== 'pause_automation' && (
                 <Handle
                     type="source"
                     position={Position.Right}

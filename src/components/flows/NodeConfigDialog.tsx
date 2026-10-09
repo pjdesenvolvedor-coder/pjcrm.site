@@ -42,6 +42,7 @@ import {
     Layers,
     Link2,
     ExternalLink,
+    PauseCircle,
 } from 'lucide-react';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
@@ -329,6 +330,7 @@ export function NodeConfigDialog({
                         {formData.nodeType === 'menu' && <Grid className="h-5 w-5 text-indigo-600" />}
                         {formData.nodeType === 'content' && <Star className="h-5 w-5 text-rose-500" />}
                         {formData.nodeType === 'delay' && <Clock className="h-5 w-5 text-orange-500" />}
+                        {formData.nodeType === 'pause_automation' && <PauseCircle className="h-5 w-5 text-purple-600" />}
                         {formData.nodeType === 'action' && <Zap className="h-5 w-5 text-amber-500" />}
                         {formData.nodeType === 'flow_connect' && <Rocket className="h-5 w-5 text-emerald-500" />}
                         {formData.nodeType === 'condition' && <UserCheck className="h-5 w-5 text-sky-500" />}
@@ -337,6 +339,7 @@ export function NodeConfigDialog({
                             {formData.nodeType === 'menu' && 'Menu'}
                             {formData.nodeType === 'content' && 'Conteúdo'}
                             {formData.nodeType === 'delay' && 'Atraso Inteligente'}
+                            {formData.nodeType === 'pause_automation' && 'Pausar Automação (Cooldown)'}
                             {formData.nodeType === 'action' && 'Ação'}
                             {formData.nodeType === 'flow_connect' && 'Conexão de Fluxo'}
                             {formData.nodeType === 'condition' && 'Verificar Cliente no CRM'}
@@ -1213,6 +1216,142 @@ export function NodeConfigDialog({
                                         );
                                     })}
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ---------------- 7. CONFIGURAÇÃO DE PAUSAR AUTOMAÇÃO (COOLDOWN / BLOCO FINAL) ---------------- */}
+                    {formData.nodeType === 'pause_automation' && (
+                        <div className="space-y-4">
+                            <div className="rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-2">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 shrink-0">
+                                        <PauseCircle className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-purple-950 dark:text-purple-200">
+                                            Finalizar e Pausar Automação para este Contato
+                                        </h4>
+                                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                            Ao chegar neste bloco final, o fluxo encerra o atendimento para este cliente e silencia a automação pelo tempo configurado abaixo.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* DEFINIR TEMPO DA PAUSA */}
+                            <div className="p-3.5 rounded-xl border bg-card space-y-3">
+                                <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                    Tempo de Silêncio / Pausa da Automação
+                                </Label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[11px] text-muted-foreground">Quantidade</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={formData.pauseDurationValue !== undefined ? formData.pauseDurationValue : 1}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    pauseDurationValue: Math.max(1, parseInt(e.target.value) || 1),
+                                                })
+                                            }
+                                            placeholder="1"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[11px] text-muted-foreground">Unidade de Tempo</Label>
+                                        <Select
+                                            value={formData.pauseDurationUnit || 'hours'}
+                                            onValueChange={(val: any) =>
+                                                setFormData({ ...formData, pauseDurationUnit: val })
+                                            }
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="minutes">Minutos</SelectItem>
+                                                <SelectItem value="hours">Horas</SelectItem>
+                                                <SelectItem value="days">Dias</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* MENSAGEM FINAL (OPCIONAL) */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-semibold">
+                                        Mensagem Final ao Cliente (Opcional)
+                                    </Label>
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs font-bold"
+                                            onClick={() => {
+                                                const cur = formData.text || '';
+                                                setFormData({ ...formData, text: cur + ' *texto em negrito* ' });
+                                            }}
+                                            title="Negrito"
+                                        >
+                                            <Bold className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs italic"
+                                            onClick={() => {
+                                                const cur = formData.text || '';
+                                                setFormData({ ...formData, text: cur + ' _texto em itálico_ ' });
+                                            }}
+                                            title="Itálico"
+                                        >
+                                            <Italic className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                </div>
+                                <Textarea
+                                    placeholder="Ex: Obrigado pelo contato! Qualquer dúvida adicional, estamos à disposição."
+                                    rows={4}
+                                    value={formData.text || ''}
+                                    onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                />
+                            </div>
+
+                            {/* INSERIR VARIÁVEIS NA MENSAGEM */}
+                            <div className="space-y-2 pt-1">
+                                <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                                    <Sparkles className="h-3 w-3 text-indigo-500" />
+                                    Inserir Variáveis Dinâmicas no Texto:
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {AVAILABLE_FLOW_VARIABLES.slice(0, 8).map((v) => (
+                                        <Badge
+                                            key={v.key}
+                                            variant="outline"
+                                            className="cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:border-indigo-300 text-[10.5px] py-0.5 px-2 font-mono transition-colors"
+                                            onClick={() => handleInsertVariable('text', v.key)}
+                                        >
+                                            +{v.label}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* EXPLICAÇÃO DO COMPORTAMENTO */}
+                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                                <p className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                                    ℹ️ O que acontece após este bloco:
+                                </p>
+                                <p>• O cliente recebe a mensagem final (se preenchida).</p>
+                                <p>• Novas mensagens enviadas por este número <strong>serão ignoradas</strong> pelo fluxo até o tempo de pausa terminar.</p>
+                                <p>• Quando o período passar, se o cliente voltar a mandar mensagem, o fluxo atenderá normalmente do início.</p>
                             </div>
                         </div>
                     )}

@@ -880,6 +880,45 @@ export function FlowWhatsAppSimulator({
                     }
                 }
             }
+            // 7. PAUSAR AUTOMAÇÃO (COOLDOWN / BLOCO FINAL)
+            else if (data.nodeType === 'pause_automation') {
+                const finalMsgText = formatText(data.text || data.pauseMessage);
+                if (finalMsgText) {
+                    setIsTyping(true);
+                    setTypingText('digitando...');
+                    await sleep(700);
+                    if (executionRef.current.isCancelled) return;
+                    setIsTyping(false);
+
+                    setMessages((prev) => [
+                        ...prev,
+                        {
+                            id: `msg_${Date.now()}_pause_final`,
+                            sender: 'bot',
+                            nodeId,
+                            nodeType: 'pause_automation',
+                            text: finalMsgText,
+                            time: getCurrentTime(),
+                        },
+                    ]);
+                }
+
+                const unit = data.pauseDurationUnit || 'hours';
+                const val = Math.max(1, Number(data.pauseDurationValue) || 1);
+                const unitLabel = unit === 'days' ? `${val} dia(s)` : unit === 'minutes' ? `${val} minuto(s)` : `${val} hora(s)`;
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `sys_${Date.now()}`,
+                        sender: 'system',
+                        text: `⏸️ *Atendimento Finalizado:* Automação pausada para este contato por *${unitLabel}*. Durante esse período, novas mensagens não reiniciarão o fluxo.`,
+                        time: getCurrentTime(),
+                    },
+                ]);
+
+                setCurrentNotice(`Fluxo finalizado com sucesso. Automação em pausa por ${unitLabel}.`);
+            }
         },
         [sampleClient, varConfig, clients]
     );
