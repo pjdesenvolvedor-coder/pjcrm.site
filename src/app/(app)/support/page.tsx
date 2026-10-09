@@ -10,7 +10,7 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { User, CheckCircle2, MessageSquare, RefreshCw } from 'lucide-react';
+import { User, CheckCircle2, MessageSquare, RefreshCw, Phone, Mail, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -30,25 +30,34 @@ function SendMessageDialog({ client, onSend, onCancel, isSending }: { client: Cl
   return (
     <>
       <DialogHeader>
-          <DialogTitle>Enviar Mensagem para {client.name}</DialogTitle>
-          <DialogDescription>
-              Digite a mensagem que você deseja enviar para o número {client.phone}.
+          <DialogTitle className="text-lg font-semibold">Enviar Mensagem para {client.name}</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+              Digite a mensagem que você deseja enviar para o número <span className="font-mono font-medium text-foreground">{client.phone}</span>.
           </DialogDescription>
       </DialogHeader>
       <div className="py-4 space-y-2">
-        <Label htmlFor="message">Mensagem</Label>
-        <Textarea id="message" placeholder="Digite sua mensagem aqui..." value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[100px]" />
+        <Label htmlFor="message" className="text-xs font-semibold">Mensagem WhatsApp</Label>
+        <Textarea 
+          id="message" 
+          placeholder="Digite sua mensagem aqui..." 
+          value={message} 
+          onChange={(e) => setMessage(e.target.value)} 
+          className="min-h-[120px] text-sm resize-none" 
+        />
       </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={isSending}>Cancelar</Button>
-        <Button onClick={() => onSend(message)} disabled={!message.trim() || isSending}>
+      <DialogFooter className="gap-2 sm:gap-0">
+        <Button variant="outline" onClick={onCancel} disabled={isSending}>Cancelar</Button>
+        <Button onClick={() => onSend(message)} disabled={!message.trim() || isSending} className="bg-primary hover:bg-primary/90 text-white gap-1.5">
             {isSending ? (
                 <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    <RefreshCw className="h-4 w-4 animate-spin" />
                     Enviando...
                 </>
             ) : (
-                'Enviar Mensagem'
+                <>
+                    <MessageSquare className="h-4 w-4" />
+                    Enviar Mensagem
+                </>
             )}
         </Button>
       </DialogFooter>
@@ -168,81 +177,134 @@ export default function SupportPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full space-y-4">
       <PageHeader
         title="Clientes de Suporte"
-        description="Clientes e contatos marcados para suporte."
+        description="Clientes e contatos marcados para atendimento de suporte."
       />
-      <main className="flex-1 overflow-auto p-4 md:p-6">
+      <main className="flex-1 overflow-auto p-4 md:p-6 pt-0">
         {isLoading ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(3)].map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-6 space-y-4">
+              <Card key={i} className="rounded-xl overflow-hidden border shadow-sm flex flex-col justify-between">
+                <CardContent className="p-5 space-y-4">
                     <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                            <Skeleton className="h-6 w-32" />
-                            <Skeleton className="h-4 w-24" />
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-5 w-36" />
+                            <Skeleton className="h-4 w-28" />
                         </div>
-                        <Skeleton className="h-6 w-20" />
+                        <Skeleton className="h-6 w-20 rounded-full" />
                     </div>
-                    <div className="space-y-2">
-                        <Skeleton className="h-4 w-40" />
-                        <Skeleton className="h-4 w-48" />
+                    <div className="space-y-2 pt-2">
+                        <Skeleton className="h-16 w-full rounded-lg" />
                     </div>
                 </CardContent>
-                <CardFooter className="flex justify-end gap-2">
-                    <Skeleton className="h-9 w-44" />
-                    <Skeleton className="h-9 w-36" />
+                <CardFooter className="p-3.5 px-5 bg-muted/20 border-t flex items-center gap-2">
+                    <Skeleton className="h-9 flex-1 rounded-md" />
+                    <Skeleton className="h-9 flex-1 rounded-md" />
                 </CardFooter>
               </Card>
             ))}
           </div>
         ) : supportClients && supportClients.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {supportClients.map((client) => (
-              <Card key={client.id}>
-                <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <User className="h-5 w-5 text-muted-foreground" />
-                                <h3 className="text-xl font-semibold">{client.name}</h3>
-                            </div>
-                            <p className="text-muted-foreground mt-1">{client.phone}</p>
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {supportClients.map((client) => {
+              const emails = client.email
+                ? (Array.isArray(client.email) ? client.email : [client.email]).filter(Boolean)
+                : [];
+
+              return (
+                <Card
+                  key={client.id}
+                  className="group relative overflow-hidden rounded-xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                >
+                  <CardContent className="p-5 space-y-4">
+                    {/* Header do Card com Nome, Telefone e Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                          {client.name ? client.name.slice(0, 2).toUpperCase() : <User className="h-5 w-5" />}
                         </div>
-                        {client.subscription && <Badge variant="outline">{client.subscription}</Badge>}
+                        <div className="min-w-0 space-y-0.5">
+                          <h3 className="font-semibold text-base text-foreground truncate" title={client.name}>
+                            {client.name}
+                          </h3>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                            <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span>{client.phone || 'Sem telefone'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {client.subscription && (
+                        <Badge
+                          variant="outline"
+                          className="font-medium text-xs px-2.5 py-0.5 rounded-full shrink-0 max-w-[130px] truncate bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                          title={client.subscription}
+                        >
+                          {client.subscription}
+                        </Badge>
+                      )}
                     </div>
-                    <div className="mt-6">
-                        <h4 className="font-semibold text-sm">Contatos de Suporte:</h4>
-                        <ul className="mt-2 list-disc list-inside text-muted-foreground text-sm">
-                            {client.email && (Array.isArray(client.email) ? client.email : [client.email]).map((email, i) => (
-                              <li key={i}>{email}</li>
-                            ))}
+
+                    {/* Bloco de Contatos / Emails de Suporte */}
+                    <div className="rounded-lg bg-slate-50/80 dark:bg-slate-900/60 p-3 border border-slate-100 dark:border-slate-800/80 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <Mail className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <span>Contatos de Suporte:</span>
+                      </div>
+                      {emails.length > 0 ? (
+                        <ul className="space-y-1 text-xs text-muted-foreground pl-5 list-disc">
+                          {emails.map((email, i) => (
+                            <li key={i} className="break-all font-mono text-[11.5px]">
+                              {email}
+                            </li>
+                          ))}
                         </ul>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic pl-5">Nenhum email registrado</p>
+                      )}
                     </div>
-                </CardContent>
-                <CardFooter className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => handleMarkAsCompleted(client)}>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Marcar como Concluído
+                  </CardContent>
+
+                  {/* Rodapé com Botões Perfeitamente Dimensionados e Alinhados */}
+                  <CardFooter className="p-3 px-4 bg-slate-50/60 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleMarkAsCompleted(client)}
+                      className="w-full h-9 text-xs font-medium border-slate-200 dark:border-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 transition-colors shadow-2xs"
+                      title="Marcar suporte como concluído"
+                    >
+                      <CheckCircle2 className="mr-1.5 h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="truncate">Concluir</span>
                     </Button>
-                    <Button onClick={() => setDialogClient(client)}>
-                        <MessageSquare className="mr-2 h-4 w-4" />
-                        Enviar Mensagem
+
+                    <Button
+                      size="sm"
+                      onClick={() => setDialogClient(client)}
+                      className="w-full h-9 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors"
+                      title="Enviar mensagem para o cliente"
+                    >
+                      <MessageSquare className="mr-1.5 h-4 w-4 shrink-0" />
+                      <span className="truncate">Enviar Mensagem</span>
                     </Button>
-                </CardFooter>
-              </Card>
-            ))}
+                  </CardFooter>
+                </Card>
+              );
+            })}
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm h-full">
-            <div className="flex flex-col items-center gap-1 text-center">
-              <h3 className="text-2xl font-bold tracking-tight">
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed shadow-xs h-80 bg-slate-50/40 dark:bg-slate-950/20">
+            <div className="flex flex-col items-center gap-2 text-center p-6 max-w-md">
+              <div className="h-12 w-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold tracking-tight text-foreground">
                 Nenhum cliente em suporte
               </h3>
-              <p className="text-sm text-muted-foreground">
-                Marque um cliente para suporte na página "Todos os Clientes".
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Todos os atendimentos foram concluídos! Quando um cliente for marcado para suporte no fluxo ou na lista de clientes, ele aparecerá aqui.
               </p>
             </div>
           </div>
