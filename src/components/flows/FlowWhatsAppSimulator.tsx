@@ -1091,13 +1091,14 @@ export function FlowWhatsAppSimulator({
         setMessages((prev) => [...prev, userMsg]);
         setCurrentNotice(null);
 
-        // Se for solicitação de atendimento humanizado / suporte:
-        if (isHumanSupportRequest(text)) {
+        // Atendimento humanizado: só vale como FALLBACK (depois de checar as opções do menu do fluxo)
+        const dispatchSupport = async (): Promise<boolean> => {
+            if (!isHumanSupportRequest(text)) return false;
             setActiveMenuNodeId(null);
             setIsTyping(true);
             setTypingText('digitando...');
             await sleep(600);
-            if (executionRef.current.isCancelled) return;
+            if (executionRef.current.isCancelled) return true;
             setIsTyping(false);
 
             const currentNodes = activeNodesRef.current;
@@ -1125,8 +1126,8 @@ export function FlowWhatsAppSimulator({
                 },
             ]);
             setCurrentNotice(`Atendimento humanizado solicitado. Card de contato (${cardName}) enviado!`);
-            return;
-        }
+            return true;
+        };
 
         // Se houver um menu aguardando resposta:
         if (activeMenuNodeId) {
@@ -1193,6 +1194,7 @@ export function FlowWhatsAppSimulator({
                 }
                 return;
             } else {
+                if (await dispatchSupport()) return;
                 // Usuário digitou um texto livre que NÃO é opção do menu
                 const warnMsg = menuData?.invalidOptionMessage || 'Selecione a opção acima';
                 setIsTyping(true);
@@ -1217,6 +1219,7 @@ export function FlowWhatsAppSimulator({
         }
 
         // Se o usuário digitou algo fora de qualquer menu:
+        if (await dispatchSupport()) return;
         await sleep(600);
         setCurrentNotice('Mensagem enviada. Nenhuma condição ou bloco está aguardando este texto.');
     };

@@ -1550,22 +1550,19 @@ export function isHumanSupportRequest(text: string, customKeywords?: string[]): 
     const defaultKeywords = [
         'falar com atendente',
         'atendimento humanizado',
+        'atendimento humano',
         'humano',
         'humana',
-        'atendente',
         'atendente humano',
         'atendente humanizado',
-        'suporte',
         'falar com suporte',
         'falar com humano',
         'chamar atendente',
-        'chamar suporte',
         'quero falar com atendente',
         'quero falar com humano',
         'quero um atendente',
         'falar com uma pessoa',
         'falar com pessoa',
-        'atendimento humano',
     ];
 
     const keywordsList = (customKeywords && customKeywords.length > 0 ? customKeywords : defaultKeywords)

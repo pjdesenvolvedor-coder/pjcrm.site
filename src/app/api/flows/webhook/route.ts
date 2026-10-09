@@ -531,19 +531,17 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 5.2 SOLICITAÇÃO DE ATENDIMENTO HUMANO / FALAR COM ATENDENTE / SUPORTE
-        // Se o cliente digitar palavras como 'falar com atendente', 'atendimento humanizado', 'humano', 'suporte', etc.
+        // 5.2 SOLICITAÇÃO DE ATENDIMENTO HUMANO (FALLBACK)
+        // IMPORTANTE: só é avaliada DEPOIS que a mensagem não bateu com nenhuma opção do menu do fluxo,
+        // para nunca atropelar o caminho configurado no funil (ex: botão "Preciso de Suporte").
         const isHumanSupport = isHumanSupportRequest(userText, flowConfig.humanSupportKeywords);
-        if (isHumanSupport) {
+        const tryDispatchHumanSupport = async (): Promise<NextResponse | null> => {
+            if (!isHumanSupport) return null;
             console.log(`[Flow Webhook] Solicitação de atendimento humano recebida de ${phoneNumber}: "${userText}". Buscando card de suporte configurado...`);
 
             const supportCard = await findSupportContactCard(db, targetUserId, flowConfig);
-
             if (supportCard && supportCard.phone) {
-                console.log(`[Flow Webhook] Enviando card de suporte para ${phoneNumber}: ${supportCard.name} (${supportCard.phone})`);
                 await sendUazapiContact(runnerCtx, supportCard.name, supportCard.phone, supportCard.org);
-
-                // Conclui a sessão para que o bot não fique interrompendo ou reenviando menus
                 await setDoc(sessionDocRef, {
                     userId: targetUserId,
                     phoneNumber,
@@ -552,16 +550,11 @@ export async function POST(req: NextRequest) {
                     status: 'completed',
                     lastInteractionAt: new Date().toISOString(),
                 }, { merge: true });
-
-                return NextResponse.json({
-                    success: true,
-                    humanSupportDispatched: true,
-                    contact: supportCard,
-                }, { status: 200 });
-            } else {
-                console.warn(`[Flow Webhook] Nenhum card de suporte/atendente encontrado nos fluxos ou configurações do usuário ${targetUserId}.`);
+                return NextResponse.json({ success: true, humanSupportDispatched: true, contact: supportCard }, { status: 200 });
             }
-        }
+            console.warn(`[Flow Webhook] Nenhum card de suporte/atendente encontrado para o usuário ${targetUserId}.`);
+            return null;
+        };
 
         // 6. Palavras de forçar reinício do menu
         const restartKeywords = (flowConfig.restartKeywords || ['menu', 'reiniciar', 'voltar', 'sair']).map((k) =>
@@ -590,7 +583,10 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ handled: 'user_menu_response' }, { status: 200 });
             }
 
-            // Se NÃO bateu com nenhuma opção do menu:
+            // Se NÃO bateu com nenhuma opção do menu: antes de avisar, vê se ele pediu atendimento humano
+            const humanResp = await tryDispatchHumanSupport();
+            if (humanResp) return humanResp;
+
             // O cliente digitou algo fora das opções do menu. Enviamos o aviso para selecionar uma das opções acima e mantemos o contato no menu!
             let invalidMsg = flowConfig.invalidOptionMessage;
 
@@ -622,6 +618,10 @@ export async function POST(req: NextRequest) {
 
             return NextResponse.json({ handled: 'invalid_menu_option_warned', message: invalidMsg }, { status: 200 });
         }
+
+        // 7.1 Cliente não está em menu: se pediu atendimento humano explicitamente, envia o card
+        const humanRespOutside = await tryDispatchHumanSupport();
+        if (humanRespOutside) return humanRespOutside;
 
         // 8. Determinar qual fluxo disparar
         let flowToTriggerId: string | null = null;

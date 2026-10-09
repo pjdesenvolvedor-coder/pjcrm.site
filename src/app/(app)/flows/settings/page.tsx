@@ -56,7 +56,7 @@ export default function FlowSettingsPage() {
     const [restartKeywordsInput, setRestartKeywordsInput] = useState<string>('menu, reiniciar, voltar');
     const [resetKeyword, setResetKeyword] = useState<string>('reset');
     const [invalidOptionMessage, setInvalidOptionMessage] = useState<string>('Selecione a opção acima');
-    const [humanSupportKeywordsInput, setHumanSupportKeywordsInput] = useState<string>('falar com atendente, atendimento humanizado, humano, atendente, suporte');
+    const [humanSupportKeywordsInput, setHumanSupportKeywordsInput] = useState<string>('falar com atendente, atendimento humanizado, atendimento humano, humano');
     const [humanSupportPhone, setHumanSupportPhone] = useState<string>('');
     const [humanSupportName, setHumanSupportName] = useState<string>('Suporte Oficial');
     const [humanSupportOrg, setHumanSupportOrg] = useState<string>('');
