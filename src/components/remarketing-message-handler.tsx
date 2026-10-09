@@ -13,26 +13,27 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds
 
 export function RemarketingMessageHandler() {
-    const { firestore, user } = useFirebase();
+    const { firestore, user, effectiveUserId } = useFirebase();
+    const targetUserId = effectiveUserId || user?.uid || '';
     const { toast } = useToast();
     const isProcessing = useRef(false);
 
     const settingsDocRef = useMemoFirebase(() => {
-        if (!user) return null;
-        return doc(firestore, 'users', user.uid, 'settings', 'config');
-    }, [firestore, user]);
+        if (!targetUserId) return null;
+        return doc(firestore, 'users', targetUserId, 'settings', 'config');
+    }, [firestore, targetUserId]);
     const { data: settings } = useDoc<Settings>(settingsDocRef);
     
     const userDocRef = useMemoFirebase(() => {
-        if (!user) return null;
-        return doc(firestore, 'users', user.uid);
-    }, [firestore, user]);
+        if (!targetUserId) return null;
+        return doc(firestore, 'users', targetUserId);
+    }, [firestore, targetUserId]);
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
     const allClientsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return collection(firestore, 'users', user.uid, 'clients');
-    }, [user, firestore]);
+        if (!targetUserId || !firestore) return null;
+        return collection(firestore, 'users', targetUserId, 'clients');
+    }, [targetUserId, firestore]);
     const { data: clients } = useCollection<Client>(allClientsQuery);
 
     useEffect(() => {
@@ -54,7 +55,7 @@ export function RemarketingMessageHandler() {
                 ? (settings?.postDueDateRemarketings?.filter(r => r.isActive && r.message) || [])
                 : [];
 
-            if (!clients || clients.length === 0 || (activeSignupRemarketings.length === 0 && activeDueDateRemarketings.length === 0) || !settings?.webhookToken || !user || !firestore) {
+            if (!clients || clients.length === 0 || (activeSignupRemarketings.length === 0 && activeDueDateRemarketings.length === 0) || !settings?.webhookToken || !targetUserId || !firestore) {
                 return;
             }
 
@@ -94,8 +95,8 @@ export function RemarketingMessageHandler() {
 
             const processTask = async (task: typeof tasks[0], isLast: boolean) => {
                 const { client, config, type } = task;
-                const clientDocRef = doc(firestore, 'users', user.uid, 'clients', client.id);
-                const logRef = collection(firestore, 'users', user.uid, 'logs');
+                const clientDocRef = doc(firestore, 'users', targetUserId, 'clients', client.id);
+                const logRef = collection(firestore, 'users', targetUserId, 'logs');
 
                 try {
                     await runTransaction(firestore, async (transaction) => {
@@ -108,7 +109,7 @@ export function RemarketingMessageHandler() {
                     });
 
                     addDocumentNonBlocking(logRef, {
-                        userId: user.uid,
+                        userId: targetUserId,
                         type: 'Remarketing',
                         clientName: client.name,
                         target: client.phone,
@@ -142,7 +143,7 @@ export function RemarketingMessageHandler() {
 
                     if (response.ok) {
                         addDocumentNonBlocking(logRef, {
-                            userId: user.uid,
+                            userId: targetUserId,
                             type: 'Remarketing',
                             clientName: client.name,
                             target: client.phone,
@@ -153,7 +154,7 @@ export function RemarketingMessageHandler() {
                         toast({ title: `Remarketing OK`, description: `Enviado para ${client.name}.` });
                     } else {
                         addDocumentNonBlocking(logRef, {
-                            userId: user.uid,
+                            userId: targetUserId,
                             type: 'Remarketing',
                             clientName: client.name,
                             target: client.phone,
@@ -181,7 +182,7 @@ export function RemarketingMessageHandler() {
         processRemarketingQueue();
         return () => clearInterval(intervalId);
 
-    }, [clients, settings, firestore, user, toast, userProfile]);
+    }, [clients, settings, firestore, targetUserId, toast, userProfile]);
 
     return null;
 }

@@ -240,22 +240,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       if (settings2fa.billingWebhookToken && !candidateTokens.includes(settings2fa.billingWebhookToken)) candidateTokens.push(settings2fa.billingWebhookToken);
       if (settings2fa.webhookToken && !candidateTokens.includes(settings2fa.webhookToken)) candidateTokens.push(settings2fa.webhookToken);
 
-      // Se não encontrou token para este usuário, buscar globalmente em outros usuários cadastrados
-      if (candidateTokens.length === 0) {
-        try {
-          const usersSnap = await getDocs(query(collection(db, 'users'), limit(10)));
-          for (const uDoc of usersSnap.docs) {
-            const uConfig = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
-            if (uConfig.exists()) {
-              const uData = uConfig.data();
-              if (uData.billingWebhookToken && !candidateTokens.includes(uData.billingWebhookToken)) candidateTokens.push(uData.billingWebhookToken);
-              if (uData.webhookToken && !candidateTokens.includes(uData.webhookToken)) candidateTokens.push(uData.webhookToken);
-            }
-          }
-        } catch (tokErr) {
-          console.error('Erro ao buscar tokens globais de fallback:', tokErr);
-        }
-      }
+      // Garante que apenas os tokens configurados pelo próprio usuário sejam utilizados
 
       // Mensagem: Usa a mensagem enviada no payload, ou template configurado, ou modelo padrão do Painel ADM
       let messageToSend = '';

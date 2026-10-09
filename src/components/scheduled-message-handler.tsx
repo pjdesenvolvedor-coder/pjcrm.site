@@ -13,27 +13,28 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const MANDATORY_DELAY = 30000; // 30 seconds
 
 export function ScheduledMessageHandler() {
-    const { firestore, user } = useFirebase();
+    const { firestore, user, effectiveUserId } = useFirebase();
+    const targetUserId = effectiveUserId || user?.uid || '';
     const { toast } = useToast();
     const processingRef = useRef(new Set<string>());
 
     const settingsDocRef = useMemoFirebase(() => {
-        if (!user) return null;
-        return doc(firestore, 'users', user.uid, 'settings', 'config');
-    }, [firestore, user]);
+        if (!targetUserId) return null;
+        return doc(firestore, 'users', targetUserId, 'settings', 'config');
+    }, [firestore, targetUserId]);
     const { data: settings } = useDoc<Settings>(settingsDocRef);
     
     const userDocRef = useMemoFirebase(() => {
-        if (!user) return null;
-        return doc(firestore, 'users', user.uid);
-    }, [firestore, user]);
+        if (!targetUserId) return null;
+        return doc(firestore, 'users', targetUserId);
+    }, [firestore, targetUserId]);
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
     
     const scheduledMessagesQuery = useMemoFirebase(() => {
-        if (!user) return null;
-        const messagesRef = collection(firestore, 'users', user.uid, 'scheduled_messages');
+        if (!targetUserId) return null;
+        const messagesRef = collection(firestore, 'users', targetUserId, 'scheduled_messages');
         return query(messagesRef, where("status", "in", ["Scheduled", "Sending"]));
-    }, [user, firestore]);
+    }, [targetUserId, firestore]);
 
     const { data: messagesToCheck } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
 
@@ -45,7 +46,7 @@ export function ScheduledMessageHandler() {
 
             const availableToken = settings?.webhookToken || settings?.billingWebhookToken;
 
-            if (!messagesToCheck || messagesToCheck.length === 0 || !availableToken || !user || !firestore) {
+            if (!messagesToCheck || messagesToCheck.length === 0 || !availableToken || !targetUserId || !firestore) {
                 return;
             }
 
@@ -68,8 +69,8 @@ export function ScheduledMessageHandler() {
             const processMessage = async (msg: ScheduledMessage, isLast: boolean) => {
                 if (processingRef.current.has(msg.id)) return;
                 
-                const messageDocRef = doc(firestore, 'users', user.uid, 'scheduled_messages', msg.id);
-                const logRef = collection(firestore, 'users', user.uid, 'logs');
+                const messageDocRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', msg.id);
+                const logRef = collection(firestore, 'users', targetUserId, 'logs');
                 
                 try {
                     processingRef.current.add(msg.id);
@@ -99,7 +100,7 @@ export function ScheduledMessageHandler() {
                     });
 
                     addDocumentNonBlocking(logRef, {
-                        userId: user.uid,
+                        userId: targetUserId,
                         type: 'Grupo',
                         clientName: 'Grupo WhatsApp',
                         target: msg.jid,
@@ -129,7 +130,7 @@ export function ScheduledMessageHandler() {
                     if (!response.ok) {
                         setDocumentNonBlocking(messageDocRef, { status: 'Error', claimedAt: null }, { merge: true });
                         addDocumentNonBlocking(logRef, {
-                            userId: user.uid,
+                            userId: targetUserId,
                             type: 'Grupo',
                             clientName: 'Grupo WhatsApp',
                             target: msg.jid,
@@ -141,7 +142,7 @@ export function ScheduledMessageHandler() {
                     }
 
                     addDocumentNonBlocking(logRef, {
-                        userId: user.uid,
+                        userId: targetUserId,
                         type: 'Grupo',
                         clientName: 'Grupo WhatsApp',
                         target: msg.jid,
@@ -185,7 +186,7 @@ export function ScheduledMessageHandler() {
         checkScheduledMessages();
         return () => clearInterval(intervalId);
 
-    }, [messagesToCheck, settings, firestore, user, toast, userProfile]);
+    }, [messagesToCheck, settings, firestore, targetUserId, toast, userProfile]);
 
     return null;
 }

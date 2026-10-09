@@ -57,19 +57,20 @@ const leadSchema = z.object({
 });
 
 function LeadForm({ onFinished }: { onFinished: () => void }) {
-  const { firestore, user } = useFirebase();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const { toast } = useToast();
 
   const subscriptionsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'subscriptions'), orderBy('name'));
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'subscriptions'), orderBy('name'));
+  }, [firestore, targetUserId]);
   const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
 
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return doc(firestore, 'users', targetUserId, 'settings', 'config');
+  }, [firestore, targetUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
   const form = useForm<z.infer<typeof leadSchema>>({
@@ -78,10 +79,10 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
   });
 
   const onSubmit = async (values: z.infer<typeof leadSchema>) => {
-    if (!user) return;
+    if (!targetUserId) return;
 
     const leadData = {
-      userId: user.uid,
+      userId: targetUserId,
       name: values.phone, // Usamos o telefone como nome já que o campo foi removido
       phone: values.phone,
       interestedSubscription: values.interestedSubscription,
@@ -89,7 +90,7 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
       createdAt: serverTimestamp(),
     };
 
-    await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'leads'), leadData);
+    await addDocumentNonBlocking(collection(firestore, 'users', targetUserId, 'leads'), leadData);
     toast({ title: "Interessado Adicionado!", description: `O lead ${values.phone} foi cadastrado.` });
 
     // Send Initial Message
@@ -150,21 +151,22 @@ function LeadForm({ onFinished }: { onFinished: () => void }) {
 }
 
 export default function WantsToBuyPage() {
-  const { firestore, user } = useFirebase();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return doc(firestore, 'users', targetUserId, 'settings', 'config');
+  }, [firestore, targetUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
   const leadsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'leads'), where('status', '==', 'pending'));
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'leads'), where('status', '==', 'pending'));
+  }, [firestore, targetUserId]);
 
   const { data: leads, isLoading } = useCollection<Lead>(leadsQuery);
 
@@ -235,8 +237,8 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
   }, [leads, searchTerm]);
 
   const handleAction = async (lead: Lead, action: 'comprou' | 'nao-comprou') => {
-    if (!user || !settings) return;
-    const docRef = doc(firestore, 'users', user.uid, 'leads', lead.id);
+    if (!targetUserId || !settings) return;
+    const docRef = doc(firestore, 'users', targetUserId, 'leads', lead.id);
     const newStatus = action === 'comprou' ? 'converted' : 'lost';
     
     setDocumentNonBlocking(docRef, { status: newStatus }, { merge: true });
@@ -321,8 +323,8 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
                     <TableRow key={lead.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-muted-foreground" />
-                            {lead.phone}
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          {lead.phone}
                         </div>
                       </TableCell>
                       <TableCell><Badge variant="outline" className="bg-blue-50">{lead.interestedSubscription}</Badge></TableCell>
@@ -360,7 +362,7 @@ function matchesPhone(clientPhone: string, searchInput: string): boolean {
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Voltar</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', user!.uid, 'leads', lead.id))}>Excluir</AlertDialogAction>
+                                        <AlertDialogAction onClick={() => deleteDocumentNonBlocking(doc(firestore, 'users', targetUserId, 'leads', lead.id))}>Excluir</AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>

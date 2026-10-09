@@ -113,10 +113,10 @@ export async function POST(request: Request) {
 
     const formattedPhone = formatPhoneWith55(String(rawPhone));
 
-    // Coleta todos os tokens disponíveis dos usuários cadastrados
+    // Coleta os tokens configurados para o usuário
     const candidateTokens: string[] = [];
     let customTemplate = '';
-    let targetUserId = '';
+    let targetUserId = getFlexValue(['userid', 'user_id', 'uid']) || '';
 
     // Se o webhook passou um token explícito
     const explicitToken = getFlexValue(['token', 'apikey', 'webhooktoken']);
@@ -124,20 +124,14 @@ export async function POST(request: Request) {
         candidateTokens.push(explicitToken);
     }
 
-    try {
-        const usersSnap = await getDocs(query(collection(db, 'users'), limit(15)));
-        for (const uDoc of usersSnap.docs) {
-            targetUserId = targetUserId || uDoc.id;
-
-            // Template de 2FA configurado
-            if (!customTemplate) {
-                const settings2faSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', '2fatores'));
-                if (settings2faSnap.exists() && settings2faSnap.data()?.messageTemplate) {
-                    customTemplate = settings2faSnap.data()?.messageTemplate;
-                }
+    if (targetUserId) {
+        try {
+            const settings2faSnap = await getDoc(doc(db, 'users', targetUserId, 'settings', '2fatores'));
+            if (settings2faSnap.exists() && settings2faSnap.data()?.messageTemplate) {
+                customTemplate = settings2faSnap.data()?.messageTemplate;
             }
 
-            const configSnap = await getDoc(doc(db, 'users', uDoc.id, 'settings', 'config'));
+            const configSnap = await getDoc(doc(db, 'users', targetUserId, 'settings', 'config'));
             if (configSnap.exists()) {
                 const s = configSnap.data();
                 if (s.billingWebhookToken && !candidateTokens.includes(s.billingWebhookToken)) {
@@ -147,9 +141,9 @@ export async function POST(request: Request) {
                     candidateTokens.push(s.webhookToken);
                 }
             }
+        } catch (dbErr) {
+            console.error('Erro ao buscar configurações no Firestore:', dbErr);
         }
-    } catch (dbErr) {
-        console.error('Erro ao buscar configurações no Firestore:', dbErr);
     }
 
     let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Jivago';
@@ -225,13 +219,12 @@ export async function POST(request: Request) {
         timestampMs: Date.now(),
     };
 
-    try {
-        await addDoc(collection(db, 'two_factor_logs'), logData);
-        if (targetUserId) {
-            await addDoc(collection(db, 'users', targetUserId, 'two_factor_logs'), logData).catch(() => {});
+    if (targetUserId) {
+        try {
+            await addDoc(collection(db, 'users', targetUserId, 'two_factor_logs'), logData);
+        } catch (logErr) {
+            console.error('Erro ao registrar log no Firestore:', logErr);
         }
-    } catch (logErr) {
-        console.error('Erro ao registrar log no Firestore:', logErr);
     }
 
     return NextResponse.json({
@@ -246,9 +239,14 @@ export async function POST(request: Request) {
     }, { status: 200 });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
-        const logsSnap = await getDocs(query(collection(db, 'two_factor_logs'), orderBy('timestampMs', 'desc'), limit(50)));
+        const { searchParams } = new URL(request.url);
+        const userId = searchParams.get('userId');
+        if (!userId) {
+            return NextResponse.json({ success: false, error: 'userId obrigatório para consultar logs.' }, { status: 400 });
+        }
+        const logsSnap = await getDocs(query(collection(db, 'users', userId, 'two_factor_logs'), orderBy('timestampMs', 'desc'), limit(50)));
         const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         return NextResponse.json({ success: true, logs });
     } catch (e: any) {

@@ -19,8 +19,8 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 
 export default function ChargeOverduePage() {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const { toast } = useToast();
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -34,14 +34,14 @@ export default function ChargeOverduePage() {
   const [deleteAfterSend, setDeleteAfterSend] = useState(false);
 
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return doc(firestore, 'users', targetUserId, 'settings', 'config');
+  }, [firestore, targetUserId]);
 
   const { data: settings, isLoading: settingsLoading } = useDoc<Settings>(settingsDocRef);
 
   const startRebilling = async () => {
-    if (!user || !settings) return;
+    if (!targetUserId || !settings) return;
 
     if (!customMessage.trim()) {
       toast({
@@ -72,7 +72,7 @@ export default function ChargeOverduePage() {
       setProgress(0);
       setLogs([]);
 
-      const clientsRef = collection(firestore, 'users', user.uid, 'clients');
+      const clientsRef = collection(firestore, 'users', targetUserId, 'clients');
       const snap = await getDocs(clientsRef);
       const allClients = snap.docs.map(d => ({ id: d.id, ...d.data() } as Client));
       
@@ -108,7 +108,7 @@ export default function ChargeOverduePage() {
       const phoneGroups = Array.from(groupsByPhone.values());
 
       setTotal(phoneGroups.length);
-      const logCollectionRef = collection(firestore, 'users', user.uid, 'logs');
+      const logCollectionRef = collection(firestore, 'users', targetUserId, 'logs');
       const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
       const DELAY_MS = messageDelay * 1000;
 
@@ -131,7 +131,7 @@ export default function ChargeOverduePage() {
         try {
           const origin = typeof window !== 'undefined' ? window.location.origin : 'https://pjcrm.site';
           const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
-          const { link } = await getOrCreateRenewalSession(user.uid, clientGroup, origin);
+          const { link } = await getOrCreateRenewalSession(targetUserId, clientGroup, origin);
           renewalLink = link;
         } catch (linkErr) {
           console.error('Erro ao gerar link de renovação:', linkErr);
@@ -170,7 +170,7 @@ export default function ChargeOverduePage() {
         }
 
         addDocumentNonBlocking(logCollectionRef, {
-          userId: user.uid,
+          userId: targetUserId,
           type: 'Cobrança Vencidos',
           clientName: primaryClient.name,
           target: primaryClient.phone,
@@ -197,14 +197,14 @@ export default function ChargeOverduePage() {
             success = true;
             setLogs(prev => prev.map((l, idx) => idx === 0 ? { ...l, status: 'success' as const } : l));
             addDocumentNonBlocking(logCollectionRef, {
-                userId: user.uid, type: 'Cobrança Vencidos', clientName: primaryClient.name, target: primaryClient.phone, status: 'Enviado', timestamp: serverTimestamp()
+                userId: targetUserId, type: 'Cobrança Vencidos', clientName: primaryClient.name, target: primaryClient.phone, status: 'Enviado', timestamp: serverTimestamp()
             });
             
             // Delete all clients in this group if option is checked and message was sent successfully
             if (deleteAfterSend) {
                for (const c of clientGroup) {
                  try {
-                     await deleteDoc(doc(firestore, 'users', user.uid, 'clients', c.id));
+                     await deleteDoc(doc(firestore, 'users', targetUserId, 'clients', c.id));
                  } catch (deleteErr) {
                      console.error('Erro ao deletar cliente após enviar mensagem:', deleteErr);
                  }
@@ -213,7 +213,7 @@ export default function ChargeOverduePage() {
           } else {
             setLogs(prev => prev.map((l, idx) => idx === 0 ? { ...l, status: 'error' as const } : l));
             addDocumentNonBlocking(logCollectionRef, {
-                userId: user.uid, type: 'Cobrança Vencidos', clientName: primaryClient.name, target: primaryClient.phone, status: 'Erro', timestamp: serverTimestamp()
+                userId: targetUserId, type: 'Cobrança Vencidos', clientName: primaryClient.name, target: primaryClient.phone, status: 'Erro', timestamp: serverTimestamp()
             });
           }
         } catch (err) {

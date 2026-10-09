@@ -36,7 +36,8 @@ function ExtractMembersContent() {
   const searchParams = useSearchParams();
   const initialJid = searchParams.get('jid') || '';
 
-  const { firestore, user } = useFirebase();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const [jid, setJid] = useState(initialJid);
   const [isSending, setIsSending] = useState(false);
   const [currentExtraction, setCurrentExtraction] = useState<ExtractionResult | null>(null);
@@ -52,16 +53,16 @@ function ExtractMembersContent() {
   }, [initialJid, jid]);
 
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return doc(firestore, 'users', targetUserId, 'settings', 'config');
+  }, [firestore, targetUserId]);
 
   const { data: settings } = useDoc<Settings>(settingsDocRef);
   
   const savedGroupsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'extracted_groups'), orderBy('groupName'));
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'extracted_groups'), orderBy('groupName'));
+  }, [firestore, targetUserId]);
 
   const { data: savedGroups, isLoading: isLoadingGroups } = useCollection<ExtractedGroup>(savedGroupsQuery);
 
@@ -178,17 +179,17 @@ function ExtractMembersContent() {
   }, [myGroups, groupSearchQuery]);
   
   const handleSaveExtraction = () => {
-    if (!currentExtraction || !user) return;
-    addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'extracted_groups'), {
-      userId: user.uid,
+    if (!currentExtraction || !targetUserId) return;
+    addDocumentNonBlocking(collection(firestore, 'users', targetUserId, 'extracted_groups'), {
+      userId: targetUserId,
       ...currentExtraction,
     });
     toast({ title: 'Grupo Salvo!', description: `${currentExtraction.groupName} foi salvo na sua lista de grupos.` });
   };
   
   const handleDeleteSavedGroup = (groupId: string) => {
-    if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'extracted_groups', groupId);
+    if (!targetUserId) return;
+    const docRef = doc(firestore, 'users', targetUserId, 'extracted_groups', groupId);
     deleteDocumentNonBlocking(docRef);
     toast({ title: 'Grupo Removido', description: 'O grupo foi removido da sua lista.' });
   };

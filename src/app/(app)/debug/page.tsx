@@ -68,8 +68,8 @@ function formatDateSafe(val: any): string {
 }
 
 export default function DebugPage() {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('logs');
@@ -97,27 +97,27 @@ export default function DebugPage() {
 
   // Firestore Queries
   const settingsDocRef = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid, 'settings', 'config');
-  }, [firestore, user]);
+    if (!targetUserId || !firestore) return null;
+    return doc(firestore, 'users', targetUserId, 'settings', 'config');
+  }, [firestore, targetUserId]);
   const { data: settings } = useDoc<Settings>(settingsDocRef);
 
   const clientsQuery = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return query(collection(firestore, 'users', user.uid, 'clients'), limit(100));
-  }, [user, firestore]);
+    if (!targetUserId || !firestore) return null;
+    return query(collection(firestore, 'users', targetUserId, 'clients'), limit(100));
+  }, [targetUserId, firestore]);
   const { data: clients } = useCollection<Client>(clientsQuery);
 
   const scheduledMessagesQuery = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return query(collection(firestore, 'users', user.uid, 'scheduled_messages'), limit(50));
-  }, [user, firestore]);
+    if (!targetUserId || !firestore) return null;
+    return query(collection(firestore, 'users', targetUserId, 'scheduled_messages'), limit(50));
+  }, [targetUserId, firestore]);
   const { data: scheduledMessages } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
 
   const rawLogsQuery = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return collection(firestore, 'users', user.uid, 'logs');
-  }, [user, firestore]);
+    if (!targetUserId || !firestore) return null;
+    return collection(firestore, 'users', targetUserId, 'logs');
+  }, [targetUserId, firestore]);
   const { data: rawLogs, isLoading: isLogsLoading } = useCollection<LogItem>(rawLogsQuery);
 
   // Safe in-memory sorting
@@ -290,14 +290,14 @@ export default function DebugPage() {
 
   // Clear Logs Safely
   const handleClearLogs = async () => {
-    if (!user || !firestore || !rawLogs || rawLogs.length === 0) return;
+    if (!targetUserId || !firestore || !rawLogs || rawLogs.length === 0) return;
     if (!confirm('Tem certeza que deseja apagar todos os logs de histórico?')) return;
 
     setIsClearingLogs(true);
     try {
       const batch = writeBatch(firestore);
       rawLogs.forEach(l => {
-        batch.delete(doc(firestore, 'users', user.uid, 'logs', l.id));
+        batch.delete(doc(firestore, 'users', targetUserId, 'logs', l.id));
       });
       await batch.commit();
       toast({ title: 'Logs limpos', description: 'Todo o histórico de logs foi removido.' });

@@ -116,7 +116,8 @@ function ScheduleMessageForm({
     initialJid?: string;
     isEditMode?: boolean;
 }) {
-    const { firestore, user } = useFirebase();
+    const { firestore, user, effectiveUserId } = useFirebase();
+    const targetUserId = effectiveUserId || user?.uid || '';
     const { toast } = useToast();
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -240,10 +241,10 @@ function ScheduleMessageForm({
     };
 
     const handleFetchConnectedGroups = async () => {
-        if (!user) return;
+        if (!targetUserId) return;
         setIsLoadingGroups(true);
         try {
-            const settingsDocRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+            const settingsDocRef = doc(firestore, 'users', targetUserId, 'settings', 'config');
             const settingsSnap = await getDoc(settingsDocRef);
             const token = settingsSnap.exists() ? (settingsSnap.data() as Settings).webhookToken : '';
 
@@ -282,10 +283,10 @@ function ScheduleMessageForm({
 
     // Auto-carrega grupos ao abrir o formulário
     useEffect(() => {
-        if (!availableGroups && user) {
+        if (!availableGroups && targetUserId) {
             handleFetchConnectedGroups();
         }
-    }, [user]);
+    }, [targetUserId]);
 
     const filteredGroups = useMemo(() => {
         if (!availableGroups) return [];
@@ -319,7 +320,7 @@ function ScheduleMessageForm({
     };
 
     const onSubmit = async (values: ScheduleFormData) => {
-        if (!user) return;
+        if (!targetUserId) return;
 
         setIsSending(true);
 
@@ -382,7 +383,7 @@ function ScheduleMessageForm({
 
         try {
             if (isEditMode && initialMessage) {
-                const docRef = doc(firestore, 'users', user.uid, 'scheduled_messages', initialMessage.id);
+                const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', initialMessage.id);
                 await updateDoc(docRef, {
                     jid: values.jid,
                     message: values.message,
@@ -400,7 +401,7 @@ function ScheduleMessageForm({
                 toast({ title: "Agendamento Atualizado!", description: "Os detalhes do agendamento foram atualizados com sucesso." });
             } else {
                 const newScheduledMessageForFirestore = {
-                    userId: user.uid,
+                    userId: targetUserId,
                     jid: values.jid,
                     message: values.message,
                     sendAt: sendAtTimestamp,
@@ -414,7 +415,7 @@ function ScheduleMessageForm({
                     errorReason: null,
                     retryCount: 0,
                 };
-                addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'scheduled_messages'), newScheduledMessageForFirestore);
+                addDocumentNonBlocking(collection(firestore, 'users', targetUserId, 'scheduled_messages'), newScheduledMessageForFirestore);
                 toast({ title: "Mensagem Agendada!", description: "Sua mensagem foi salva e será enviada no horário programado." });
             }
             onFinished();
@@ -845,7 +846,8 @@ function ScheduleMessageForm({
 }
 
 function ScheduleMessageContent() {
-  const { firestore, user } = useFirebase();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const searchParams = useSearchParams();
   const initialJid = searchParams.get('jid') || '';
 
@@ -866,23 +868,23 @@ function ScheduleMessageContent() {
   }, [initialJid]);
 
   const scheduledMessagesQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'scheduled_messages'), orderBy('sendAt', 'desc'));
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'scheduled_messages'), orderBy('sendAt', 'desc'));
+  }, [firestore, targetUserId]);
 
   const { data: scheduledMessages, isLoading } = useCollection<ScheduledMessage>(scheduledMessagesQuery);
 
   const handleDelete = (message: ScheduledMessage) => {
-    if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'scheduled_messages', message.id);
+    if (!targetUserId) return;
+    const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', message.id);
     deleteDocumentNonBlocking(docRef);
     toast({ title: 'Agendamento Removido', description: 'A mensagem foi removida da lista de agendamentos.' });
   };
 
   const handleResetStatus = async (message: ScheduledMessage) => {
-    if (!user) return;
+    if (!targetUserId) return;
     try {
-        const docRef = doc(firestore, 'users', user.uid, 'scheduled_messages', message.id);
+        const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', message.id);
         await updateDoc(docRef, {
             status: 'Scheduled',
             retryCount: 0,
@@ -910,10 +912,10 @@ function ScheduleMessageContent() {
   };
 
   const handleSendNow = async (msg: ScheduledMessage) => {
-    if (!user) return;
+    if (!targetUserId) return;
     setIsSendingNow(prev => ({ ...prev, [msg.id]: true }));
     try {
-        const settingsDocRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+        const settingsDocRef = doc(firestore, 'users', targetUserId, 'settings', 'config');
         const settingsSnap = await getDoc(settingsDocRef);
         if (!settingsSnap.exists()) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Configurações de token não encontradas.' });
@@ -931,7 +933,7 @@ function ScheduleMessageContent() {
             return;
         }
 
-        const docRef = doc(firestore, 'users', user.uid, 'scheduled_messages', msg.id);
+        const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', msg.id);
         await updateDoc(docRef, { status: 'Sending' });
 
         const response = await fetch('/api/send-group-message', {

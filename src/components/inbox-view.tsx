@@ -19,13 +19,13 @@ import type { Conversation, Message } from '@/lib/types';
 
 
 export function InboxView() {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
 
   const conversationsQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'conversations'), orderBy('timestamp', 'desc'));
-  }, [firestore, user]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'conversations'), orderBy('timestamp', 'desc'));
+  }, [firestore, targetUserId]);
 
   const { data: conversations, isLoading: isLoadingConversations } = useCollection<Conversation>(conversationsQuery);
 
@@ -109,17 +109,17 @@ export function InboxView() {
 
 
 function ConversationPanel({ conversation }: { conversation: Conversation }) {
-  const { firestore } = useFirebase();
-  const { user } = useUser();
+  const { firestore, user, effectiveUserId } = useFirebase();
+  const targetUserId = effectiveUserId || user?.uid || '';
   const [message, setMessage] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
   const messagesQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'conversations', conversation.id, 'messages'), orderBy('timestamp', 'asc'));
-  }, [firestore, user, conversation.id]);
+    if (!targetUserId) return null;
+    return query(collection(firestore, 'users', targetUserId, 'conversations', conversation.id, 'messages'), orderBy('timestamp', 'asc'));
+  }, [firestore, targetUserId, conversation.id]);
 
   const { data: messages, isLoading: isLoadingMessages } = useCollection<Message>(messagesQuery);
 
@@ -154,8 +154,8 @@ function ConversationPanel({ conversation }: { conversation: Conversation }) {
 
 
   const handleSendMessage = () => {
-    if (message.trim() && user) {
-      const messagesCol = collection(firestore, 'users', user.uid, 'conversations', conversation.id, 'messages');
+    if (message.trim() && targetUserId) {
+      const messagesCol = collection(firestore, 'users', targetUserId, 'conversations', conversation.id, 'messages');
       addDocumentNonBlocking(messagesCol, {
         sender: 'agent',
         content: message,
