@@ -1154,10 +1154,31 @@ export function FlowWhatsAppSimulator({
                     setCurrentNotice(`Nenhum bloco conectado à opção "${matchedOpt!.label}". O fluxo encerra aqui.`);
                 }
                 return;
+            } else {
+                // Usuário digitou um texto livre que NÃO é opção do menu
+                const warnMsg = menuData?.invalidOptionMessage || '⚠️ *Por favor, selecione ou digite uma das opções válidas acima para continuar.*';
+                setIsTyping(true);
+                setTypingText('digitando...');
+                await sleep(700);
+                if (executionRef.current.isCancelled) return;
+                setIsTyping(false);
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `msg_warn_${Date.now()}`,
+                        sender: 'bot',
+                        nodeId: activeMenuNodeId,
+                        text: warnMsg,
+                        time: getCurrentTime(),
+                    },
+                ]);
+                setCurrentNotice('Opção não reconhecida. Selecione ou digite uma das opções acima.');
+                return;
             }
         }
 
-        // Se o usuário digitou algo fora do menu ou nenhuma opção bateu:
+        // Se o usuário digitou algo fora de qualquer menu:
         await sleep(600);
         setCurrentNotice('Mensagem enviada. Nenhuma condição ou bloco está aguardando este texto.');
     };

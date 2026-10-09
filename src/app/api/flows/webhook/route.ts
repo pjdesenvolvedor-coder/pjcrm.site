@@ -555,9 +555,38 @@ export async function POST(req: NextRequest) {
                 }).catch(() => {});
                 return NextResponse.json({ handled: 'user_menu_response' }, { status: 200 });
             }
+
             // Se NÃO bateu com nenhuma opção do menu:
-            // A mensagem do usuário é tratada como novo gatilho, reiniciando o fluxo!
-            console.log(`[Flow Webhook] Texto "${userText}" (btnId: "${selectedButtonId || ''}") não era opção de menu. Reiniciando fluxo para ${phoneNumber}.`);
+            // O cliente digitou algo fora das opções do menu. Enviamos o aviso para selecionar uma das opções acima e mantemos o contato no menu!
+            let invalidMsg = flowConfig.invalidOptionMessage;
+
+            // Tenta verificar se o nó de menu atual possui uma mensagem personalizada
+            try {
+                const currentFlowRef = doc(db, 'users', targetUserId, 'flows', currentSession.flowId);
+                const currentFlowSnap = await getDoc(currentFlowRef);
+                if (currentFlowSnap.exists()) {
+                    const currentFlowData = currentFlowSnap.data() as FlowDefinition;
+                    const menuNode = (currentFlowData.nodes || []).find((n: any) => n.id === currentSession.currentNodeId);
+                    if (menuNode?.data?.invalidOptionMessage) {
+                        invalidMsg = menuNode.data.invalidOptionMessage;
+                    }
+                }
+            } catch {}
+
+            if (!invalidMsg || !invalidMsg.trim()) {
+                invalidMsg = '⚠️ *Por favor, selecione ou digite uma das opções acima para continuar.*';
+            }
+
+            console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ("${userText}") não corresponde a nenhuma opção do menu. Enviando aviso: "${invalidMsg}"`);
+            await sendUazapiText(runnerCtx, invalidMsg).catch(() => {});
+
+            // Mantém o estado da sessão em waiting_user_input no mesmo nó
+            await updateDoc(sessionDocRef, {
+                lastMessageText: userText || '',
+                lastInteractionAt: new Date().toISOString(),
+            }).catch(() => {});
+
+            return NextResponse.json({ handled: 'invalid_menu_option_warned', message: invalidMsg }, { status: 200 });
         }
 
         // 8. Determinar qual fluxo disparar

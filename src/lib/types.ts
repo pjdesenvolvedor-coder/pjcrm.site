@@ -383,6 +383,7 @@ export type FlowTriggerSettings = {
   ignoreIfActiveFlow?: boolean;
   restartKeywords?: string[];
   resetKeyword?: string;
+  invalidOptionMessage?: string;
   updatedAt?: any;
 };
 
@@ -399,6 +400,7 @@ export type FlowNodeData = {
   menuQuestionText?: string;
   menuButtonTitle?: string;
   menuFooterText?: string;
+  invalidOptionMessage?: string;
   menuOptions?: Array<{
     id: string;
     label: string;

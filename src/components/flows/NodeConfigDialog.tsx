@@ -536,6 +536,24 @@ export function NodeConfigDialog({
                                 />
                             </div>
 
+                            {/* MENSAGEM SE O CLIENTE DIGITAR TEXTO FORA DAS OPÇÕES */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center justify-between">
+                                    <span>Mensagem se o Cliente Digitar Fora do Menu (Opcional)</span>
+                                    <span className="text-[11px] font-normal text-muted-foreground">Se ele digitar algo livre</span>
+                                </Label>
+                                <Input
+                                    placeholder="Ex: ⚠️ Por favor, selecione ou digite uma das opções acima para continuar."
+                                    value={formData.invalidOptionMessage || ''}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, invalidOptionMessage: e.target.value })
+                                    }
+                                />
+                                <p className="text-[10.5px] text-muted-foreground">
+                                    Caso o cliente envie um texto livre em vez de escolher uma opção, o sistema envia este aviso e o mantém no menu atual.
+                                </p>
+                            </div>
+
                             {/* SEÇÃO RESPOSTAS / ITENS DO MENU */}
                             <div className="space-y-3 pt-2">
                                 <div className="flex items-center justify-between">

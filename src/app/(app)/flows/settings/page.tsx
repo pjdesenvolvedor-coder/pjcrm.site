@@ -53,6 +53,7 @@ export default function FlowSettingsPage() {
     const [ignoreIfActiveFlow, setIgnoreIfActiveFlow] = useState<boolean>(true);
     const [restartKeywordsInput, setRestartKeywordsInput] = useState<string>('menu, reiniciar, voltar');
     const [resetKeyword, setResetKeyword] = useState<string>('reset');
+    const [invalidOptionMessage, setInvalidOptionMessage] = useState<string>('⚠️ *Por favor, selecione ou digite uma das opções acima para continuar.*');
     const [isSaving, setIsSaving] = useState(false);
 
     // Novo item de palavra-chave
@@ -71,6 +72,9 @@ export default function FlowSettingsPage() {
             }
             if (savedConfig.resetKeyword) {
                 setResetKeyword(savedConfig.resetKeyword);
+            }
+            if (savedConfig.invalidOptionMessage) {
+                setInvalidOptionMessage(savedConfig.invalidOptionMessage);
             }
         }
     }, [savedConfig]);
@@ -129,6 +133,7 @@ export default function FlowSettingsPage() {
             ignoreIfActiveFlow,
             restartKeywords: restartKeywordsList,
             resetKeyword: resetKeyword.trim().toLowerCase() || 'reset',
+            invalidOptionMessage: invalidOptionMessage.trim() || undefined,
             updatedAt: new Date().toISOString(),
         };
 
@@ -417,6 +422,22 @@ export default function FlowSettingsPage() {
                             />
                             <p className="text-xs text-muted-foreground">
                                 Quando você (ou o cliente) mandar essa palavra no WhatsApp (padrão: <code>reset</code>), o chat é completamente resetado e o fluxo recomeça imediatamente do início para novos testes.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t">
+                            <Label className="text-sm font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
+                                <MessageSquare className="h-4 w-4 text-indigo-600" />
+                                Mensagem Padrão para Resposta Fora do Menu
+                            </Label>
+                            <Input
+                                value={invalidOptionMessage}
+                                onChange={(e) => setInvalidOptionMessage(e.target.value)}
+                                placeholder="⚠️ *Por favor, selecione ou digite uma das opções acima para continuar.*"
+                                className="text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Se o cliente digitar um texto qualquer em vez de clicar ou digitar uma das opções do menu, o bot envia esse aviso e mantém a espera pela opção do menu.
                             </p>
                         </div>
                     </CardContent>
