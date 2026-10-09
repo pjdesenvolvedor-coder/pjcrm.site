@@ -524,49 +524,53 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const renderContent = () => {
     if (connectionStatus === 'connecting') {
       return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Loader2 className="h-16 w-16 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground mt-4">Gerando QR code...</p>
+        <div className="flex flex-col items-center justify-center text-center p-4 sm:p-6 gap-3 min-h-[220px]">
+          <Loader2 className="h-10 w-10 text-primary animate-spin" />
+          <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-2">Gerando QR code de conexão...</p>
         </div>
       );
     }
     if (connectionStatus === 'qr_code' && qrCode) {
       return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4">
-          <Badge variant="default" className="py-1 px-3 bg-blue-100 text-blue-800">
-            <QrCode className="h-4 w-4 mr-2" /> Pronto para escanear
+        <div className="flex flex-col items-center justify-center text-center py-2 px-1 gap-2">
+          <Badge variant="default" className="py-0.5 px-2.5 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 text-xs font-semibold">
+            <QrCode className="h-3.5 w-3.5 mr-1.5" /> Pronto para escanear
           </Badge>
-          <div className="w-56 h-56 bg-white rounded-lg flex items-center justify-center my-4 p-2 shadow-lg">
-            <Image src={qrCode} alt="QR Code" width={220} height={220} data-ai-hint="qr code"/>
+          <div className="w-48 h-48 sm:w-52 sm:h-52 bg-white rounded-xl flex items-center justify-center my-1.5 p-2 shadow-md border mx-auto">
+            <Image src={qrCode} alt="QR Code" width={195} height={195} className="w-full h-full object-contain" data-ai-hint="qr code"/>
           </div>
-          <p className="text-lg font-semibold text-muted-foreground animate-pulse">Aguardando conexão...</p>
+          <p className="text-xs sm:text-sm font-semibold text-muted-foreground animate-pulse">Aguardando leitura no WhatsApp...</p>
         </div>
       );
     }
     if (liveStatus?.status === 'connected') {
       return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="default" className="py-1 px-3 bg-green-100 text-green-800">Conectado</Badge>
-          {liveStatus.profilePicUrl && <Image src={liveStatus.profilePicUrl} alt="Foto" width={96} height={96} className="rounded-full my-4 shadow-lg" />}
-          <p className="font-semibold text-lg">{liveStatus.profileName}</p>
-           <div className="flex flex-col gap-2 w-full">
-            <Button variant="outline" className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800" onClick={() => { setZapConnectOpen(false); router.push('/settings/save-contacts'); }}>
-                <SaveAll className="h-4 w-4" />
-                Salvar Contatos (Exportar)
+        <div className="flex flex-col items-center justify-center text-center py-3 px-1 gap-2.5">
+          <Badge variant="default" className="py-0.5 px-2.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-semibold">
+            WhatsApp Conectado
+          </Badge>
+          {liveStatus.profilePicUrl && (
+            <Image src={liveStatus.profilePicUrl} alt="Foto" width={68} height={68} className="rounded-full my-1.5 shadow-md border-2 border-emerald-500/30 object-cover" />
+          )}
+          <p className="font-bold text-sm sm:text-base text-foreground truncate max-w-[260px]">{liveStatus.profileName || 'Instância Ativa'}</p>
+          <div className="flex flex-col gap-2 w-full pt-1">
+            <Button variant="outline" size="sm" className="w-full gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 text-xs h-8.5" onClick={() => { setZapConnectOpen(false); router.push('/settings/save-contacts'); }}>
+              <SaveAll className="h-4 w-4" />
+              Salvar Contatos (Exportar)
             </Button>
-            <Button variant="destructive" className="w-full" onClick={handleDisconnect} disabled={isDisconnecting}>
-                {isDisconnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : "Desconectar"}
+            <Button variant="destructive" size="sm" className="w-full text-xs h-8.5" onClick={handleDisconnect} disabled={isDisconnecting}>
+              {isDisconnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : "Desconectar"}
             </Button>
-           </div>
+          </div>
         </div>
       );
     }
     return (
-        <div className="flex flex-col items-center justify-center text-center p-8 gap-4 min-h-[340px]">
-          <Badge variant="destructive" className="py-1 px-3">Desconectado</Badge>
-          <p className="text-sm text-muted-foreground">Clique em 'Conectar' para parear.</p>
-          <div className="w-40 h-40 bg-muted/20 rounded-lg flex items-center justify-center my-4"><Zap className="h-20 w-20 text-muted-foreground/20" /></div>
-        </div>
+      <div className="flex flex-col items-center justify-center text-center py-4 px-1 gap-2 min-h-[180px]">
+        <Badge variant="destructive" className="py-0.5 px-2.5 text-xs font-semibold">Desconectado</Badge>
+        <p className="text-xs text-muted-foreground">Clique em 'Conectar' abaixo para parear.</p>
+        <div className="w-20 h-20 bg-muted/20 rounded-xl flex items-center justify-center my-1 border border-dashed border-border"><Zap className="h-8 w-8 text-muted-foreground/30" /></div>
+      </div>
     );
   };
 
@@ -992,10 +996,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </SidebarMenuSubItem>
               </SidebarMenuItem>
             </SidebarMenu>
-            <DialogContent className="sm:max-w-sm">
-                <DialogHeader className="p-6 border-b flex flex-row items-center justify-between space-y-0">
+            <DialogContent className="w-[95vw] max-w-[420px] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl shadow-2xl border flex flex-col">
+                <DialogHeader className="p-4 sm:p-5 border-b flex flex-row items-center justify-between space-y-0 sticky top-0 bg-background/95 backdrop-blur-sm z-10">
                     <div>
-                      <DialogTitle className="text-xl font-bold flex items-center gap-2"><Zap className="text-primary" />Hub Principal</DialogTitle>
+                      <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                        <Zap className="h-5 w-5 text-primary" />
+                        Hub Principal
+                      </DialogTitle>
                       <p className="text-xs text-muted-foreground mt-0.5">Conexão Zap do Sistema</p>
                     </div>
                     {settings?.webhookToken && (
@@ -1012,37 +1019,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </DialogHeader>
 
                 {/* Bloco de edição/exibição do Token do Hub Principal */}
-                <div className="px-6 pt-4 pb-0 space-y-2">
-                  <div className="flex flex-col gap-1.5 p-3 rounded-lg border bg-muted/40 border-border">
+                <div className="p-4 sm:p-5 pb-2">
+                  <div className="flex flex-col gap-1.5 p-3 rounded-xl border bg-muted/40 border-border">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
                         <Key className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                         Token UAZAPI
                       </Label>
                       {settings?.webhookToken && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 font-semibold">
                           Salvo
                         </Badge>
                       )}
                     </div>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-1.5 mt-0.5">
                       <Input
                         type="text"
                         placeholder="Cole aqui seu token..."
                         value={hubTokenInput}
                         onChange={(e) => setHubTokenInput(e.target.value)}
-                        className="font-mono text-xs h-8 bg-background"
+                        className="font-mono text-xs h-8 bg-background flex-1 min-w-0"
                       />
                       <Button
                         type="button"
                         variant="default"
                         size="sm"
-                        className="h-8 px-3 shrink-0 gap-1 text-xs"
+                        className="h-8 px-2.5 shrink-0 gap-1 text-xs"
                         onClick={handleSaveHubToken}
                         disabled={isSavingHubToken}
                       >
                         {isSavingHubToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                        Salvar
+                        <span className="hidden sm:inline">Salvar</span>
                       </Button>
                       {hubTokenInput && (
                         <Button
@@ -1060,16 +1067,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         </Button>
                       )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-tight mt-1">
-                      Insira o token gerado na UAZAPI e clique em Salvar para conectar seu WhatsApp.
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                      Insira o token da UAZAPI e clique em Salvar para conectar seu WhatsApp.
                     </p>
                   </div>
                 </div>
 
-                {renderContent()}
-                <DialogFooter className="p-6 border-t bg-muted/50">
+                <div className="px-4 sm:px-5">
+                  {renderContent()}
+                </div>
+
+                <DialogFooter className="p-4 sm:p-5 border-t bg-muted/30 sticky bottom-0 z-10">
                   {liveStatus?.status !== 'connected' && connectionStatus !== 'qr_code' && (
-                    <Button className="w-full" size="lg" onClick={handleConnect} disabled={connectionStatus === 'connecting'}><Zap className="mr-2 h-4 w-4" />Conectar</Button>
+                    <Button className="w-full h-10 text-sm font-semibold shadow-sm" size="lg" onClick={handleConnect} disabled={connectionStatus === 'connecting'}>
+                      {connectionStatus === 'connecting' ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Gerando QR Code...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="mr-2 h-4 w-4" />
+                          Conectar WhatsApp
+                        </>
+                      )}
+                    </Button>
                   )}
                 </DialogFooter>
             </DialogContent>
