@@ -104,8 +104,9 @@ export default function TwoFactorAppPage() {
   };
 
   const fetchLogsFromApi = async () => {
+    if (!uid) return;
     try {
-      const res = await fetch('/api/2-fatores');
+      const res = await fetch(`/api/2-fatores/${uid}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.logs)) {
         setLogs(data.logs);
@@ -117,16 +118,17 @@ export default function TwoFactorAppPage() {
     }
   };
 
-  // Listen to Firestore 2FA logs in real-time + 4s polling fallback
+  // Listen to Firestore 2FA logs in real-time for this specific user
   useEffect(() => {
-    if (!firestore) {
-      fetchLogsFromApi();
-      const interval = setInterval(fetchLogsFromApi, 4000);
-      return () => clearInterval(interval);
+    if (!firestore || !uid) {
+      if (uid) {
+        fetchLogsFromApi();
+      }
+      return;
     }
 
     setIsLoadingLogs(true);
-    const q = query(collection(firestore, 'two_factor_logs'), orderBy('timestampMs', 'desc'), limit(50));
+    const q = query(collection(firestore, 'users', uid, 'two_factor_logs'), orderBy('timestampMs', 'desc'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedLogs: TwoFactorLog[] = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -139,22 +141,23 @@ export default function TwoFactorAppPage() {
       fetchLogsFromApi();
     });
 
-    const interval = setInterval(fetchLogsFromApi, 4000);
+    const interval = setInterval(fetchLogsFromApi, 5000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
-  }, [firestore]);
+  }, [firestore, uid]);
 
-  const webhookUrl = `${origin}/api/2-fatores`;
+  const webhookUrl = uid ? `${origin}/api/2-fatores/${uid}` : `${origin}/api/2-fatores`;
 
   const copyWebhookUrl = () => {
+    if (!webhookUrl) return;
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     toast({
       title: 'URL Copiada! 🚀',
-      description: 'O link do Webhook foi copiado para a área de transferência.',
+      description: 'O link do Webhook exclusivo da sua conta foi copiado.',
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -170,9 +173,18 @@ export default function TwoFactorAppPage() {
       return;
     }
 
+    if (!uid) {
+      toast({
+        title: 'Usuário não autenticado',
+        description: 'Aguarde o carregamento da sua sessão para testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSending(true);
     try {
-      const res = await fetch('/api/2-fatores', {
+      const res = await fetch(`/api/2-fatores/${uid}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,7 +204,7 @@ export default function TwoFactorAppPage() {
       } else {
         toast({
           title: 'Erro ao enviar 2FA',
-          description: json.error || json.details || 'Falha ao processar o webhook.',
+          description: json.error || json.errorDetail || 'Falha ao processar o webhook.',
           variant: 'destructive',
         });
       }
