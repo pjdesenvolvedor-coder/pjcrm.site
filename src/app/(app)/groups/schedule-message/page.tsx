@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw } from 'lucide-react';
+import { useState, useRef, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,13 +21,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
-import type { ScheduledMessage } from '@/lib/types';
+import type { ScheduledMessage, Settings } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -98,13 +98,21 @@ const scheduleSchema = z.object({
 
 type ScheduleFormData = z.infer<typeof scheduleSchema>;
 
+interface ListedGroup {
+    jid: string;
+    name: string;
+    participantCount: number;
+}
+
 function ScheduleMessageForm({ 
     onFinished, 
     initialMessage,
+    initialJid = '',
     isEditMode = false 
 }: { 
     onFinished: () => void; 
     initialMessage?: ScheduledMessage;
+    initialJid?: string;
     isEditMode?: boolean;
 }) {
     const { firestore, user } = useFirebase();
@@ -113,10 +121,14 @@ function ScheduleMessageForm({
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
 
+    const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+    const [availableGroups, setAvailableGroups] = useState<ListedGroup[] | null>(null);
+    const [showGroupPicker, setShowGroupPicker] = useState(false);
+
     const form = useForm<ScheduleFormData>({
         resolver: zodResolver(scheduleSchema),
         defaultValues: {
-            jid: '',
+            jid: initialJid || '',
             message: '',
             image: undefined,
             sendDate: '',
@@ -145,22 +157,43 @@ function ScheduleMessageForm({
                 siteLink: initialMessage.siteLink || '',
             });
             setImagePreview(initialMessage.imageUrl || null);
-        } else {
-            form.reset({
-                jid: '',
-                message: '',
-                image: undefined,
-                sendDate: '',
-                sendHour: new Date().getHours().toString().padStart(2, '0'),
-                sendMinute: new Date().getMinutes().toString().padStart(2, '0'),
-                repeatDaily: false,
-                useBillingZap: false,
-                supportNumber: '',
-                siteLink: '',
-            });
-            setImagePreview(null);
+        } else if (initialJid) {
+            form.setValue('jid', initialJid);
         }
-    }, [initialMessage, form]);
+    }, [initialMessage, initialJid, form]);
+
+    const handleFetchConnectedGroups = async () => {
+        if (!user) return;
+        setIsLoadingGroups(true);
+        try {
+            const settingsDocRef = doc(firestore, 'users', user.uid, 'settings', 'config');
+            const settingsSnap = await getDoc(settingsDocRef);
+            const token = settingsSnap.exists() ? (settingsSnap.data() as Settings).webhookToken : '';
+
+            if (!token) {
+                toast({ variant: 'destructive', title: 'WhatsApp não conectado', description: 'Configure seu token antes de buscar grupos.' });
+                return;
+            }
+
+            const response = await fetch('/api/groups/list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Falha ao buscar grupos.');
+            }
+
+            setAvailableGroups(data.groups || []);
+            setShowGroupPicker(true);
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Erro ao listar grupos', description: err.message });
+        } finally {
+            setIsLoadingGroups(false);
+        }
+    };
 
     const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let value = e.target.value.replace(/\D/g, '');
@@ -168,10 +201,10 @@ function ScheduleMessageForm({
 
         let formatted = value;
         if (value.length > 2) {
-        formatted = `${value.slice(0, 2)}/${value.slice(2)}`;
+            formatted = `${value.slice(0, 2)}/${value.slice(2)}`;
         }
         if (value.length > 4) {
-        formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
+            formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
         }
         form.setValue('sendDate', formatted);
     };
@@ -181,9 +214,9 @@ function ScheduleMessageForm({
 
         setIsSending(true);
 
-        // Custom validation for required image
-        if (!values.image && !imagePreview) {
-            form.setError('image', { type: 'manual', message: 'A imagem é obrigatória para o agendamento.' });
+        // Imagem é opcional se já existir preview no modo de edição
+        if (!values.image && !imagePreview && !values.message) {
+            form.setError('message', { type: 'manual', message: 'Preencha a mensagem ou selecione uma imagem.' });
             setIsSending(false);
             return;
         }
@@ -271,31 +304,69 @@ function ScheduleMessageForm({
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <fieldset disabled={isSending} className="space-y-4">
                     <DialogHeader>
-                        <DialogTitle>Agendar Mensagem de Grupo</DialogTitle>
+                        <DialogTitle>{isEditMode ? 'Editar Agendamento' : 'Agendar Mensagem de Grupo'}</DialogTitle>
                         <DialogDescription>
-                            Preencha os detalhes para agendar uma nova mensagem para um grupo.
+                            Preencha os detalhes para programar o disparo da mensagem no grupo.
                         </DialogDescription>
                     </DialogHeader>
                     <Alert className="border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle className="font-bold">Atenção</AlertTitle>
                         <AlertDescription>
-                        ⚠️ Você precisa ser administrador do grupo para agendar uma mensagem. 🔐
+                        ⚠️ O WhatsApp conectado precisa participar do grupo para enviar a mensagem. 🔐
                         </AlertDescription>
                     </Alert>
+
                     <FormField
                         control={form.control}
                         name="jid"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Grupo (JID)</FormLabel>
+                                <div className="flex items-center justify-between">
+                                    <FormLabel>Grupo (JID)</FormLabel>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleFetchConnectedGroups}
+                                        disabled={isLoadingGroups}
+                                        className="h-6 text-xs text-primary gap-1 px-1.5"
+                                    >
+                                        <ListFilter className="h-3 w-3" />
+                                        {isLoadingGroups ? 'Buscando...' : 'Selecionar de Meus Grupos'}
+                                    </Button>
+                                </div>
                                 <FormControl>
-                                    <Input placeholder="Cole o JID do grupo aqui..." {...field} />
+                                    <Input placeholder="Ex: 120363153742561022@g.us" {...field} />
                                 </FormControl>
                                 <FormMessage />
+
+                                {showGroupPicker && availableGroups && (
+                                    <div className="mt-2 border rounded-md p-2 bg-muted/20 max-h-36 overflow-y-auto space-y-1">
+                                        <div className="flex justify-between items-center text-[11px] font-semibold text-muted-foreground mb-1">
+                                            <span>Grupos Conectados:</span>
+                                            <button type="button" onClick={() => setShowGroupPicker(false)} className="hover:underline">Fechar</button>
+                                        </div>
+                                        {availableGroups.map(g => (
+                                            <button
+                                                key={g.jid}
+                                                type="button"
+                                                onClick={() => {
+                                                    form.setValue('jid', g.jid);
+                                                    setShowGroupPicker(false);
+                                                }}
+                                                className="w-full flex items-center justify-between p-1.5 rounded text-left hover:bg-muted text-xs transition-colors"
+                                            >
+                                                <span className="font-medium truncate mr-2">{g.name}</span>
+                                                <span className="text-[10px] font-mono text-muted-foreground shrink-0">{g.jid}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </FormItem>
                         )}
                     />
+
                     <FormField
                         control={form.control}
                         name="message"
@@ -303,22 +374,23 @@ function ScheduleMessageForm({
                             <FormItem>
                                 <FormLabel>Mensagem</FormLabel>
                                 <FormControl>
-                                    <Textarea placeholder="Escreva sua mensagem..." className="resize-none" {...field} />
+                                    <Textarea placeholder="Escreva sua mensagem... (pode usar @todos ou @all para mencionar)" className="resize-none" rows={3} {...field} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
                         )}
                     />
+
                     <FormField
                         control={form.control}
                         name="image"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Imagem</FormLabel>
+                                <FormLabel>Imagem (Opcional)</FormLabel>
                                 <FormControl>
                                     <Button type="button" variant="outline" className="w-full" onClick={() => imageInputRef.current?.click()}>
                                     <Upload className="mr-2 h-4 w-4" />
-                                    {field.value ? 'Alterar Imagem' : 'Selecionar Imagem'}
+                                    {field.value || imagePreview ? 'Alterar Imagem' : 'Selecionar Imagem'}
                                     </Button>
                                 </FormControl>
                                 <Input 
@@ -338,18 +410,35 @@ function ScheduleMessageForm({
                                         }
                                     }} 
                                 />
-                                {imagePreview && <img src={imagePreview} alt="Preview" className="mt-2 h-20 w-20 object-cover rounded-md" data-ai-hint="image preview" />}
+                                {imagePreview && (
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <img src={imagePreview} alt="Preview" className="h-16 w-16 object-cover rounded-md border" />
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-xs text-destructive h-7"
+                                            onClick={() => {
+                                                setImagePreview(null);
+                                                field.onChange(undefined);
+                                            }}
+                                        >
+                                            Remover Imagem
+                                        </Button>
+                                    </div>
+                                )}
                                 <FormMessage />
                             </FormItem>
                         )}
                     />
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                             control={form.control}
                             name="supportNumber"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Número para suporte (Opcional)</FormLabel>
+                                    <FormLabel>Contato de Suporte (Opcional)</FormLabel>
                                     <FormControl>
                                         <Input placeholder="Ex: 5511999998888" {...field} />
                                     </FormControl>
@@ -371,6 +460,7 @@ function ScheduleMessageForm({
                             )}
                         />
                     </div>
+
                     <div className='space-y-2'>
                         <Label>Data e Hora do Envio</Label>
                         <div className="flex items-start gap-2">
@@ -421,16 +511,17 @@ function ScheduleMessageForm({
                                 />
                             </div>
                         </div>
+
                         <div className="flex flex-col gap-3 pt-4">
                             <FormField
                                 control={form.control}
                                 name="useBillingZap"
                                 render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
                                         <div className="space-y-0.5">
-                                            <FormLabel className="text-base">Usar ZAP Cobrança</FormLabel>
-                                            <p className="text-[13px] text-muted-foreground mr-4">
-                                                Habilitar envio pelo número de cobrança. Se desmarcado (padrão), o Hub Principal será utilizado.
+                                            <FormLabel className="text-sm font-medium">Usar ZAP Cobrança</FormLabel>
+                                            <p className="text-[12px] text-muted-foreground mr-4">
+                                                Dispara pelo WhatsApp de cobrança. Se desmarcado, utiliza o Hub Principal.
                                             </p>
                                         </div>
                                         <FormControl>
@@ -455,8 +546,8 @@ function ScheduleMessageForm({
                                             />
                                         </FormControl>
                                         <div className="space-y-1 leading-none">
-                                            <FormLabel>
-                                                Repetir diariamente
+                                            <FormLabel className="text-sm">
+                                                Repetir diariamente no mesmo horário
                                             </FormLabel>
                                         </div>
                                     </FormItem>
@@ -481,19 +572,29 @@ function ScheduleMessageForm({
                 </DialogFooter>
             </form>
         </Form>
-    )
+    );
 }
 
-
-export default function ScheduleMessagePage() {
+function ScheduleMessageContent() {
   const { firestore, user } = useFirebase();
+  const searchParams = useSearchParams();
+  const initialJid = searchParams.get('jid') || '';
+
   const { toast } = useToast();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(Boolean(initialJid));
   const [dialogConfig, setDialogConfig] = useState<{
     mode: 'create' | 'edit' | 'duplicate';
     message?: ScheduledMessage;
-  }>({ mode: 'create' });
+    jid?: string;
+  }>({ mode: 'create', jid: initialJid });
   const [isSendingNow, setIsSendingNow] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (initialJid) {
+      setDialogConfig({ mode: 'create', jid: initialJid });
+      setIsDialogOpen(true);
+    }
+  }, [initialJid]);
 
   const scheduledMessagesQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -525,7 +626,7 @@ export default function ScheduleMessagePage() {
   };
 
   const handleOpenCreate = () => {
-    setDialogConfig({ mode: 'create' });
+    setDialogConfig({ mode: 'create', jid: '' });
     setIsDialogOpen(true);
   };
 
@@ -591,7 +692,7 @@ export default function ScheduleMessagePage() {
                     errorReason: null
                 });
             }
-            toast({ title: 'Mensagem Enviada!', description: 'A mensagem foi disparada com sucesso para o grupo.' });
+            toast({ title: 'Mensagem Enviada!', description: 'A mensagem foi disparada com sucesso para o grupo via UazAPI.' });
         } else {
             let errorMsg = 'Erro desconhecido';
             try {
@@ -646,8 +747,8 @@ export default function ScheduleMessagePage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Agendar Mensagens"
-        description="Agende o envio de mensagens para os grupos cadastrados."
+        title="Agendar Mensagens de Grupo"
+        description="Agende envios automáticos para grupos do WhatsApp através da API oficial da UazAPI."
       >
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <Button size="sm" className="gap-1" onClick={handleOpenCreate}>
@@ -658,6 +759,7 @@ export default function ScheduleMessagePage() {
                 <ScheduleMessageForm 
                     onFinished={() => setIsDialogOpen(false)} 
                     initialMessage={dialogConfig.message}
+                    initialJid={dialogConfig.jid}
                     isEditMode={dialogConfig.mode === 'edit'}
                 />
             </DialogContent>
@@ -668,7 +770,7 @@ export default function ScheduleMessagePage() {
             <CardHeader>
                 <CardTitle>Mensagens Agendadas</CardTitle>
                 <CardDescription>
-                    Lista de todas as mensagens agendadas para envio.
+                    Lista de todas as mensagens agendadas para envio em grupos.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -686,7 +788,7 @@ export default function ScheduleMessagePage() {
                 <TableBody>
                      {isLoading && (
                         <TableRow>
-                            <TableCell colSpan={6} className="text-center">Carregando...</TableCell>
+                            <TableCell colSpan={6} className="text-center py-6">Carregando agendamentos...</TableCell>
                         </TableRow>
                      )}
                      {!isLoading && scheduledMessages?.map((msg) => (
@@ -801,7 +903,7 @@ export default function ScheduleMessagePage() {
                      ))}
                      {!isLoading && scheduledMessages?.length === 0 && (
                         <TableRow>
-                            <TableCell colSpan={6} className="text-center">Nenhum agendamento encontrado.</TableCell>
+                            <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Nenhum agendamento encontrado.</TableCell>
                         </TableRow>
                     )}
                 </TableBody>
@@ -810,5 +912,13 @@ export default function ScheduleMessagePage() {
         </Card>
       </main>
     </div>
+  );
+}
+
+export default function ScheduleMessagePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">Carregando agendamentos...</div>}>
+      <ScheduleMessageContent />
+    </Suspense>
   );
 }
