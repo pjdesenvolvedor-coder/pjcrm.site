@@ -27,7 +27,10 @@ import {
     cleanPhone,
     cleanServerUrl,
     sendUazapiText,
+    sendUazapiContact,
     formatPhoneWith55,
+    findSupportContactCard,
+    isHumanSupportRequest,
 } from '@/lib/flow-runner';
 
 export const dynamic = 'force-dynamic';
@@ -525,6 +528,38 @@ export async function POST(req: NextRequest) {
                     pausedUntil: null,
                     pausedUntilMs: null,
                 }).catch(() => {});
+            }
+        }
+
+        // 5.2 SOLICITAÇÃO DE ATENDIMENTO HUMANO / FALAR COM ATENDENTE / SUPORTE
+        // Se o cliente digitar palavras como 'falar com atendente', 'atendimento humanizado', 'humano', 'suporte', etc.
+        const isHumanSupport = isHumanSupportRequest(userText, flowConfig.humanSupportKeywords);
+        if (isHumanSupport) {
+            console.log(`[Flow Webhook] Solicitação de atendimento humano recebida de ${phoneNumber}: "${userText}". Buscando card de suporte configurado...`);
+
+            const supportCard = await findSupportContactCard(db, targetUserId, flowConfig);
+
+            if (supportCard && supportCard.phone) {
+                console.log(`[Flow Webhook] Enviando card de suporte para ${phoneNumber}: ${supportCard.name} (${supportCard.phone})`);
+                await sendUazapiContact(runnerCtx, supportCard.name, supportCard.phone, supportCard.org);
+
+                // Conclui a sessão para que o bot não fique interrompendo ou reenviando menus
+                await setDoc(sessionDocRef, {
+                    userId: targetUserId,
+                    phoneNumber,
+                    contactName: contactName || 'Cliente WhatsApp',
+                    lastMessageText: userText,
+                    status: 'completed',
+                    lastInteractionAt: new Date().toISOString(),
+                }, { merge: true });
+
+                return NextResponse.json({
+                    success: true,
+                    humanSupportDispatched: true,
+                    contact: supportCard,
+                }, { status: 200 });
+            } else {
+                console.warn(`[Flow Webhook] Nenhum card de suporte/atendente encontrado nos fluxos ou configurações do usuário ${targetUserId}.`);
             }
         }
 

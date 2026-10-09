@@ -1,5 +1,5 @@
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import type { FlowDefinition, FlowNodeData, FlowContactSession, UazapiConnectionConfig, Settings, FlowVariablesConfig } from './types';
+import type { FlowDefinition, FlowNodeData, FlowContactSession, UazapiConnectionConfig, Settings, FlowVariablesConfig, FlowTriggerSettings } from './types';
 import { getOrCreateRenewalSession } from './renewal-service';
 
 export function cleanPhone(raw: string): string {
@@ -1532,4 +1532,128 @@ export async function handleUserMenuResponse(
         lastInteractionAt: new Date().toISOString(),
     }, { merge: true });
     return true;
+}
+
+// Helper de detecção resiliente de solicitação de atendimento humano / atendente / suporte
+export function isHumanSupportRequest(text: string, customKeywords?: string[]): boolean {
+    if (!text) return false;
+    const clean = (text || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\p{Emoji}\p{Symbol}\p{Punctuation}]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!clean) return false;
+
+    const defaultKeywords = [
+        'falar com atendente',
+        'atendimento humanizado',
+        'humano',
+        'humana',
+        'atendente',
+        'atendente humano',
+        'atendente humanizado',
+        'suporte',
+        'falar com suporte',
+        'falar com humano',
+        'chamar atendente',
+        'chamar suporte',
+        'quero falar com atendente',
+        'quero falar com humano',
+        'quero um atendente',
+        'falar com uma pessoa',
+        'falar com pessoa',
+        'atendimento humano',
+    ];
+
+    const keywordsList = (customKeywords && customKeywords.length > 0 ? customKeywords : defaultKeywords)
+        .map((k) =>
+            (k || '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[\p{Emoji}\p{Symbol}\p{Punctuation}]/gu, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+        )
+        .filter(Boolean);
+
+    for (const kw of keywordsList) {
+        if (!kw) continue;
+        if (clean === kw) return true;
+        // Palavra ou frase isolada no texto
+        const regex = new RegExp(`(^|\\s)${kw}(\\s|$)`, 'i');
+        if (regex.test(clean)) return true;
+    }
+
+    return false;
+}
+
+// Localizador inteligente do card de contato de suporte
+// Prioriza o fluxo de teste do usuário e blocos send_contact configurados
+export async function findSupportContactCard(
+    db: any,
+    userId: string,
+    flowConfig?: FlowTriggerSettings
+): Promise<{ name: string; phone: string; org?: string } | null> {
+    // 1. Se configurado explicitamente em flow_config
+    if (flowConfig?.humanSupportPhone && flowConfig.humanSupportPhone.trim()) {
+        return {
+            name: flowConfig.humanSupportName?.trim() || 'Suporte Oficial',
+            phone: flowConfig.humanSupportPhone.trim(),
+            org: flowConfig.humanSupportOrg?.trim() || undefined,
+        };
+    }
+
+    // 2. Busca nos fluxos do usuário (Prioridade para o fluxo de Teste)
+    try {
+        const flowsSnap = await getDocs(collection(db, 'users', userId, 'flows'));
+        const flows = flowsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FlowDefinition));
+
+        // Prioridade 1: Fluxo cujo nome contém "teste" ou "test"
+        const testFlows = flows.filter((f) => /teste|test/i.test(f.name || ''));
+        const otherFlows = flows.filter((f) => !/teste|test/i.test(f.name || ''));
+        const searchOrder = [...testFlows, ...otherFlows];
+
+        for (const flow of searchOrder) {
+            const nodes = flow.nodes || [];
+            // Procura bloco action send_contact com contactCardPhone preenchido
+            const contactNode = nodes.find(
+                (n: any) =>
+                    (n.data?.actionType === 'send_contact' || n.data?.contactCardPhone) &&
+                    n.data?.contactCardPhone?.trim()
+            );
+
+            if (contactNode && contactNode.data?.contactCardPhone) {
+                console.log(`[findSupportContactCard] Card de contato de suporte encontrado no fluxo "${flow.name}": ${contactNode.data.contactCardName || 'Suporte'} (${contactNode.data.contactCardPhone})`);
+                return {
+                    name: contactNode.data.contactCardName?.trim() || 'Suporte Oficial',
+                    phone: contactNode.data.contactCardPhone.trim(),
+                    org: contactNode.data.contactCardOrganization?.trim() || undefined,
+                };
+            }
+        }
+    } catch (err) {
+        console.error('[findSupportContactCard] Erro ao buscar fluxos do usuário:', err);
+    }
+
+    // 3. Fallback: configurações gerais do usuário (settings/config)
+    try {
+        const configSnap = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
+        if (configSnap.exists()) {
+            const cfg = configSnap.data() as any;
+            const fallbackPhone = cfg.supportPhone || cfg.supportNumber || cfg.adminPhone || cfg.phone;
+            if (fallbackPhone && String(fallbackPhone).trim()) {
+                return {
+                    name: cfg.supportName?.trim() || 'Suporte Oficial',
+                    phone: String(fallbackPhone).trim(),
+                    org: cfg.companyName?.trim() || undefined,
+                };
+            }
+        }
+    } catch {}
+
+    return null;
 }

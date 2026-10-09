@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { FlowNodeData, FlowVariablesConfig } from '@/lib/types';
+import { isHumanSupportRequest } from '@/lib/flow-runner';
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import {
@@ -1089,6 +1090,43 @@ export function FlowWhatsAppSimulator({
         };
         setMessages((prev) => [...prev, userMsg]);
         setCurrentNotice(null);
+
+        // Se for solicitação de atendimento humanizado / suporte:
+        if (isHumanSupportRequest(text)) {
+            setActiveMenuNodeId(null);
+            setIsTyping(true);
+            setTypingText('digitando...');
+            await sleep(600);
+            if (executionRef.current.isCancelled) return;
+            setIsTyping(false);
+
+            const currentNodes = activeNodesRef.current;
+            const contactNode = currentNodes.find(
+                (n) => (n.data?.actionType === 'send_contact' || n.data?.contactCardPhone) && n.data?.contactCardPhone
+            );
+            const cardData = contactNode?.data as FlowNodeData | undefined;
+
+            const cardName = cardData?.contactCardName ? formatText(cardData.contactCardName) : 'Suporte Oficial';
+            const cardPhone = cardData?.contactCardPhone ? formatText(cardData.contactCardPhone) : '5511999999999';
+            const cardOrg = cardData?.contactCardOrganization ? formatText(cardData.contactCardOrganization) : undefined;
+
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `msg_contact_${Date.now()}`,
+                    sender: 'bot',
+                    text: '',
+                    contactCard: {
+                        name: cardName,
+                        phone: cardPhone,
+                        organization: cardOrg,
+                    },
+                    time: getCurrentTime(),
+                },
+            ]);
+            setCurrentNotice(`Atendimento humanizado solicitado. Card de contato (${cardName}) enviado!`);
+            return;
+        }
 
         // Se houver um menu aguardando resposta:
         if (activeMenuNodeId) {

@@ -384,6 +384,12 @@ export type FlowTriggerSettings = {
   restartKeywords?: string[];
   resetKeyword?: string;
   invalidOptionMessage?: string;
+  enableHumanSupportCard?: boolean;
+  humanSupportKeywords?: string[];
+  humanSupportPhone?: string;
+  humanSupportName?: string;
+  humanSupportOrg?: string;
+  humanSupportPauseDurationMinutes?: number;
   updatedAt?: any;
 };
 

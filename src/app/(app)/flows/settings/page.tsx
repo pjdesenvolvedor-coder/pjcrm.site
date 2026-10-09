@@ -25,7 +25,9 @@ import {
     CheckCircle2, 
     HelpCircle,
     Info,
-    RotateCcw
+    RotateCcw,
+    UserCheck,
+    PhoneCall
 } from 'lucide-react';
 
 export default function FlowSettingsPage() {
@@ -54,6 +56,10 @@ export default function FlowSettingsPage() {
     const [restartKeywordsInput, setRestartKeywordsInput] = useState<string>('menu, reiniciar, voltar');
     const [resetKeyword, setResetKeyword] = useState<string>('reset');
     const [invalidOptionMessage, setInvalidOptionMessage] = useState<string>('Selecione a opção acima');
+    const [humanSupportKeywordsInput, setHumanSupportKeywordsInput] = useState<string>('falar com atendente, atendimento humanizado, humano, atendente, suporte');
+    const [humanSupportPhone, setHumanSupportPhone] = useState<string>('');
+    const [humanSupportName, setHumanSupportName] = useState<string>('Suporte Oficial');
+    const [humanSupportOrg, setHumanSupportOrg] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
 
     // Novo item de palavra-chave
@@ -75,6 +81,18 @@ export default function FlowSettingsPage() {
             }
             if (savedConfig.invalidOptionMessage) {
                 setInvalidOptionMessage(savedConfig.invalidOptionMessage);
+            }
+            if (savedConfig.humanSupportKeywords) {
+                setHumanSupportKeywordsInput(savedConfig.humanSupportKeywords.join(', '));
+            }
+            if (savedConfig.humanSupportPhone) {
+                setHumanSupportPhone(savedConfig.humanSupportPhone);
+            }
+            if (savedConfig.humanSupportName) {
+                setHumanSupportName(savedConfig.humanSupportName);
+            }
+            if (savedConfig.humanSupportOrg) {
+                setHumanSupportOrg(savedConfig.humanSupportOrg);
             }
         }
     }, [savedConfig]);
@@ -126,6 +144,11 @@ export default function FlowSettingsPage() {
             .map((s) => s.trim().toLowerCase())
             .filter(Boolean);
 
+        const humanSupportKeywordsList = humanSupportKeywordsInput
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+
         const payload: FlowTriggerSettings = {
             triggerMode,
             defaultFlowId: defaultFlowId || undefined,
@@ -134,6 +157,10 @@ export default function FlowSettingsPage() {
             restartKeywords: restartKeywordsList,
             resetKeyword: resetKeyword.trim().toLowerCase() || 'reset',
             invalidOptionMessage: invalidOptionMessage.trim() || undefined,
+            humanSupportKeywords: humanSupportKeywordsList.length > 0 ? humanSupportKeywordsList : undefined,
+            humanSupportPhone: humanSupportPhone.trim() || undefined,
+            humanSupportName: humanSupportName.trim() || undefined,
+            humanSupportOrg: humanSupportOrg.trim() || undefined,
             updatedAt: new Date().toISOString(),
         };
 
@@ -441,11 +468,83 @@ export default function FlowSettingsPage() {
                             </p>
                         </div>
                     </CardContent>
+                </Card>
+
+                {/* CARD ATENDIMENTO HUMANIZADO & CARD DE SUPORTE */}
+                <Card className="border shadow-sm border-emerald-500/20 bg-emerald-500/[0.01]">
+                    <CardHeader>
+                        <CardTitle className="text-base flex items-center justify-between">
+                            <span className="flex items-center gap-2">
+                                <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                Atendimento Humanizado / Card de Suporte
+                            </span>
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs">
+                                Automático
+                            </Badge>
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                            Se o cliente digitar que quer falar com atendente ou suporte durante qualquer etapa da automação, o robô envia o contato oficial configurado.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label className="text-sm font-semibold">
+                                Palavras-Chave de Atendimento Humano
+                            </Label>
+                            <Input
+                                value={humanSupportKeywordsInput}
+                                onChange={(e) => setHumanSupportKeywordsInput(e.target.value)}
+                                placeholder="falar com atendente, atendimento humanizado, humano, atendente, suporte"
+                                className="font-mono text-xs"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Separadas por vírgula. Se o cliente mandar qualquer uma dessas frases (Ex: <code>falar com atendente</code>, <code>humano</code>), o robô envia o card de suporte e finaliza a automação.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center gap-1">
+                                    <PhoneCall className="h-3.5 w-3.5 text-emerald-600" />
+                                    WhatsApp do Suporte (Opcional)
+                                </Label>
+                                <Input
+                                    value={humanSupportPhone}
+                                    onChange={(e) => setHumanSupportPhone(e.target.value)}
+                                    placeholder="Ex: 5511999999999"
+                                    className="text-sm font-mono"
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                    Se vazio, o sistema busca automaticamente o bloco do seu <strong>Fluxo Teste</strong>.
+                                </p>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Nome do Contato</Label>
+                                <Input
+                                    value={humanSupportName}
+                                    onChange={(e) => setHumanSupportName(e.target.value)}
+                                    placeholder="Suporte Oficial"
+                                    className="text-sm"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Empresa / Organização (Opcional)</Label>
+                                <Input
+                                    value={humanSupportOrg}
+                                    onChange={(e) => setHumanSupportOrg(e.target.value)}
+                                    placeholder="Minha Empresa"
+                                    className="text-sm"
+                                />
+                            </div>
+                        </div>
+                    </CardContent>
                     <CardFooter className="border-t pt-4 flex justify-end">
                         <Button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
                         >
                             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                             Salvar Configurações
