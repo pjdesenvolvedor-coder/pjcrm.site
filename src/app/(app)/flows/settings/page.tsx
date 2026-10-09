@@ -53,7 +53,7 @@ export default function FlowSettingsPage() {
     const [ignoreIfActiveFlow, setIgnoreIfActiveFlow] = useState<boolean>(true);
     const [restartKeywordsInput, setRestartKeywordsInput] = useState<string>('menu, reiniciar, voltar');
     const [resetKeyword, setResetKeyword] = useState<string>('reset');
-    const [invalidOptionMessage, setInvalidOptionMessage] = useState<string>('⚠️ *Por favor, selecione ou digite uma das opções acima para continuar.*');
+    const [invalidOptionMessage, setInvalidOptionMessage] = useState<string>('Selecione a opção acima');
     const [isSaving, setIsSaving] = useState(false);
 
     // Novo item de palavra-chave
@@ -433,7 +433,7 @@ export default function FlowSettingsPage() {
                             <Input
                                 value={invalidOptionMessage}
                                 onChange={(e) => setInvalidOptionMessage(e.target.value)}
-                                placeholder="⚠️ *Por favor, selecione ou digite uma das opções acima para continuar.*"
+                                placeholder="Selecione a opção acima"
                                 className="text-sm"
                             />
                             <p className="text-xs text-muted-foreground">

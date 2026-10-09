@@ -543,7 +543,7 @@ export function NodeConfigDialog({
                                     <span className="text-[11px] font-normal text-muted-foreground">Se ele digitar algo livre</span>
                                 </Label>
                                 <Input
-                                    placeholder="Ex: ⚠️ Por favor, selecione ou digite uma das opções acima para continuar."
+                                    placeholder="Ex: Selecione a opção acima"
                                     value={formData.invalidOptionMessage || ''}
                                     onChange={(e) =>
                                         setFormData({ ...formData, invalidOptionMessage: e.target.value })

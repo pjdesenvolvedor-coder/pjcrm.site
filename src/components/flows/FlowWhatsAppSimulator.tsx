@@ -1156,7 +1156,7 @@ export function FlowWhatsAppSimulator({
                 return;
             } else {
                 // Usuário digitou um texto livre que NÃO é opção do menu
-                const warnMsg = menuData?.invalidOptionMessage || '⚠️ *Por favor, selecione ou digite uma das opções válidas acima para continuar.*';
+                const warnMsg = menuData?.invalidOptionMessage || 'Selecione a opção acima';
                 setIsTyping(true);
                 setTypingText('digitando...');
                 await sleep(700);

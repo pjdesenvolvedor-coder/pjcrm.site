@@ -9,6 +9,7 @@ import {
     doc,
     getDoc,
     setDoc,
+    updateDoc,
     deleteDoc,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
@@ -67,119 +68,103 @@ function normalizeTextForMatch(str: string): string {
         .trim();
 }
 
-// Resolução instantânea do usuário dono da instância WhatsApp
+// Resolução instantânea e estritamente isolada do usuário dono da instância de fluxo (uazapi_flow)
 async function resolveUserCredentials(
     queryUserId: string | null,
-    headerToken: string
-): Promise<CachedUserCredentials | null> {
+    incomingToken: string
+): Promise<{ creds: CachedUserCredentials | null; mismatch?: boolean }> {
     const now = Date.now();
+    const cleanIncoming = (incomingToken || '').trim();
 
-    // 1. Se targetUserId foi passado na query e está em cache
+    // 1. Se temos queryUserId:
     if (queryUserId) {
-        const cached = userIdToCredsCache.get(queryUserId);
-        if (cached && (now - cached.cachedAt) < CACHE_TTL_MS) {
-            return cached;
-        }
-    }
-
-    // 2. Se headerToken foi passado e está em cache
-    if (headerToken) {
-        const cached = tokenToUserCache.get(headerToken);
-        if (cached && (now - cached.cachedAt) < CACHE_TTL_MS) {
-            return cached;
-        }
-    }
-
-    // 3. Se temos queryUserId, busca direto no Firestore
-    if (queryUserId) {
-        let serverUrl = 'https://travelflow.uazapi.com';
-        let instanceToken = headerToken;
-
+        // Busca o documento exclusivo de conexão de fluxo: settings/uazapi_flow
         const flowConnRef = doc(db, 'users', queryUserId, 'settings', 'uazapi_flow');
         const flowConnSnap = await getDoc(flowConnRef);
-        if (flowConnSnap.exists()) {
-            const data = flowConnSnap.data() as UazapiConnectionConfig;
-            serverUrl = data.serverUrl || serverUrl;
-            if (data.instanceToken) instanceToken = data.instanceToken;
-        } else {
-            const mainConfigRef = doc(db, 'users', queryUserId, 'settings', 'config');
-            const mainConfigSnap = await getDoc(mainConfigRef);
-            if (mainConfigSnap.exists()) {
-                const mainData = mainConfigSnap.data() as Settings;
-                if (mainData.webhookToken) instanceToken = mainData.webhookToken;
-            }
+
+        if (!flowConnSnap.exists()) {
+            // Nenhuma instância de fluxo configurada para este usuário
+            return { creds: null };
         }
 
-        if (instanceToken) {
-            const creds: CachedUserCredentials = {
-                userId: queryUserId,
-                serverUrl,
-                instanceToken,
-                cachedAt: now,
-            };
-            userIdToCredsCache.set(queryUserId, creds);
-            tokenToUserCache.set(instanceToken, creds);
-            return creds;
+        const data = flowConnSnap.data() as UazapiConnectionConfig;
+        const flowInstanceToken = (data.instanceToken || '').trim();
+        const serverUrl = data.serverUrl || 'https://travelflow.uazapi.com';
+
+        if (!flowInstanceToken) {
+            return { creds: null };
+        }
+
+        // Se recebemos um token identificador no webhook (via header, body ou query),
+        // ele DEVE ser estritamente igual ao token da instância de fluxo cadastrada (uazapi_flow).
+        // Se for diferente, trata-se de webhook disparado por OUTRO WhatsApp conectado (ex: Zap principal, Zap de cobrança, etc.)
+        if (cleanIncoming && cleanIncoming !== flowInstanceToken) {
+            console.warn(`[Flow Webhook] Token mismatch para userId ${queryUserId}: webhookToken="${cleanIncoming}" !== flowToken="${flowInstanceToken}". Ignorando mensagem para não conflitar com outro WhatsApp.`);
+            return { creds: null, mismatch: true };
+        }
+
+        const creds: CachedUserCredentials = {
+            userId: queryUserId,
+            serverUrl,
+            instanceToken: flowInstanceToken,
+            cachedAt: now,
+        };
+
+        userIdToCredsCache.set(queryUserId, creds);
+        tokenToUserCache.set(flowInstanceToken, creds);
+        return { creds };
+    }
+
+    // 2. Se NÃO temos queryUserId, mas temos incomingToken:
+    if (cleanIncoming) {
+        const cached = tokenToUserCache.get(cleanIncoming);
+        if (cached && (now - cached.cachedAt) < CACHE_TTL_MS) {
+            return { creds: cached };
+        }
+
+        // Busca em paralelo APENAS em settings/uazapi_flow de todos os usuários
+        try {
+            const usersSnap = await getDocs(collection(db, 'users'));
+            const results = await Promise.all(
+                usersSnap.docs.map(async (uDoc) => {
+                    const uid = uDoc.id;
+                    try {
+                        const flowSnap = await getDoc(doc(db, 'users', uid, 'settings', 'uazapi_flow'));
+                        if (flowSnap.exists()) {
+                            const data = flowSnap.data() as UazapiConnectionConfig;
+                            const t = (data.instanceToken || '').trim();
+                            if (t) {
+                                return {
+                                    userId: uid,
+                                    serverUrl: data.serverUrl || 'https://travelflow.uazapi.com',
+                                    instanceToken: t,
+                                    cachedAt: now,
+                                };
+                            }
+                        }
+                    } catch {}
+                    return null;
+                })
+            );
+
+            let matchedCreds: CachedUserCredentials | null = null;
+            for (const res of results) {
+                if (!res) continue;
+                tokenToUserCache.set(res.instanceToken, res);
+                userIdToCredsCache.set(res.userId, res);
+                if (res.instanceToken === cleanIncoming) {
+                    matchedCreds = res;
+                }
+            }
+
+            return { creds: matchedCreds };
+        } catch (err) {
+            console.error('[Flow Webhook] Erro ao resolver credenciais de fluxo:', err);
+            return { creds: null };
         }
     }
 
-    // 4. Se não temos queryUserId ou token específico, busca em paralelo em todos os usuários (0 serial loop)
-    try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const userDocs = usersSnap.docs;
-
-        const results = await Promise.all(
-            userDocs.map(async (uDoc) => {
-                const uid = uDoc.id;
-                try {
-                    const flowSnap = await getDoc(doc(db, 'users', uid, 'settings', 'uazapi_flow'));
-                    if (flowSnap.exists()) {
-                        const data = flowSnap.data() as UazapiConnectionConfig;
-                        if (data.instanceToken) {
-                            return {
-                                userId: uid,
-                                serverUrl: data.serverUrl || 'https://travelflow.uazapi.com',
-                                instanceToken: data.instanceToken,
-                                cachedAt: now,
-                            };
-                        }
-                    }
-                    const mainSnap = await getDoc(doc(db, 'users', uid, 'settings', 'config'));
-                    if (mainSnap.exists()) {
-                        const mData = mainSnap.data() as Settings;
-                        if (mData.webhookToken) {
-                            return {
-                                userId: uid,
-                                serverUrl: 'https://travelflow.uazapi.com',
-                                instanceToken: mData.webhookToken,
-                                cachedAt: now,
-                            };
-                        }
-                    }
-                } catch {}
-                return null;
-            })
-        );
-
-        let matchedCreds: CachedUserCredentials | null = null;
-        let firstAvailable: CachedUserCredentials | null = null;
-
-        for (const res of results) {
-            if (!res) continue;
-            tokenToUserCache.set(res.instanceToken, res);
-            userIdToCredsCache.set(res.userId, res);
-
-            if (!firstAvailable) firstAvailable = res;
-            if (headerToken && res.instanceToken === headerToken) {
-                matchedCreds = res;
-            }
-        }
-
-        return matchedCreds || (!headerToken ? firstAvailable : null);
-    } catch (err) {
-        console.error('[Flow Webhook] Erro ao resolver credenciais de usuários:', err);
-        return null;
-    }
+    return { creds: null };
 }
 
 // Helper que prioriza JID com @s.whatsapp.net ou @c.us e ignora @lid
@@ -360,15 +345,21 @@ export async function POST(req: NextRequest) {
         }
 
         // Token da instância no header, query ou no payload
-        const headerToken =
+        const incomingToken =
             queryToken ||
             req.headers.get('token') ||
             req.headers.get('apikey') ||
             req.headers.get('x-api-key') ||
+            req.headers.get('instance-token') ||
+            req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
             body.token ||
             body.instanceToken ||
+            body.apikey ||
+            body.key ||
+            (typeof body.instance === 'string' ? body.instance : (body.instance?.token || body.instance?.key || '')) ||
             body.data?.token ||
-            body.instance?.token ||
+            body.data?.instanceToken ||
+            body.data?.apikey ||
             '';
 
         // 1. Extração universal e resiliente da mensagem e remetente
@@ -405,12 +396,20 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | btnId="${selectedButtonId || ''}" | fromMe=${fromMe}`);
 
-        // 2. Localizar o usuário dono desta instância UazAPI (alta performance com cache em memória)
-        const userCreds = await resolveUserCredentials(queryUserId, headerToken);
+        // 2. Localizar o usuário dono desta instância de fluxo UazAPI (com isolamento estrito de número)
+        const { creds: userCreds, mismatch } = await resolveUserCredentials(queryUserId, incomingToken);
+
+        if (mismatch) {
+            console.log(`[Flow Webhook] Webhook descartado: token recebido ("${incomingToken}") não pertence à instância conectada de fluxo. Evitando conflito com outro WhatsApp.`);
+            return NextResponse.json({
+                ignored: 'instance_token_mismatch',
+                message: 'Webhook recebido de outra instância de WhatsApp do CRM. Ignorado para não disparar no Zap de fluxo.',
+            }, { status: 200 });
+        }
 
         if (!userCreds || !userCreds.userId || !userCreds.instanceToken) {
-            console.warn('[Flow Webhook] Nenhum usuário encontrado para a instância.');
-            return NextResponse.json({ error: 'Nenhum usuário configurado para este webhook.' }, { status: 200 });
+            console.warn('[Flow Webhook] Nenhuma instância de fluxo conectada para este webhook.');
+            return NextResponse.json({ ignored: 'no_flow_instance_configured' }, { status: 200 });
         }
 
         const targetUserId = userCreds.userId;
@@ -574,7 +573,7 @@ export async function POST(req: NextRequest) {
             } catch {}
 
             if (!invalidMsg || !invalidMsg.trim()) {
-                invalidMsg = '⚠️ *Por favor, selecione ou digite uma das opções acima para continuar.*';
+                invalidMsg = 'Selecione a opção acima';
             }
 
             console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ("${userText}") não corresponde a nenhuma opção do menu. Enviando aviso: "${invalidMsg}"`);
