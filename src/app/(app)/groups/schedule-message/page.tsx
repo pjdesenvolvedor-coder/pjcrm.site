@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send } from 'lucide-react';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -509,6 +509,21 @@ export default function ScheduleMessagePage() {
     toast({ title: 'Agendamento Removido', description: 'A mensagem foi removida da lista de agendamentos.' });
   };
 
+  const handleResetStatus = async (message: ScheduledMessage) => {
+    if (!user) return;
+    try {
+        const docRef = doc(firestore, 'users', user.uid, 'scheduled_messages', message.id);
+        await updateDoc(docRef, {
+            status: 'Scheduled',
+            retryCount: 0,
+            errorReason: null
+        });
+        toast({ title: 'Status Destravado', description: 'A mensagem voltou ao status Agendado com sucesso.' });
+    } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Erro ao destravar', description: err.message || 'Não foi possível atualizar o status.' });
+    }
+  };
+
   const handleOpenCreate = () => {
     setDialogConfig({ mode: 'create' });
     setIsDialogOpen(true);
@@ -706,11 +721,25 @@ export default function ScheduleMessagePage() {
                             </TableCell>
                             <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-1">
+                                    {/* Destravar / Resetar Status */}
+                                    {msg.status === 'Sending' && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            disabled={isSendingNow[msg.id]}
+                                            onClick={() => handleResetStatus(msg)}
+                                            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                                            title="Destravar / Resetar para Agendado"
+                                        >
+                                            <RotateCcw className="h-4 w-4" />
+                                        </Button>
+                                    )}
+
                                     {/* Enviar Agora */}
                                     <Button 
                                         variant="ghost" 
                                         size="icon" 
-                                        disabled={msg.status === 'Sending' || isSendingNow[msg.id]}
+                                        disabled={isSendingNow[msg.id]}
                                         onClick={() => handleSendNow(msg)}
                                         className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
                                         title="Enviar Agora"
@@ -726,7 +755,7 @@ export default function ScheduleMessagePage() {
                                     <Button 
                                         variant="ghost" 
                                         size="icon" 
-                                        disabled={msg.status === 'Sending' || isSendingNow[msg.id]}
+                                        disabled={isSendingNow[msg.id]}
                                         onClick={() => handleOpenEdit(msg)}
                                         className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
                                         title="Editar"
@@ -738,7 +767,7 @@ export default function ScheduleMessagePage() {
                                     <Button 
                                         variant="ghost" 
                                         size="icon" 
-                                        disabled={msg.status === 'Sending' || isSendingNow[msg.id]}
+                                        disabled={isSendingNow[msg.id]}
                                         onClick={() => handleOpenDuplicate(msg)}
                                         className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
                                         title="Duplicar"
@@ -749,7 +778,7 @@ export default function ScheduleMessagePage() {
                                     {/* Excluir */}
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" disabled={msg.status === 'Sending' || isSendingNow[msg.id]}>
+                                            <Button variant="ghost" size="icon" disabled={isSendingNow[msg.id]} title="Excluir Agendamento">
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>
                                         </AlertDialogTrigger>

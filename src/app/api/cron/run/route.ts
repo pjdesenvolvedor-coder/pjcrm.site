@@ -635,6 +635,24 @@ export async function GET(request: Request) {
             /* --- 4. PROCESSAR GRUPOS AGENDADOS --- */
             const scheduledSnap = await getDocs(collection(db, 'users', userId, 'scheduled_messages'));
             const scheduled = scheduledSnap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduledMessage));
+
+            // Auto-recuperar agendamentos que ficaram travados em 'Sending' por mais de 5 minutos
+            for (const msg of scheduled) {
+                if (msg.status === 'Sending') {
+                    const sendAtMs = msg.sendAt ? getTimestampMs(msg.sendAt) || 0 : 0;
+                    if (sendAtMs > 0 && (now.getTime() - sendAtMs > 5 * 60 * 1000)) {
+                        const messageDocRef = doc(db, 'users', userId, 'scheduled_messages', msg.id);
+                        await runTransaction(db, async (txn) => {
+                            txn.update(messageDocRef, {
+                                status: 'Scheduled',
+                                errorReason: 'Destravado automaticamente por tempo excedido em envio.'
+                            });
+                        }).catch(console.error);
+                        msg.status = 'Scheduled'; // Atualiza referência local
+                    }
+                }
+            }
+
             const dueMessages = scheduled.filter(msg => {
                 if (msg.status !== 'Scheduled') return false;
                 const sendAtMs = msg.sendAt ? getTimestampMs(msg.sendAt) || 0 : 0;
