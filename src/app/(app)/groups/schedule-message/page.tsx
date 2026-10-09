@@ -279,16 +279,18 @@ function ScheduleMessageForm({
         
         const sendAtTimestamp = Timestamp.fromDate(date);
 
-        let imageUrlDataUri: string | undefined = undefined;
+        let finalImageUrl: string | null = null;
         if (values.image instanceof File) {
             try {
-                imageUrlDataUri = await compressImage(values.image);
+                finalImageUrl = await compressImage(values.image);
             } catch (error) {
                 console.error("Error compressing image:", error);
                 toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível compactar a imagem.' });
                 setIsSending(false);
                 return;
             }
+        } else if (imagePreview) {
+            finalImageUrl = imagePreview;
         }
 
         try {
@@ -298,12 +300,12 @@ function ScheduleMessageForm({
                     jid: values.jid,
                     message: values.message,
                     sendAt: sendAtTimestamp,
-                    repeatDaily: values.repeatDaily,
+                    repeatDaily: Boolean(values.repeatDaily),
                     status: 'Scheduled' as const,
-                    imageUrl: imageUrlDataUri || initialMessage.imageUrl || undefined,
-                    useBillingZap: values.useBillingZap,
-                    supportNumber: values.supportNumber || undefined,
-                    siteLink: values.siteLink || undefined,
+                    imageUrl: finalImageUrl || null,
+                    useBillingZap: Boolean(values.useBillingZap),
+                    supportNumber: values.supportNumber?.trim() || null,
+                    siteLink: values.siteLink?.trim() || null,
                     errorReason: null,
                     retryCount: 0
                 });
@@ -314,12 +316,14 @@ function ScheduleMessageForm({
                     jid: values.jid,
                     message: values.message,
                     sendAt: sendAtTimestamp,
-                    repeatDaily: values.repeatDaily,
+                    repeatDaily: Boolean(values.repeatDaily),
                     status: 'Scheduled' as const,
-                    imageUrl: imageUrlDataUri || initialMessage?.imageUrl || undefined,
-                    useBillingZap: values.useBillingZap,
-                    supportNumber: values.supportNumber || undefined,
-                    siteLink: values.siteLink || undefined,
+                    imageUrl: finalImageUrl || null,
+                    useBillingZap: Boolean(values.useBillingZap),
+                    supportNumber: values.supportNumber?.trim() || null,
+                    siteLink: values.siteLink?.trim() || null,
+                    errorReason: null,
+                    retryCount: 0,
                 };
                 addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'scheduled_messages'), newScheduledMessageForFirestore);
                 toast({ title: "Mensagem Agendada!", description: "Sua mensagem foi salva e será enviada no horário programado." });
