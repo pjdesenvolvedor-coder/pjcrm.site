@@ -312,7 +312,7 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       notes: initialData?.notes || '',
       quantity: defaultEmails.length.toString(),
       subscription: initialData?.subscription || '',
-      paymentMethod: initialData?.paymentMethod || undefined,
+      paymentMethod: (initialData?.paymentMethod as any) || 'PIX',
       amountPaid: initialData?.amountPaid || ''
     },
   });
