@@ -229,17 +229,17 @@ export default function TwoFactorAppPage() {
       {/* SEÇÃO DE CONFIGURAÇÃO DO MODELO DE MENSAGEM */}
       <Card className="border-emerald-500/30 bg-emerald-500/5 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg text-emerald-600 dark:text-emerald-400">
+          <CardTitle className="flex items-center gap-2 text-lg text-emerald-600 dark:text-emerald-400 font-bold">
             <MessageSquareText className="h-5 w-5" />
             Personalizar Mensagem de 2FA
           </CardTitle>
-          <CardDescription>
-            Personalize o texto enviado ao cliente. Use as variáveis <code>{`{codigo}`}</code> e <code>{`{numero}`}</code> para inserir os dados recebidos.
+          <CardDescription className="text-xs">
+            Personalize o texto enviado ao cliente quando chegar um código 2FA via Webhook. O que você salvar aqui será aplicado com prioridade total a todos os envios.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-muted-foreground">Variáveis disponíveis (clique para inserir):</span>
               <Badge
                 variant="outline"
@@ -251,9 +251,23 @@ export default function TwoFactorAppPage() {
               <Badge
                 variant="outline"
                 className="cursor-pointer font-mono hover:bg-emerald-500/10 hover:border-emerald-500 text-xs py-1"
+                onClick={() => insertVariable('{nome}')}
+              >
+                {`{nome}`}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="cursor-pointer font-mono hover:bg-emerald-500/10 hover:border-emerald-500 text-xs py-1"
                 onClick={() => insertVariable('{numero}')}
               >
                 {`{numero}`}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="cursor-pointer font-mono hover:bg-emerald-500/10 hover:border-emerald-500 text-xs py-1"
+                onClick={() => insertVariable('{telefone}')}
+              >
+                {`{telefone}`}
               </Badge>
             </div>
 
@@ -261,16 +275,19 @@ export default function TwoFactorAppPage() {
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
               placeholder="Digite sua mensagem de 2FA..."
-              className="min-h-28 font-mono text-sm"
-              rows={4}
+              className="min-h-28 font-mono text-sm leading-relaxed"
+              rows={5}
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[11px] text-muted-foreground">
+              💡 As tags <code>{`{codigo}`}</code>, <code>{`{nome}`}</code> e <code>{`{numero}`}</code> serão substituídas automaticamente pelos dados reais recebidos no Webhook.
+            </span>
             <Button
               onClick={handleSaveTemplate}
               disabled={isSavingTemplate}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold shadow-md active:scale-95 transition-transform"
             >
               {isSavingTemplate ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {isSavingTemplate ? 'Salvando...' : 'Salvar Modelo de Mensagem'}

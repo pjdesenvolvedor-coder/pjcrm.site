@@ -141,22 +141,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.error(`[2-fatores/${userId}] Erro ao buscar configurações no Firestore:`, dbErr);
   }
 
-  let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Jivago';
+  let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Cliente';
   let rawMessage = getFlexValue(['mensagem', 'texto', 'text', 'message']);
 
-  // Modelo padrão se nenhum for configurado
+  // Modelo padrão oficial do sistema
   const defaultTemplate = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: {codigo}`;
-  const templateToUse = rawMessage?.trim() || customTemplate?.trim() || defaultTemplate;
+  
+  // O modelo personalizado salvo pelo usuário no CRM tem SEMPRE prioridade total
+  const templateToUse = customTemplate?.trim() || (rawMessage && !rawMessage.includes('PJ CONTAS - CÓDIGO DE VERIFICAÇÃO') ? rawMessage.trim() : defaultTemplate);
 
-  // Substitui variáveis {codigo}, {nome} e {numero}
+  // Substitui variáveis {codigo}, {nome}, {cliente}, {numero}, {telefone}
   const messageText = templateToUse
     .replace(/{codigo}/gi, code || 'N/A')
     .replace(/{code}/gi, code || 'N/A')
+    .replace(/{pin}/gi, code || 'N/A')
+    .replace(/{otp}/gi, code || 'N/A')
     .replace(/{nome}/gi, rawName || 'Cliente')
     .replace(/{cliente}/gi, rawName || 'Cliente')
     .replace(/{name}/gi, rawName || 'Cliente')
     .replace(/{numero}/gi, rawPhone || formattedPhone || 'N/A')
-    .replace(/{telefone}/gi, rawPhone || formattedPhone || 'N/A');
+    .replace(/{telefone}/gi, rawPhone || formattedPhone || 'N/A')
+    .replace(/{phone}/gi, rawPhone || formattedPhone || 'N/A');
 
   let isSuccess = false;
   let uazapiStatus = 0;

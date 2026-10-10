@@ -242,21 +242,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
 
       // Garante que apenas os tokens configurados pelo próprio usuário sejam utilizados
 
-      // Mensagem: Usa a mensagem enviada no payload, ou template configurado, ou modelo padrão do Painel ADM
-      let messageToSend = '';
-      if (rawMessage && String(rawMessage).trim()) {
-        messageToSend = String(rawMessage).trim();
-      } else if (settings2fa.messageTemplate) {
-        messageToSend = settings2fa.messageTemplate
-          .replace(/{codigo}/gi, String(rawCode || ''))
-          .replace(/{code}/gi, String(rawCode || ''))
-          .replace(/{nome}/gi, String(rawName))
-          .replace(/{cliente}/gi, String(rawName))
-          .replace(/{numero}/gi, cleanPhone || String(rawPhone || ''))
-          .replace(/{telefone}/gi, cleanPhone || String(rawPhone || ''));
-      } else {
-        messageToSend = `🔒 *PJ CONTAS - CÓDIGO DE VERIFICAÇÃO*\n\nOlá *${rawName}*, seu código de segurança para acessar o Painel ADM é:\n\n👉 *${rawCode || '------'}*\n\n_Válido por 10 minutos. Se você não solicitou, ignore esta mensagem._`;
-      }
+      // Mensagem: Prioridade total para o modelo personalizado salvo no CRM
+      const customTemplate = settings2fa?.messageTemplate?.trim();
+      const defaultTemplate = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: {codigo}`;
+      const templateToUse = customTemplate || (rawMessage && !rawMessage.includes('PJ CONTAS - CÓDIGO DE VERIFICAÇÃO') ? String(rawMessage).trim() : defaultTemplate);
+
+      const messageToSend = templateToUse
+        .replace(/{codigo}/gi, String(rawCode || 'N/A'))
+        .replace(/{code}/gi, String(rawCode || 'N/A'))
+        .replace(/{pin}/gi, String(rawCode || 'N/A'))
+        .replace(/{otp}/gi, String(rawCode || 'N/A'))
+        .replace(/{nome}/gi, String(rawName || 'Cliente'))
+        .replace(/{cliente}/gi, String(rawName || 'Cliente'))
+        .replace(/{name}/gi, String(rawName || 'Cliente'))
+        .replace(/{numero}/gi, cleanPhone || String(rawPhone || 'N/A'))
+        .replace(/{telefone}/gi, cleanPhone || String(rawPhone || 'N/A'))
+        .replace(/{phone}/gi, cleanPhone || String(rawPhone || 'N/A'));
 
       let isSuccess = false;
       let uazapiStatus = 0;

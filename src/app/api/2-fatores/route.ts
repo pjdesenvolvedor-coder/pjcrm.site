@@ -146,22 +146,25 @@ export async function POST(request: Request) {
         }
     }
 
-    let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Jivago';
+    let rawName = getFlexValue(['nome', 'name', 'cliente', 'customer', 'user', 'destinatario']) || 'Cliente';
     let rawMessage = getFlexValue(['mensagem', 'texto', 'text', 'message']);
 
-    // Modelo padrão se nenhum for configurado
-    const defaultTemplate = `🔒 *PJ CONTAS - CÓDIGO DE VERIFICAÇÃO*\n\nOlá *{nome}*, seu código de segurança para acessar o Painel ADM é:\n\n👉 *{codigo}*\n\n_Válido por 10 minutos. Se você não solicitou, ignore esta mensagem._`;
-    const templateToUse = rawMessage?.trim() || customTemplate?.trim() || defaultTemplate;
+    // Modelo padrão oficial do sistema
+    const defaultTemplate = `Ola,\nSeu codigo de acesso para o Aplicativo PJ Assinaturas;\n\nCodigo: {codigo}`;
+    const templateToUse = customTemplate?.trim() || (rawMessage && !rawMessage.includes('PJ CONTAS - CÓDIGO DE VERIFICAÇÃO') ? rawMessage.trim() : defaultTemplate);
 
-    // Substitui variáveis {codigo}, {nome} e {numero}
+    // Substitui variáveis {codigo}, {nome}, {cliente}, {numero}, {telefone}
     const messageText = templateToUse
         .replace(/{codigo}/gi, code || 'N/A')
         .replace(/{code}/gi, code || 'N/A')
+        .replace(/{pin}/gi, code || 'N/A')
+        .replace(/{otp}/gi, code || 'N/A')
         .replace(/{nome}/gi, rawName || 'Cliente')
         .replace(/{cliente}/gi, rawName || 'Cliente')
         .replace(/{name}/gi, rawName || 'Cliente')
         .replace(/{numero}/gi, rawPhone || formattedPhone || 'N/A')
-        .replace(/{telefone}/gi, rawPhone || formattedPhone || 'N/A');
+        .replace(/{telefone}/gi, rawPhone || formattedPhone || 'N/A')
+        .replace(/{phone}/gi, rawPhone || formattedPhone || 'N/A');
 
     let isSuccess = false;
     let uazapiStatus = 0;
