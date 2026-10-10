@@ -158,13 +158,14 @@ export default function RenewalPage() {
 
   // Assinaturas atualmente selecionadas para renovar
   const chosenSubs = useMemo(() => {
-    return subscriptions.filter((s) => selectedToRenew.includes(s.clientId));
+    return subscriptions.filter((s) => s && selectedToRenew.includes(s.clientId));
   }, [subscriptions, selectedToRenew]);
 
   // Valor total das assinaturas selecionadas
   const totalAmount = useMemo(() => {
     let sum = 0;
     for (const sub of chosenSubs) {
+      if (!sub) continue;
       const val = parseFloat(String(sub.value || '0').replace(',', '.'));
       sum += isNaN(val) ? 25 : val;
     }
@@ -178,7 +179,7 @@ export default function RenewalPage() {
 
   const selectedNamesDisplay = useMemo(() => {
     if (chosenSubs.length === 0) return 'Nenhuma assinatura';
-    return chosenSubs.map((s) => s.name).join(' + ');
+    return chosenSubs.map((s) => s?.name || 'Assinatura').join(' + ');
   }, [chosenSubs]);
 
   // Copiar código PIX com feedback e vibração
@@ -300,8 +301,8 @@ export default function RenewalPage() {
             <div className="flex items-center justify-center gap-2.5 flex-wrap pt-2">
               {subscriptions.slice(0, 3).map((sub, idx) => (
                 <ProductIcon
-                  key={sub.clientId || idx}
-                  name={sub.name}
+                  key={sub?.clientId || idx}
+                  name={sub?.name || 'Assinatura'}
                   style={{ width: '56px', height: '56px', borderRadius: '16px' }}
                 />
               ))}
@@ -312,7 +313,7 @@ export default function RenewalPage() {
                 Renovação de Acesso
               </span>
               <h1 className="text-2xl font-black text-zinc-900 dark:text-white pt-2 leading-tight">
-                Olá, {session.clientName}!
+                Olá, {session.clientName || 'Cliente'}!
               </h1>
               <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 pt-1">
                 {hasMultiple
@@ -330,7 +331,7 @@ export default function RenewalPage() {
                   if (hasMultiple) {
                     setStep('select_yes');
                   } else {
-                    const singleId = [subscriptions[0].clientId];
+                    const singleId = subscriptions[0]?.clientId ? [subscriptions[0].clientId] : [];
                     setSelectedToRenew(singleId);
                     handleGeneratePix(singleId, []);
                   }
@@ -383,17 +384,22 @@ export default function RenewalPage() {
 
             {/* SELETORES DE ASSINATURA */}
             <div className="space-y-2.5">
-              {subscriptions.map((sub) => {
-                const isSelected = selectedToRenew.includes(sub.clientId);
+              {subscriptions.map((sub, idx) => {
+                const subId = sub?.clientId || `sub-${idx}`;
+                const isSelected = selectedToRenew.includes(subId);
+                const subName = sub?.name || 'Assinatura';
+                const subVal = parseFloat(String(sub?.value || '25').replace(',', '.'));
+                const displayVal = isNaN(subVal) ? '25,00' : subVal.toFixed(2).replace('.', ',');
+
                 return (
                   <button
-                    key={sub.clientId}
+                    key={subId}
                     type="button"
                     onClick={() => {
                       if (isSelected) {
-                        setSelectedToRenew(selectedToRenew.filter((id) => id !== sub.clientId));
+                        setSelectedToRenew(selectedToRenew.filter((id) => id !== subId));
                       } else {
-                        setSelectedToRenew([...selectedToRenew, sub.clientId]);
+                        setSelectedToRenew([...selectedToRenew, subId]);
                       }
                     }}
                     className={`w-full p-3.5 rounded-2xl border-2 flex items-center justify-between text-left transition-all cursor-pointer ${
@@ -403,13 +409,13 @@ export default function RenewalPage() {
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <ProductIcon name={sub.name} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
+                      <ProductIcon name={subName} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
-                          {sub.name}
+                          {subName}
                         </div>
                         <div className="text-xs text-zinc-500 font-medium">
-                          R$ {parseFloat(String(sub.value).replace(',', '.') || '25').toFixed(2).replace('.', ',')}/mês
+                          R$ {displayVal}/mês
                         </div>
                       </div>
                     </div>
@@ -498,17 +504,20 @@ export default function RenewalPage() {
             </div>
 
             <div className="space-y-2.5">
-              {subscriptions.map((sub) => {
-                const isMarkedBroken = brokenSubscriptions.includes(sub.clientId);
+              {subscriptions.map((sub, idx) => {
+                const subId = sub?.clientId || `sub-${idx}`;
+                const isMarkedBroken = brokenSubscriptions.includes(subId);
+                const subName = sub?.name || 'Assinatura';
+
                 return (
                   <button
-                    key={sub.clientId}
+                    key={subId}
                     type="button"
                     onClick={() => {
                       if (isMarkedBroken) {
-                        setBrokenSubscriptions(brokenSubscriptions.filter((id) => id !== sub.clientId));
+                        setBrokenSubscriptions(brokenSubscriptions.filter((id) => id !== subId));
                       } else {
-                        setBrokenSubscriptions([...brokenSubscriptions, sub.clientId]);
+                        setBrokenSubscriptions([...brokenSubscriptions, subId]);
                       }
                     }}
                     className={`w-full p-3.5 rounded-2xl border-2 flex items-center justify-between text-left transition-all cursor-pointer ${
@@ -518,10 +527,10 @@ export default function RenewalPage() {
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <ProductIcon name={sub.name} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
+                      <ProductIcon name={subName} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
-                          {sub.name}
+                          {subName}
                         </div>
                         <div className="text-xs text-red-500 font-semibold">
                           {isMarkedBroken ? '⚠️ Problema relatado' : 'Clique para marcar com defeito'}
@@ -549,7 +558,7 @@ export default function RenewalPage() {
                 disabled={brokenSubscriptions.length === 0}
                 onClick={() => {
                   // Passa para a pergunta de quais deseja renovar
-                  setSelectedToRenew(subscriptions.map((s) => s.clientId));
+                  setSelectedToRenew(subscriptions.map((s, idx) => s?.clientId || `sub-${idx}`));
                   setStep('select_after_issue');
                 }}
                 className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] disabled:opacity-40 text-white font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer"
@@ -587,19 +596,23 @@ export default function RenewalPage() {
             </div>
 
             <div className="space-y-2.5">
-              {subscriptions.map((sub) => {
-                const isSelected = selectedToRenew.includes(sub.clientId);
-                const hadProblem = brokenSubscriptions.includes(sub.clientId);
+              {subscriptions.map((sub, idx) => {
+                const subId = sub?.clientId || `sub-${idx}`;
+                const isSelected = selectedToRenew.includes(subId);
+                const hadProblem = brokenSubscriptions.includes(subId);
+                const subName = sub?.name || 'Assinatura';
+                const subVal = parseFloat(String(sub?.value || '25').replace(',', '.'));
+                const displayVal = isNaN(subVal) ? '25,00' : subVal.toFixed(2).replace('.', ',');
 
                 return (
                   <button
-                    key={sub.clientId}
+                    key={subId}
                     type="button"
                     onClick={() => {
                       if (isSelected) {
-                        setSelectedToRenew(selectedToRenew.filter((id) => id !== sub.clientId));
+                        setSelectedToRenew(selectedToRenew.filter((id) => id !== subId));
                       } else {
-                        setSelectedToRenew([...selectedToRenew, sub.clientId]);
+                        setSelectedToRenew([...selectedToRenew, subId]);
                       }
                     }}
                     className={`w-full p-3.5 rounded-2xl border-2 flex items-center justify-between text-left transition-all cursor-pointer ${
@@ -609,13 +622,13 @@ export default function RenewalPage() {
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <ProductIcon name={sub.name} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
+                      <ProductIcon name={subName} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
-                          {sub.name}
+                          {subName}
                         </div>
                         <div className="text-xs text-zinc-500 font-medium">
-                          R$ {parseFloat(String(sub.value).replace(',', '.') || '25').toFixed(2).replace('.', ',')}/mês
+                          R$ {displayVal}/mês
                           {hadProblem && <span className="text-red-500 font-bold ml-1.5">(com suporte)</span>}
                         </div>
                       </div>
@@ -741,7 +754,7 @@ export default function RenewalPage() {
                 </div>
                 <div className="text-4xl font-black text-zinc-900 dark:text-white pt-0.5">
                   <span className="text-xl text-red-600 mr-1">R$</span>
-                  <span>{pixData.amountInReais.replace('.', ',')}</span>
+                  <span>{String(pixData.amountInReais || '0.00').replace('.', ',')}</span>
                   <span className="text-xs font-bold text-zinc-400 ml-1">/mês</span>
                 </div>
               </div>

@@ -5,8 +5,8 @@ import React from 'react';
 /**
  * Detecta o tipo de serviço de streaming pelo nome ou texto
  */
-export function detectService(name = ''): string {
-  const text = name.toLowerCase();
+export function detectService(name: any = ''): string {
+  const text = String(name || '').toLowerCase();
 
   if (text.includes('netflix')) return 'netflix';
   if (text.includes('disney')) return 'disney';
@@ -24,14 +24,15 @@ export function detectService(name = ''): string {
 }
 
 interface ProductIconProps {
-  name?: string;
+  name?: string | null;
   className?: string;
   style?: React.CSSProperties;
 }
 
 export default function ProductIcon({ name = '', className = '', style = {} }: ProductIconProps) {
   const service = detectService(name);
-  const initial = (name || 'P').trim().charAt(0).toUpperCase();
+  const safeName = String(name || '').trim();
+  const initial = (safeName || 'P').charAt(0).toUpperCase();
 
   const baseStyle: React.CSSProperties = {
     width: '64px',

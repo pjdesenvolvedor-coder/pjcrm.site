@@ -123,6 +123,59 @@ function getCustomDeliveryMessage(
   return bestMatchMsg !== undefined ? bestMatchMsg : defaultMessage;
 }
 
+export function parseSafeDate(rawDate: any): Date | null {
+  if (!rawDate) return null;
+  if (typeof rawDate?.toDate === 'function') {
+    try {
+      const d = rawDate.toDate();
+      return isNaN(d.getTime()) ? null : d;
+    } catch {
+      return null;
+    }
+  }
+  if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+    return rawDate;
+  }
+  if (typeof rawDate === 'number') {
+    const d = new Date(rawDate);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof rawDate === 'object' && typeof rawDate.seconds === 'number') {
+    const d = new Date(rawDate.seconds * 1000 + (rawDate.nanoseconds || 0) / 1000000);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof rawDate === 'object' && typeof rawDate._seconds === 'number') {
+    const d = new Date(rawDate._seconds * 1000 + (rawDate._nanoseconds || 0) / 1000000);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof rawDate === 'string') {
+    const trimmed = rawDate.trim();
+    if (!trimmed) return null;
+    const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (brMatch) {
+      const day = parseInt(brMatch[1], 10);
+      const month = parseInt(brMatch[2], 10) - 1;
+      let year = parseInt(brMatch[3], 10);
+      if (year < 100) year += 2000;
+      const d = new Date(year, month, day);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+export function safeFormatDate(rawDate: any, formatStr = 'dd/MM/yyyy', fallback = '-'): string {
+  const parsed = parseSafeDate(rawDate);
+  if (!parsed) return fallback;
+  try {
+    return format(parsed, formatStr);
+  } catch {
+    return fallback;
+  }
+}
+
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   telegramUser: z.string().optional(),
@@ -253,9 +306,9 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
       screen: initialData?.screen || '',
       pinScreen: initialData?.pinScreen || '',
       accessLink: initialData?.accessLink || '',
-      dueDate: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'dd/MM/yy') : '',
-      dueTimeHour: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'HH') : '',
-      dueTimeMinute: initialData?.dueDate ? format((initialData.dueDate as any).toDate(), 'mm') : '',
+      dueDate: safeFormatDate(initialData?.dueDate, 'dd/MM/yy', ''),
+      dueTimeHour: safeFormatDate(initialData?.dueDate, 'HH', ''),
+      dueTimeMinute: safeFormatDate(initialData?.dueDate, 'mm', ''),
       notes: initialData?.notes || '',
       quantity: defaultEmails.length.toString(),
       subscription: initialData?.subscription || '',
@@ -1181,7 +1234,7 @@ function SendRenewalMessageDialog({
         <div className="border rounded-md divide-y max-h-[260px] overflow-y-auto">
           {relatedClients.map((c) => {
             const isChecked = selectedIds.includes(c.id);
-            const formattedDueDate = c.dueDate ? format((c.dueDate as any).toDate(), 'dd/MM/yyyy') : '-';
+            const formattedDueDate = safeFormatDate(c.dueDate, 'dd/MM/yyyy');
             const price = parseFloat((c.amountPaid || '0').replace(',', '.')) || 0;
 
             return (
@@ -1403,9 +1456,9 @@ function formatClientEmailDisplay(emailVal: any): string {
             let formattedMessage = messageTemplate
                 .replace(/{cliente}/g, client.name)
                 .replace(/{telefone}/g, client.phone)
-                .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : client.email)
+                .replace(/{email}/g, Array.isArray(client.email) ? client.email.join(', ') : (client.email || 'N/A'))
                 .replace(/{assinatura}/g, client.subscription || '')
-                .replace(/{vencimento}/g, client.dueDate ? format(client.dueDate.toDate(), 'dd/MM/yyyy') : 'N/A')
+                .replace(/{vencimento}/g, safeFormatDate(client.dueDate, 'dd/MM/yyyy', 'N/A'))
                 .replace(/{valor}/g, client.amountPaid || '0,00')
                 .replace(/{senha}/g, client.password || 'N/A')
                 .replace(/{tela}/g, client.screen || 'N/A')
@@ -1526,7 +1579,7 @@ function formatClientEmailDisplay(emailVal: any): string {
           .replace(/{pin_tela}/g, client.pinScreen || 'N/A')
           .replace(/{link}/g, client.accessLink || 'N/A')
           .replace(/{assinatura}/g, client.subscription || 'N/A')
-          .replace(/{vencimento}/g, client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : 'N/A')
+          .replace(/{vencimento}/g, safeFormatDate(client.dueDate, 'dd/MM/yyyy', 'N/A'))
           .replace(/{valor}/g, client.amountPaid || '0,00')
           .replace(/{status}/g, client.status);
 
@@ -1569,7 +1622,7 @@ function formatClientEmailDisplay(emailVal: any): string {
         const phone = c.phone || 'Sem Telefone';
         const email = Array.isArray(c.email) ? c.email.join(', ') : (c.email || 'Sem Email');
         const plan = c.subscription || 'Sem Plano';
-        const dueDate = c.dueDate ? format(c.dueDate.toDate(), 'dd/MM/yyyy') : 'Sem Vencimento';
+        const dueDate = safeFormatDate(c.dueDate, 'dd/MM/yyyy', 'Sem Vencimento');
         
         return `${name} - ${phone} - ${email} - ${plan} - ${dueDate}`;
     });
@@ -1715,7 +1768,8 @@ function formatClientEmailDisplay(emailVal: any): string {
                 <TableRow><TableCell colSpan={6} className="text-center">Carregando...</TableCell></TableRow>
               ) : filteredClients.map((client) => {
                   const now = new Date();
-                  const isActuallyOverdue = client.status === 'Ativo' && client.dueDate && (client.dueDate as any).toDate() <= now;
+                  const dueDateObj = parseSafeDate(client.dueDate);
+                  const isActuallyOverdue = client.status === 'Ativo' && dueDateObj && dueDateObj <= now;
                   const displayStatus = isActuallyOverdue ? 'Vencido' : client.status;
                   
                   return (
@@ -1724,7 +1778,7 @@ function formatClientEmailDisplay(emailVal: any): string {
                     <TableCell><div className="text-xs text-muted-foreground max-w-[180px] truncate">{formatClientEmailDisplay(client.email)}</div></TableCell>
                     <TableCell><Badge variant="outline" className="font-normal">{client.subscription || '-'}</Badge></TableCell>
                     <TableCell><Badge variant={displayStatus === 'Ativo' ? 'default' : 'destructive'} className={cn(displayStatus === 'Ativo' && 'bg-green-500/20 text-green-700')}>{displayStatus}</Badge></TableCell>
-                    <TableCell>{client.dueDate ? format((client.dueDate as any).toDate(), 'dd/MM/yyyy') : '-'}</TableCell>
+                    <TableCell>{safeFormatDate(client.dueDate, 'dd/MM/yyyy')}</TableCell>
                     <TableCell>
                         {client.amountPaid ? (
                             <span className="font-medium text-green-700">R$ {client.amountPaid}</span>
@@ -1798,25 +1852,25 @@ function formatClientEmailDisplay(emailVal: any): string {
                     <DialogTitle>
                         {dialogState.view === 'add' && 'Novo Cliente'}
                         {dialogState.view === 'edit' && 'Editar Cliente'}
-                        {dialogState.view === 'renew' && `Renovar: ${dialogState.client?.name}`}
+                        {dialogState.view === 'renew' && `Renovar: ${dialogState.client?.name || 'Cliente'}`}
                         {dialogState.view === 'message' && 'Iniciar Conversa'}
                     </DialogTitle>
                 </DialogHeader>
             )}
-            {dialogState.view === 'send_renewal' && (
+            {dialogState.view === 'send_renewal' && dialogState.client && (
                 <SendRenewalMessageDialog
                     client={dialogState.client}
                     allClients={clients || []}
                     onFinished={() => setDialogState({ view: 'closed' })}
                 />
             )}
-            {dialogState.view === 'renew' && (
+            {dialogState.view === 'renew' && dialogState.client && (
                 <RenewDialog client={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
             )}
             {(dialogState.view === 'add' || dialogState.view === 'edit') && (
                 <ClientForm initialData={dialogState.client} onFinished={() => setDialogState({ view: 'closed' })} />
             )}
-            {dialogState.view === 'message' && (
+            {dialogState.view === 'message' && dialogState.client && (
                 <SendMessageDialog 
                     client={dialogState.client} 
                     onSend={handleSendMessage} 
