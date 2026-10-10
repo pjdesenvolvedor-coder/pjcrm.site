@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       });
     }
 
-    let responseData;
+    let responseData: any;
     const responseText = await apiResponse.text();
     try {
       responseData = JSON.parse(responseText);
@@ -65,15 +65,39 @@ export async function POST(request: Request) {
     if (!apiResponse.ok) {
       console.error(`UAZAPI failed with status ${apiResponse.status}: ${responseText}`);
       return NextResponse.json(
-        { error: 'Failed to send message via UAZAPI.', details: responseData },
+        { 
+          success: false,
+          error: responseData?.message || responseData?.error || 'Falha ao enviar mensagem via UAZAPI.', 
+          details: responseData,
+          httpStatus: apiResponse.status,
+          formattedPhoneNumber,
+          endpoint: apiUrl,
+          timestamp: new Date().toISOString(),
+        },
         { status: apiResponse.status }
       );
     }
 
-    return NextResponse.json({ success: true, data: responseData });
+    return NextResponse.json({ 
+      success: true, 
+      httpStatus: apiResponse.status,
+      formattedPhoneNumber,
+      endpoint: apiUrl,
+      tokenUsed: `${token.slice(0, 8)}••••••••${token.slice(-4)}`,
+      data: responseData,
+      rawResponse: responseData,
+      timestamp: new Date().toISOString(),
+    });
 
   } catch (error: any) {
     console.error('API route /api/send-message error:', error);
-    return NextResponse.json({ error: 'Internal Server Error', details: error?.message || String(error) }, { status: 500 });
+    return NextResponse.json({ 
+      success: false,
+      error: 'Internal Server Error', 
+      details: error?.message || String(error),
+      httpStatus: 500,
+      timestamp: new Date().toISOString(),
+    }, { status: 500 });
   }
 }
+
