@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, Search, Check, CheckCircle2, X, Plus, ExternalLink, MousePointerClick } from 'lucide-react';
+import { PlusCircle, Upload, CalendarIcon, Trash2, RefreshCw, AlertTriangle, Pencil, Copy, Send, RotateCcw, ListFilter, Search, Check, CheckCircle2, X, Plus, ExternalLink, MousePointerClick, Clock } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -317,6 +317,21 @@ function ScheduleMessageForm({
             formatted = `${value.slice(0, 2)}/${value.slice(2, 4)}/${value.slice(4)}`;
         }
         form.setValue('sendDate', formatted);
+    };
+
+    const handleSetCurrentDateTime = (e?: React.MouseEvent) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const now = new Date();
+        form.setValue('sendDate', format(now, 'dd/MM/yyyy'), { shouldValidate: true, shouldDirty: true });
+        form.setValue('sendHour', format(now, 'HH'), { shouldValidate: true, shouldDirty: true });
+        form.setValue('sendMinute', format(now, 'mm'), { shouldValidate: true, shouldDirty: true });
+        toast({
+            title: 'Data e Hora Preenchidas! 🕒',
+            description: `Definido para agora: ${format(now, 'dd/MM/yyyy')} às ${format(now, 'HH:mm')}`,
+        });
     };
 
     const onSubmit = async (values: ScheduleFormData) => {
@@ -732,7 +747,20 @@ function ScheduleMessageForm({
                     </div>
 
                     <div className='space-y-2'>
-                        <Label>Data e Hora do Envio</Label>
+                        <div className="flex items-center justify-between">
+                            <Label>Data e Hora do Envio</Label>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleSetCurrentDateTime}
+                                className="h-6 text-[11px] px-2 text-primary hover:text-primary hover:bg-primary/10 gap-1 font-semibold cursor-pointer"
+                                title="Clique para preencher com a data e horário atuais"
+                            >
+                                <Clock className="h-3 w-3" />
+                                Agora
+                            </Button>
+                        </div>
                         <div className="flex items-start gap-2">
                             <div className="flex-1">
                                 <FormField
@@ -741,7 +769,14 @@ function ScheduleMessageForm({
                                     render={({ field }) => (
                                     <FormItem>
                                         <div className="relative">
-                                            <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                            <button
+                                                type="button"
+                                                onClick={handleSetCurrentDateTime}
+                                                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all cursor-pointer z-10"
+                                                title="Clique para preencher com a data e horário atuais"
+                                            >
+                                                <CalendarIcon className="h-4 w-4" />
+                                            </button>
                                             <FormControl>
                                                 <Input placeholder="dd/mm/aaaa" {...field} className="pl-9" onChange={handleDateInputChange} />
                                             </FormControl>

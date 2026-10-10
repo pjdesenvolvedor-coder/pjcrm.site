@@ -671,14 +671,25 @@ function ClientForm({ initialData, onFinished }: { initialData?: Partial<Client>
                 )}
           </TabsContent>
           <TabsContent value="vencimento" className="py-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Definir</Label><div className="md:col-span-3 flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(add(new Date(), { months: 1 }), { days: -1 }), 'dd/MM/yy'))}>29 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button></div></div>
-                <FormField control={form.control} name="dueDate" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Data</FormLabel><div className='md:col-span-3'><div className="relative"><CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><FormControl><Input placeholder="dd/mm/aa" {...field} onChange={handleDateInputChange} className="pl-9" /></FormControl></div></div></FormItem> )} />
+                <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><Label className="md:text-right">Definir</Label><div className="md:col-span-3 flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { const now = new Date(); form.setValue('dueDate', format(now, 'dd/MM/yy')); form.setValue('dueTimeHour', format(now, 'HH')); form.setValue('dueTimeMinute', format(now, 'mm')); }}>Hoje</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { days: 15 }), 'dd/MM/yy'))}>15 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(add(new Date(), { months: 1 }), { days: -1 }), 'dd/MM/yy'))}>29 dias</Button><Button type="button" variant="outline" size="sm" onClick={() => form.setValue('dueDate', format(add(new Date(), { months: 1 }), 'dd/MM/yy'))}>1 mês</Button></div></div>
+                <FormField control={form.control} name="dueDate" render={({ field }) => ( <FormItem className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4"><FormLabel className="md:text-right">Data</FormLabel><div className='md:col-span-3'><div className="relative"><button type="button" onClick={() => { const now = new Date(); form.setValue('dueDate', format(now, 'dd/MM/yy')); }} className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all cursor-pointer z-10" title="Definir para hoje"><CalendarIcon className="h-4 w-4" /></button><FormControl><Input placeholder="dd/mm/aa" {...field} onChange={handleDateInputChange} className="pl-9" /></FormControl></div></div></FormItem> )} />
                 
                 <div className="grid grid-cols-1 md:grid-cols-4 md:items-center gap-4">
                     <FormLabel className="md:text-right">Horário</FormLabel>
                     <div className="md:col-span-3 flex items-center gap-2">
                         <div className="relative flex-1">
-                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const now = new Date();
+                                    form.setValue('dueTimeHour', format(now, 'HH'));
+                                    form.setValue('dueTimeMinute', format(now, 'mm'));
+                                }}
+                                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all cursor-pointer z-10"
+                                title="Definir horário atual"
+                            >
+                                <Clock className="h-4 w-4" />
+                            </button>
                             <FormField
                                 control={form.control}
                                 name="dueTimeHour"
