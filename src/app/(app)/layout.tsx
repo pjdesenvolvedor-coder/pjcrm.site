@@ -61,6 +61,7 @@ import {
   ChevronUp,
   ChevronDown,
   Workflow,
+  Code2,
 } from 'lucide-react';
 import Image from 'next/image';
 import { Upsell2MessageHandler } from '@/components/upsell-2-message-handler';
@@ -614,11 +615,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
 
-              <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/teste'} tooltip="Teste">
-                      <Link href="/teste"><Activity className="h-4 w-4" /><span className="text-[13px] font-medium">Teste</span></Link>
-                  </SidebarMenuButton>
-              </SidebarMenuItem>
 
               <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname === '/webhook-receiver'} tooltip="Receber Webhook">
@@ -950,16 +946,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
               )}
 
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === '/debug'} tooltip="DEBUG / Logs do Sistema">
-                  <Link href="/debug">
-                    <Bug className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    <span className="flex-1 text-[13px] font-bold text-rose-600 dark:text-rose-400">DEBUG & Logs</span>
-                    <Badge variant="destructive" className="h-4 px-1.5 text-[9px] font-mono bg-rose-600">LIVE</Badge>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
               {permissions.users && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname === '/users'} tooltip="Gerenciar Usuários">
@@ -970,7 +956,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               {permissions.settings && (
                 <SidebarMenuItem>
-                  <Collapsible defaultOpen={pathname.startsWith('/settings')}>
+                  <Collapsible defaultOpen={pathname.startsWith('/settings') || pathname === '/debug' || pathname === '/charge-overdue' || pathname === '/teste'}>
                       <CollapsibleTrigger asChild>
                           <SidebarMenuButton className="w-full justify-between" tooltip="Configurações">
                               <div className="flex items-center gap-2"><SettingsIcon className="h-4 w-4" /><span className="text-[13px] font-medium">Configurações</span></div>
@@ -983,24 +969,53 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/my-token'}><Link href="/settings/my-token">Tokens n8n</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/subscriptions'}><Link href="/settings/subscriptions">Planos</Link></SidebarMenuSubButton></SidebarMenuSubItem>
                               <SidebarMenuSubItem><SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/settings/presets'}><Link href="/settings/presets">Predefinições</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+
+                              {/* SUBMENU DESENVOLVIMENTO */}
+                              <SidebarMenuSubItem className="pt-1 mt-1 border-t border-sidebar-border/50">
+                                <Collapsible defaultOpen={pathname === '/debug' || pathname === '/charge-overdue' || pathname === '/teste'}>
+                                  <CollapsibleTrigger asChild>
+                                    <SidebarMenuSubButton asChild className="w-full justify-between cursor-pointer font-semibold text-muted-foreground hover:text-foreground">
+                                      <button type="button" className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-2">
+                                          <Code2 className="h-3.5 w-3.5 text-primary" />
+                                          <span className="text-xs">Desenvolvimento</span>
+                                        </div>
+                                        <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" />
+                                      </button>
+                                    </SidebarMenuSubButton>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="ml-2 pl-2 border-l border-sidebar-border/60 flex flex-col gap-1 mt-1">
+                                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/debug'}>
+                                        <Link href="/debug" className="flex items-center justify-between gap-1.5 w-full">
+                                          <span className="flex items-center gap-1.5">
+                                            <Bug className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                                            <span>Debugs e Logs</span>
+                                          </span>
+                                          <Badge variant="destructive" className="h-3.5 px-1 text-[8px] font-mono bg-rose-600 shrink-0">LIVE</Badge>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/charge-overdue'}>
+                                        <Link href="/charge-overdue" className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
+                                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                          <span className="font-semibold">Cobrar Vencidos</span>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/teste'}>
+                                        <Link href="/teste" className="flex items-center gap-1.5">
+                                          <Activity className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                          <span>Teste</span>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              </SidebarMenuSubItem>
                           </SidebarMenuSub>
                       </CollapsibleContent>
                   </Collapsible>
                 </SidebarMenuItem>
               )}
-              
-
-              {/* COBRAR VENCIDOS - Sempre visível para todos os usuários */}
-              <SidebarMenuItem>
-                  <SidebarMenuSubItem className="list-none px-0">
-                      <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/charge-overdue'}>
-                          <Link href="/charge-overdue" className="flex items-center gap-2 text-orange-600 dark:text-orange-500">
-                              <AlertTriangle className="h-4 w-4" />
-                              <span className="font-bold">COBRAR VENCIDOS</span>
-                          </Link>
-                      </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-              </SidebarMenuItem>
             </SidebarMenu>
             <DialogContent className="w-[95vw] max-w-[420px] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl shadow-2xl border flex flex-col">
                 <DialogHeader className="p-4 sm:p-5 border-b flex flex-row items-center justify-between space-y-0 sticky top-0 bg-background/95 backdrop-blur-sm z-10">
