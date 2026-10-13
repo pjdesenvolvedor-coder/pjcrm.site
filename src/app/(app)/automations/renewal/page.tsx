@@ -39,6 +39,7 @@ import {
   Send,
 } from 'lucide-react';
 import { DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
+import { DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_SUCCESS_MESSAGE =
@@ -84,6 +85,8 @@ export default function RenewalAutomationPage() {
   const [supportMessage, setSupportMessage] = useState(DEFAULT_SUPPORT_MESSAGE);
   const [buttonText, setButtonText] = useState('SIM, RENOVAR AGORA');
   const [footerText, setFooterText] = useState('Entrega Automática • ⬇️Clique No Botão⬇️');
+  const [renewalPixGateway, setRenewalPixGateway] = useState<'pjpay' | 'linkinpay'>('pjpay');
+  const [pjpayToken, setPjpayToken] = useState(DEFAULT_PJPAY_TOKEN);
   const [linkinpayToken, setLinkinpayToken] = useState(DEFAULT_LINKINPAY_TOKEN);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -137,11 +140,22 @@ export default function RenewalAutomationPage() {
       setSupportMessage(settings.renewalSupportMessage || settings.supportStartedMessage || DEFAULT_SUPPORT_MESSAGE);
       setButtonText(settings.renewalButtonText || 'SIM, RENOVAR AGORA');
       setFooterText(settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️');
+      setRenewalPixGateway(settings.renewalPixGateway || 'pjpay');
+      setPjpayToken(settings.pjpayToken || DEFAULT_PJPAY_TOKEN);
       setLinkinpayToken(settings.linkinpayToken || DEFAULT_LINKINPAY_TOKEN);
       setRenewalZapInstance(settings.renewalZapInstance || 'auto');
       checkZapStatuses();
     }
-  }, [settings?.webhookToken, settings?.billingWebhookToken, settings?.renewalZapInstance, settings?.renewalSendTime, settings?.renewalDelaySeconds]);
+  }, [
+    settings?.webhookToken,
+    settings?.billingWebhookToken,
+    settings?.renewalZapInstance,
+    settings?.renewalSendTime,
+    settings?.renewalDelaySeconds,
+    settings?.renewalPixGateway,
+    settings?.pjpayToken,
+    settings?.linkinpayToken,
+  ]);
 
   const handleSave = () => {
     if (!settingsDocRef) return;
@@ -175,6 +189,8 @@ export default function RenewalAutomationPage() {
         renewalSupportMessage: supportMessage.trim(),
         renewalButtonText: buttonText.trim(),
         renewalFooterText: footerText.trim(),
+        renewalPixGateway,
+        pjpayToken: pjpayToken.trim(),
         linkinpayToken: linkinpayToken.trim(),
         renewalZapInstance,
       },
@@ -386,7 +402,7 @@ export default function RenewalAutomationPage() {
     <div className="flex flex-col h-full">
       <PageHeader
         title="Renovação Automática PIX"
-        description="Gere links de pagamento oficiais da LinkinPay e renove as assinaturas do cliente imediatamente após o pagamento."
+        description="Gere links de pagamento oficiais via PJ Pay Gateway ou LinkinPay e renove as assinaturas do cliente imediatamente após o pagamento."
       />
 
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6 max-w-5xl">
@@ -742,49 +758,183 @@ export default function RenewalAutomationPage() {
           </CardContent>
         </Card>
 
-        {/* GATEWAY LINKINPAY */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-red-600" />
-              <CardTitle className="text-lg">Configuração da LinkinPay</CardTitle>
+        {/* GATEWAY DE PAGAMENTO PIX */}
+        <Card className="border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <CardHeader className="bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <CreditCard className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <CardTitle className="text-lg">Gateway de Pagamento PIX</CardTitle>
+                  <CardDescription>
+                    Selecione qual gateway emitirá os códigos PIX de renovação e gerenciará as baixas automáticas.
+                  </CardDescription>
+                </div>
+              </div>
+              <Badge className="bg-emerald-600 text-white font-bold text-xs px-2.5 py-1">
+                {renewalPixGateway === 'pjpay' ? 'PJ Pay Gateway Ativo' : 'LinkinPay Ativo'}
+              </Badge>
             </div>
-            <CardDescription>
-              Insira o token da API para emissão instantânea de QR Code e Copia e Cola PIX.
-            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                API Token (Bearer)
-              </Label>
-              <Input
-                type="text"
-                placeholder="45|Wm3x05BU8..."
-                value={linkinpayToken}
-                onChange={(e) => setLinkinpayToken(e.target.value)}
-                className="font-mono text-sm"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Token fornecido no painel da LinkinPay em <b>Tokens · API Key</b>.
-              </p>
+          <CardContent className="pt-6 space-y-6">
+            {/* SELEÇÃO DE GATEWAY */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* CARD PJ PAY GATEWAY */}
+              <div
+                onClick={() => setRenewalPixGateway('pjpay')}
+                className={cn(
+                  "p-4 rounded-xl border-2 cursor-pointer transition-all relative flex flex-col justify-between space-y-3",
+                  renewalPixGateway === 'pjpay'
+                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm ring-1 ring-emerald-500/20"
+                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        PJ Pay Gateway
+                        <Badge variant="outline" className="text-[10px] bg-emerald-100/50 text-emerald-800 dark:text-emerald-300 border-emerald-300 font-semibold py-0">
+                          Recomendado
+                        </Badge>
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        PIX com nome do cliente no QR Code e baixa em tempo real
+                      </p>
+                    </div>
+                  </div>
+                  {renewalPixGateway === 'pjpay' && (
+                    <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
+                      SELECIONADO
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[11px] text-muted-foreground">
+                  Endpoint: <span className="font-mono text-[10px]">https://www.pjgateway.com/api/v1/payments</span>
+                </div>
+              </div>
+
+              {/* CARD LINKINPAY */}
+              <div
+                onClick={() => setRenewalPixGateway('linkinpay')}
+                className={cn(
+                  "p-4 rounded-xl border-2 cursor-pointer transition-all relative flex flex-col justify-between space-y-3",
+                  renewalPixGateway === 'linkinpay'
+                    ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm ring-1 ring-emerald-500/20"
+                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900"
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-red-500/10 text-red-600">
+                      <CreditCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">
+                        LinkinPay
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Gateway LinkinPay padrão
+                      </p>
+                    </div>
+                  </div>
+                  {renewalPixGateway === 'linkinpay' && (
+                    <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5">
+                      SELECIONADO
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[11px] text-muted-foreground">
+                  Endpoint: <span className="font-mono text-[10px]">https://api.linkinpay.com.br/api/v1/pix</span>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                URL do Webhook (Recebimento de Pagamentos)
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input readOnly value={webhookUrl} className="font-mono text-xs bg-muted/50" />
-                <Button variant="outline" size="sm" onClick={handleCopyWebhook} className="gap-1.5 shrink-0">
-                  {copiedWebhook ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                  <span>{copiedWebhook ? 'Copiado!' : 'Copiar'}</span>
-                </Button>
+            {/* CAMPOS ESPECÍFICOS DO GATEWAY SELECIONADO */}
+            {renewalPixGateway === 'pjpay' ? (
+              <div className="p-4 rounded-xl border bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Token Bearer (PJ Pay Gateway)
+                    </Label>
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      Authorization: Bearer pj_live_...
+                    </span>
+                  </div>
+                  <Input
+                    type="text"
+                    placeholder="pj_live_W9IMRIG1GFW48ND7YIUEX5sELQB4tDLD"
+                    value={pjpayToken}
+                    onChange={(e) => setPjpayToken(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Chave de API da sua conta PJ Pay Gateway com permissão para criar e consultar pagamentos PIX.
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-3 border-t">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    URL do Webhook (Recebimento Automático)
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input readOnly value={webhookUrl} className="font-mono text-xs bg-muted/50" />
+                    <Button variant="outline" size="sm" onClick={handleCopyWebhook} className="gap-1.5 shrink-0">
+                      {copiedWebhook ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                      <span>{copiedWebhook ? 'Copiado!' : 'Copiar'}</span>
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Cadastre essa URL no painel da PJ Pay Gateway como webhook_url para notificações do evento <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">payment.paid</code>.
+                  </p>
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Cadastre essa URL no painel da LinkinPay para notificações instantâneas em tempo real.
-              </p>
-            </div>
+            ) : (
+              <div className="p-4 rounded-xl border bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      API Token (LinkinPay)
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      Bearer Token
+                    </span>
+                  </div>
+                  <Input
+                    type="text"
+                    placeholder="45|Wm3x05BU8..."
+                    value={linkinpayToken}
+                    onChange={(e) => setLinkinpayToken(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Token fornecido no painel da LinkinPay em <b>Tokens · API Key</b>.
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-3 border-t">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    URL do Webhook (Recebimento LinkinPay)
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input readOnly value={webhookUrl} className="font-mono text-xs bg-muted/50" />
+                    <Button variant="outline" size="sm" onClick={handleCopyWebhook} className="gap-1.5 shrink-0">
+                      {copiedWebhook ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                      <span>{copiedWebhook ? 'Copiado!' : 'Copiar'}</span>
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Cadastre essa URL no painel da LinkinPay para notificações instantâneas em tempo real.
+                  </p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

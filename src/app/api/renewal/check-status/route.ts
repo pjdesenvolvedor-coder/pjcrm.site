@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { checkLinkinPayTransaction, DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
+import { checkPjPayTransaction, DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
 import { executeRenewalPayment } from '@/lib/renewal-service';
 import type { RenewalSession, Settings } from '@/lib/types';
 
@@ -45,23 +46,28 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Obter token do usuário
-    let linkinpayToken = DEFAULT_LINKINPAY_TOKEN;
+    // Obter configurações do usuário
+    let configData: Settings | null = null;
     try {
       const configSnap = await getDoc(doc(db, 'users', session.userId, 'settings', 'config'));
       if (configSnap.exists()) {
-        const configData = configSnap.data() as Settings;
-        if (configData.linkinpayToken?.trim()) {
-          linkinpayToken = configData.linkinpayToken.trim();
-        }
+        configData = configSnap.data() as Settings;
       }
     } catch {}
 
-    // Consulta status na LinkinPay
-    const checkRes = await checkLinkinPayTransaction(txId, linkinpayToken);
+    const isPjPay = session.gateway === 'pjpay';
+    let checkRes: { paid: boolean; status: string; rawStatus: string };
+
+    if (isPjPay) {
+      const pjpayToken = configData?.pjpayToken?.trim() || DEFAULT_PJPAY_TOKEN;
+      checkRes = await checkPjPayTransaction(txId, pjpayToken);
+    } else {
+      const linkinpayToken = configData?.linkinpayToken?.trim() || DEFAULT_LINKINPAY_TOKEN;
+      checkRes = await checkLinkinPayTransaction(txId, linkinpayToken);
+    }
 
     if (checkRes.paid) {
-      console.log(`[check-status] Transação ${txId} APROVADA! Executando renovação automática...`);
+      console.log(`[check-status] Transação ${txId} (${isPjPay ? 'PJPay' : 'LinkinPay'}) APROVADA! Executando renovação automática...`);
       const execResult = await executeRenewalPayment({
         sessionId,
         pixTransactionId: txId,

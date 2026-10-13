@@ -146,11 +146,13 @@ export type Settings = {
   billingWebhookToken?: string;
   useSeparateBillingZap?: boolean;
 
-  // Renovação Automática PIX (LinkinPay)
+  // Renovação Automática PIX (LinkinPay e PJ Pay Gateway)
   isAutoRenewalActive?: boolean;
   renewalSendTime?: string;
   lastAutoRenewalRunDate?: string;
   renewalDelaySeconds?: number;
+  renewalPixGateway?: 'pjpay' | 'linkinpay';
+  pjpayToken?: string;
   linkinpayToken?: string;
   renewalSuccessMessage?: string;
   renewalBillingMessage?: string;
@@ -179,6 +181,7 @@ export type RenewalSession = {
   clientIds: string[];
   subscriptions: RenewalSessionItem[];
   status: 'pending' | 'paid' | 'expired';
+  gateway?: 'pjpay' | 'linkinpay';
   pixTransactionId?: string;
   pixCode?: string;
   pixQrCodeBase64?: string;

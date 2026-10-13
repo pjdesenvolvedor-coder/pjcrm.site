@@ -16,10 +16,10 @@ export async function POST(req: NextRequest) {
     const querySessionId = searchParams.get('sessionId');
 
     const body = await req.json().catch(() => ({}));
-    console.log('[renewal-webhook] Payload recebido da LinkinPay:', JSON.stringify(body));
+    console.log('[renewal-webhook] Payload recebido:', JSON.stringify(body));
 
-    const txId = body.id || body.transaction_id || body.transactionId || body.data?.id;
-    const rawStatus = String(body.status || body.event || body.transaction_status || '').toLowerCase();
+    const txId = body.id || body.data?.id || body.payment?.id || body.transaction_id || body.transactionId;
+    const rawStatus = String(body.status || body.event || body.type || body.transaction_status || '').toLowerCase();
 
     const isPaid = [
       'paid',
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     const result = await executeRenewalPayment({
       sessionId: targetSessionId,
       pixTransactionId: String(txId || ''),
-      amountInCents: body.value || body.amount,
+      amountInCents: body.value || body.amount || body.data?.amount || body.data?.value,
     });
 
     return NextResponse.json({
@@ -73,5 +73,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'ok', endpoint: 'LinkinPay Renewal Webhook' });
+  return NextResponse.json({ status: 'ok', endpoint: 'Renewal Webhook (LinkinPay & PJ Pay Gateway)' });
 }
