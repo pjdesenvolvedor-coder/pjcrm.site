@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { doc, collection, getDocs } from 'firebase/firestore';
-import { useFirebase, useUser, useDoc, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
+import { useFirebase, useUser, useDoc, useCollection, setDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { Settings, Client } from '@/lib/types';
+import type { Settings, Client, RenewalFollowUpStep } from '@/lib/types';
 import { getCanonicalPhone } from '@/lib/renewal-service';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,10 +37,100 @@ import {
   Eye,
   ShieldAlert,
   Send,
+  Plus,
+  Trash2,
+  Timer,
+  Flame,
+  BellRing,
+  ArrowRight,
+  Users,
+  CheckCheck,
+  MousePointerClick,
+  XCircle,
 } from 'lucide-react';
 import { DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
 import { DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
 import { cn } from '@/lib/utils';
+
+const DEFAULT_FOLLOWUP_STEPS: RenewalFollowUpStep[] = [
+  {
+    id: 'step_1',
+    name: '1º Lembrete • Esqueceu de Renovar?',
+    isActive: true,
+    delayValue: 2,
+    delayUnit: 'hours',
+    message:
+      '⏳ *LEMBRETE DE RENOVAÇÃO*\n\n' +
+      'Olá *{cliente}*, vimos que você recebeu nossa mensagem mais cedo, mas ainda não identificamos a renovação da sua assinatura.\n\n' +
+      '📦 *Assinatura(s):* {assinaturas}\n' +
+      '💰 *Valor:* R$ {valor}\n\n' +
+      '👉 Para não correr o risco de ficar sem acesso hoje, clique no botão abaixo e renove em segundos via PIX automático:',
+    includeRenewalButton: true,
+    customButtonText: 'SIM, RENOVAR AGORA',
+    customFooterText: 'Liberação Instantânea • ⬇️Clique No Botão⬇️',
+  },
+  {
+    id: 'step_2',
+    name: '2º Aviso • Evite a Suspensão do Acesso',
+    isActive: true,
+    delayValue: 6,
+    delayUnit: 'hours',
+    message:
+      '⚠️ *AVISO IMPORTANTE: ACESSO PRESTES A PAUSAR*\n\n' +
+      'Oi *{cliente}*! Passando para avisar que o sistema ainda não registrou o pagamento da sua assinatura *{assinaturas}*.\n\n' +
+      '🔒 Para evitar que sua tela seja bloqueada automaticamente pelo sistema, finalize sua renovação clicando no botão oficial abaixo:',
+    includeRenewalButton: true,
+    customButtonText: 'MANTER MEU ACESSO ATIVO',
+    customFooterText: 'Evite o Bloqueio Automático • ⬇️Clique Abaixo⬇️',
+  },
+  {
+    id: 'step_3',
+    name: '3º Aviso • Última Chamada (24h após cobrança)',
+    isActive: true,
+    delayValue: 24,
+    delayUnit: 'hours',
+    message:
+      '🚨 *ÚLTIMA CHAMADA PARA RENOVAÇÃO*\n\n' +
+      'Olá *{cliente}*, sua assinatura *{assinaturas}* está vencida e a vaga no grupo/conta será liberada para outro cliente em breve.\n\n' +
+      '⚡ Se você deseja continuar com seu acesso, clique no botão abaixo agora mesmo para renovar via PIX ou clique em "Não quero renovar" para encerrar:',
+    includeRenewalButton: true,
+    customButtonText: 'GARANTIR MINHA VAGA AGORA',
+    customFooterText: 'Última Chamada • ⬇️Escolha uma opção abaixo⬇️',
+    includeCancelButton: true,
+    cancelButtonText: 'Não quero renovar',
+  },
+];
+
+const FOLLOWUP_TEMPLATES = [
+  {
+    label: '😊 Lembrete Amigável',
+    title: 'Lembrete Amigável',
+    message:
+      '⏳ *LEMBRETE DE RENOVAÇÃO*\n\n' +
+      'Olá *{cliente}*, tudo bem? Vimos que na correria do dia a dia você ainda não conseguiu finalizar a renovação da sua assinatura *{assinaturas}*.\n\n' +
+      '💰 *Valor:* R$ {valor}\n\n' +
+      '👉 Clique no botão abaixo para gerar seu PIX e renovar instantaneamente:',
+    buttonText: 'SIM, RENOVAR AGORA',
+  },
+  {
+    label: '⚠️ Aviso de Suspensão',
+    title: 'Aviso de Bloqueio de Sinal',
+    message:
+      '⚠️ *ATENÇÃO: ASSINATURA PENDENTE*\n\n' +
+      'Oi *{cliente}*! O sistema identificou que sua assinatura *{assinaturas}* permanece pendente de renovação.\n\n' +
+      '🔒 Para evitar a pausa automática do seu acesso, clique no botão abaixo e regularize em menos de 1 minuto:',
+    buttonText: 'REGULARIZAR MEU ACESSO',
+  },
+  {
+    label: '🚨 Última Chamada / Vaga',
+    title: 'Última Chamada',
+    message:
+      '🚨 *ÚLTIMO AVISO DE RENOVAÇÃO*\n\n' +
+      'Olá *{cliente}*, como ainda não identificamos o pagamento de *{assinaturas}*, o sistema fará a remoção automática do acesso em breve.\n\n' +
+      '⚡ Quer manter sua assinatura ativa? Clique no botão abaixo agora mesmo:',
+    buttonText: 'RENOVAR MINHA ASSINATURA',
+  },
+];
 
 const DEFAULT_SUCCESS_MESSAGE =
   '🎉 *PAGAMENTO CONFIRMADO!*\n\n' +
@@ -76,6 +166,13 @@ export default function RenewalAutomationPage() {
 
   const { data: settings, isLoading } = useDoc<Settings>(settingsDocRef);
 
+  const clientsCollectionRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return collection(firestore, 'users', user.uid, 'clients');
+  }, [firestore, user]);
+
+  const { data: allClientsData } = useCollection<Client>(clientsCollectionRef);
+
   const [isActive, setIsActive] = useState(false);
   const [renewalSendTime, setRenewalSendTime] = useState('14:30');
   const [renewalDelaySeconds, setRenewalDelaySeconds] = useState(15);
@@ -90,6 +187,13 @@ export default function RenewalAutomationPage() {
   const [linkinpayToken, setLinkinpayToken] = useState(DEFAULT_LINKINPAY_TOKEN);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Estados do Remarketing Pós-Cobrança (Clientes que não renovaram)
+  const [isRenewalFollowUpActive, setIsRenewalFollowUpActive] = useState(true);
+  const [followUpSteps, setFollowUpSteps] = useState<RenewalFollowUpStep[]>(DEFAULT_FOLLOWUP_STEPS);
+  const [activeStepTab, setActiveStepTab] = useState<string>('step_1');
+  const [dispatchingFollowUpKey, setDispatchingFollowUpKey] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState<number>(Date.now());
 
   // Instância de WhatsApp escolhida para renovação e status de conexão
   const [renewalZapInstance, setRenewalZapInstance] = useState<'main' | 'billing' | 'auto'>('auto');
@@ -131,6 +235,11 @@ export default function RenewalAutomationPage() {
   };
 
   useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     if (settings) {
       setIsActive(Boolean(settings.isAutoRenewalActive));
       setRenewalSendTime(settings.renewalSendTime || '14:30');
@@ -144,6 +253,23 @@ export default function RenewalAutomationPage() {
       setPjpayToken(settings.pjpayToken || DEFAULT_PJPAY_TOKEN);
       setLinkinpayToken(settings.linkinpayToken || DEFAULT_LINKINPAY_TOKEN);
       setRenewalZapInstance(settings.renewalZapInstance || 'auto');
+      setIsRenewalFollowUpActive(settings.isRenewalFollowUpActive ?? true);
+      if (Array.isArray(settings.renewalFollowUpSteps) && settings.renewalFollowUpSteps.length > 0) {
+        const normalizedSteps = settings.renewalFollowUpSteps.map((s, idx) => {
+          if (s.id === 'step_3' || idx === 2) {
+            return {
+              ...s,
+              includeCancelButton: s.includeCancelButton ?? true,
+              cancelButtonText: s.cancelButtonText || 'Não quero renovar',
+            };
+          }
+          return s;
+        });
+        setFollowUpSteps(normalizedSteps);
+        if (!normalizedSteps.some(s => s.id === activeStepTab)) {
+          setActiveStepTab(normalizedSteps[0].id);
+        }
+      }
       checkZapStatuses();
     }
   }, [
@@ -155,7 +281,201 @@ export default function RenewalAutomationPage() {
     settings?.renewalPixGateway,
     settings?.pjpayToken,
     settings?.linkinpayToken,
+    settings?.isRenewalFollowUpActive,
+    settings?.renewalFollowUpSteps,
   ]);
+
+  const handleAddFollowUpStep = () => {
+    const nextNum = followUpSteps.length + 1;
+    const newId = `step_${Date.now()}`;
+    const newStep: RenewalFollowUpStep = {
+      id: newId,
+      name: `${nextNum}º Lembrete de Renovação`,
+      isActive: true,
+      delayValue: nextNum === 1 ? 2 : nextNum === 2 ? 6 : 24,
+      delayUnit: 'hours',
+      message:
+        '⏳ *LEMBRETE DE RENOVAÇÃO*\n\n' +
+        'Olá *{cliente}*, vimos que sua assinatura *{assinaturas}* ainda aguarda renovação.\n\n' +
+        '💰 *Valor:* R$ {valor}\n\n' +
+        '👉 Para renovar agora via PIX e manter seu acesso sem pausas, clique no botão abaixo:',
+      includeRenewalButton: true,
+      customButtonText: buttonText || 'SIM, RENOVAR AGORA',
+      customFooterText: footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
+      includeCancelButton: nextNum >= 3,
+      cancelButtonText: 'Não quero renovar',
+      createdAt: Date.now(),
+    };
+    const updated = [...followUpSteps, newStep];
+    setFollowUpSteps(updated);
+    setActiveStepTab(newId);
+  };
+
+  const handleUpdateFollowUpStep = (id: string, patch: Partial<RenewalFollowUpStep>) => {
+    setFollowUpSteps(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+  };
+
+  const handleRemoveFollowUpStep = (id: string) => {
+    if (followUpSteps.length <= 1) {
+      toast({
+        variant: 'destructive',
+        title: 'Mínimo de 1 etapa',
+        description: 'Mantenha ao menos uma etapa ou desative o funil no botão superior.',
+      });
+      return;
+    }
+    const updated = followUpSteps.filter(s => s.id !== id);
+    setFollowUpSteps(updated);
+    if (activeStepTab === id && updated.length > 0) {
+      setActiveStepTab(updated[0].id);
+    }
+  };
+
+  const formatDelayLabel = (val: number, unit: 'minutes' | 'hours' | 'days') => {
+    const v = Number(val) || 1;
+    if (unit === 'minutes') return `${v} ${v === 1 ? 'minuto' : 'minutos'}`;
+    if (unit === 'hours') return `${v} ${v === 1 ? 'hora' : 'horas'}`;
+    return `${v} ${v === 1 ? 'dia' : 'dias'}`;
+  };
+
+  const getStepDelayMs = (step: RenewalFollowUpStep) => {
+    const val = Math.max(1, Number(step.delayValue) || 1);
+    if (step.delayUnit === 'minutes') return val * 60 * 1000;
+    if (step.delayUnit === 'hours') return val * 60 * 60 * 1000;
+    return val * 24 * 60 * 60 * 1000;
+  };
+
+  // Agrupamento dos clientes cobrados recentemente para monitoramento em tempo real do Remarketing
+  const billedGroupsMonitor = useMemo(() => {
+    if (!allClientsData || allClientsData.length === 0) return [];
+    const groupsMap = new Map<string, Client[]>();
+
+    for (const c of allClientsData) {
+      if (!c.lastBilledAt && !c.lastBilledDate) continue;
+      const canon = getCanonicalPhone(c.phone);
+      if (!canon) continue;
+      if (!groupsMap.has(canon)) groupsMap.set(canon, []);
+      groupsMap.get(canon)!.push(c);
+    }
+
+    const result = Array.from(groupsMap.entries()).map(([canon, group]) => {
+      const primary = group[0];
+      let latestBilledMs = 0;
+      let latestRenewedMs = 0;
+
+      for (const item of group) {
+        const bMs = item.lastBilledAt?.toDate
+          ? item.lastBilledAt.toDate().getTime()
+          : item.lastBilledAt?.seconds
+          ? item.lastBilledAt.seconds * 1000
+          : typeof item.lastBilledAt === 'number'
+          ? item.lastBilledAt
+          : 0;
+        if (bMs > latestBilledMs) latestBilledMs = bMs;
+
+        const rMs = item.lastRenewedAt?.toDate
+          ? item.lastRenewedAt.toDate().getTime()
+          : item.lastRenewedAt?.seconds
+          ? item.lastRenewedAt.seconds * 1000
+          : typeof item.lastRenewedAt === 'number'
+          ? item.lastRenewedAt
+          : 0;
+        if (rMs > latestRenewedMs) latestRenewedMs = rMs;
+      }
+
+      const isPaidAfterBilling =
+        group.every(c => c.status === 'Ativo') &&
+        (latestRenewedMs >= latestBilledMs || latestBilledMs === 0);
+
+      const sentStepIds = Array.from(
+        new Set(group.flatMap(c => (Array.isArray(c.sentRenewalFollowUpIds) ? c.sentRenewalFollowUpIds : [])))
+      );
+
+      const elapsedMs = latestBilledMs > 0 ? Math.max(0, nowTick - latestBilledMs) : 0;
+
+      return {
+        canon,
+        clientIds: group.map(c => c.id),
+        name: primary.name,
+        phone: primary.phone,
+        subscriptions: group.map(c => c.subscription || 'Assinatura').join(' + '),
+        totalAmount: group.reduce((acc, c) => {
+          const num = parseFloat(String(c.amountPaid || '0').replace(',', '.'));
+          return acc + (isNaN(num) ? 0 : num);
+        }, 0),
+        latestBilledMs,
+        elapsedMs,
+        isPaid: isPaidAfterBilling,
+        sentStepIds,
+      };
+    });
+
+    const minBilledCutoffMs = Math.max(
+      1792137294000,
+      Number(settings?.renewalFollowUpActivatedAt) || 0
+    );
+
+    return result
+      .filter(item => item.latestBilledMs >= minBilledCutoffMs)
+      .sort((a, b) => b.latestBilledMs - a.latestBilledMs)
+      .slice(0, 20);
+  }, [allClientsData, nowTick, settings?.renewalFollowUpActivatedAt]);
+
+  const formatElapsedTime = (ms: number) => {
+    if (!ms || ms <= 0) return 'agora mesmo';
+    const totalMinutes = Math.floor(ms / 60000);
+    if (totalMinutes < 1) return 'há poucos segundos';
+    if (totalMinutes < 60) return `há ${totalMinutes} min`;
+    const hours = Math.floor(totalMinutes / 60);
+    const remMin = totalMinutes % 60;
+    if (hours < 24) return remMin > 0 ? `há ${hours}h ${remMin}min` : `há ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `há ${days} dia(s)`;
+  };
+
+  const handleDispatchFollowUpNow = async (clientIds: string[], step: RenewalFollowUpStep, clientName: string) => {
+    if (!user || !settingsDocRef) return;
+    const key = `${clientIds[0]}_${step.id}`;
+    try {
+      setDispatchingFollowUpKey(key);
+      // Salva silenciosamente as etapas atuais antes de disparar para que o endpoint leia a versão mais recente
+      setDocumentNonBlocking(
+        settingsDocRef,
+        {
+          isRenewalFollowUpActive,
+          renewalFollowUpSteps: followUpSteps,
+        },
+        { merge: true }
+      );
+
+      const res = await fetch('/api/renewal/dispatch-single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          clientIds,
+          followUpStepId: step.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Falha ao disparar remarketing.');
+      }
+
+      toast({
+        title: 'Remarketing Enviado com Sucesso!',
+        description: `A etapa "${step.name}" foi enviada para ${clientName} no WhatsApp${step.includeRenewalButton ? ' com o botão de renovação PIX' : ''}.`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao Enviar Remarketing',
+        description: err.message || 'Não foi possível enviar a etapa agora.',
+      });
+    } finally {
+      setDispatchingFollowUpKey(null);
+    }
+  };
 
   const handleSave = () => {
     if (!settingsDocRef) return;
@@ -193,6 +513,9 @@ export default function RenewalAutomationPage() {
         pjpayToken: pjpayToken.trim(),
         linkinpayToken: linkinpayToken.trim(),
         renewalZapInstance,
+        isRenewalFollowUpActive,
+        renewalFollowUpSteps: followUpSteps,
+        renewalFollowUpActivatedAt: settings?.renewalFollowUpActivatedAt || Math.max(Date.now(), 1792137294000),
       },
       { merge: true }
     );
@@ -201,7 +524,7 @@ export default function RenewalAutomationPage() {
       setIsSaving(false);
       toast({
         title: 'Configurações Salvas!',
-        description: 'Automação de renovação PIX atualizada com sucesso.',
+        description: 'Automação de renovação PIX e Funil de Remarketing Pós-Cobrança salvos com sucesso.',
       });
     }, 400);
   };
@@ -587,6 +910,696 @@ export default function RenewalAutomationPage() {
               <p className="text-[11px] text-muted-foreground pt-1 flex items-center gap-1.5">
                 <span className="text-emerald-600 font-bold">●</span> O painel de progresso é flutuante no canto inferior esquerdo, pode ser arrastado pela tela, persiste se você recarregar a página e não duplica disparos se você tiver várias abas abertas.
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* SEÇÃO: FUNIL DE REMARKETING PÓS-COBRANÇA (CASO O CLIENTE NÃO RENOVE) */}
+        <Card className="border-2 border-purple-300/80 dark:border-purple-900/60 shadow-md overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-purple-500/10 via-fuchsia-500/10 to-amber-500/10 border-b border-purple-200/60 dark:border-purple-900/40">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-600 to-fuchsia-600 text-white shadow-sm">
+                  <Flame className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CardTitle className="text-lg">
+                      Funil de Remarketing Pós-Cobrança (Se o Cliente Não Renovar)
+                    </CardTitle>
+                    <Badge className="bg-purple-600 text-white text-[10px] font-bold">
+                      INTELIGENTE • AUTO-STOP NO PIX
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    Disparou a cobrança (manual ou automática) e passou <strong>X tempo</strong> sem o cliente pagar? O sistema identifica quem ainda não renovou e envia mensagens de recuperação com o botão oficial de renovar!
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 self-end sm:self-center shrink-0 bg-white/80 dark:bg-zinc-900/80 px-3.5 py-2 rounded-xl border border-purple-200 dark:border-purple-800">
+                <Label htmlFor="followup-funnel-switch" className="text-xs font-bold cursor-pointer">
+                  {isRenewalFollowUpActive ? 'Remarketing Ativo' : 'Desativado'}
+                </Label>
+                <Switch
+                  id="followup-funnel-switch"
+                  checked={isRenewalFollowUpActive}
+                  onCheckedChange={setIsRenewalFollowUpActive}
+                />
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-6 space-y-6">
+            {/* LINHA DO TEMPO VISUAL DO FUNIL */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 via-purple-50/40 to-emerald-50/40 dark:from-slate-900/60 dark:via-purple-950/20 dark:to-emerald-950/20 border border-purple-200/60 dark:border-purple-900/40 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-purple-800 dark:text-purple-300 flex items-center gap-1.5">
+                  <Timer className="h-4 w-4 text-purple-600" /> Como funciona a jornada automática após o disparo da cobrança:
+                </span>
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Se o cliente pagar em qualquer momento, o funil para na hora!
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-1">
+                {/* PASSO 0: COBRANÇA ENVIADA */}
+                <div className="shrink-0 p-3 rounded-xl bg-white dark:bg-zinc-900 border-2 border-emerald-500/60 shadow-sm min-w-[175px]">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">
+                    <span>Marco Zero (0 min)</span>
+                    <Send className="h-3 w-3" />
+                  </div>
+                  <p className="font-bold text-xs mt-1 text-slate-800 dark:text-slate-100">
+                    1. Cobrança Disparada
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Manual ou Automática
+                  </p>
+                </div>
+
+                {followUpSteps.map((step, idx) => (
+                  <div key={step.id} className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col items-center px-1 text-purple-600 dark:text-purple-400">
+                      <span className="text-[10px] font-mono font-bold whitespace-nowrap bg-purple-100 dark:bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-300 dark:border-purple-800">
+                        +{formatDelayLabel(step.delayValue, step.delayUnit)}
+                      </span>
+                      <ArrowRight className="h-4 w-4 mt-0.5" />
+                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">não pagou?</span>
+                    </div>
+
+                    <div
+                      onClick={() => setActiveStepTab(step.id)}
+                      className={cn(
+                        'shrink-0 p-3 rounded-xl border-2 cursor-pointer transition-all min-w-[190px] max-w-[220px]',
+                        activeStepTab === step.id
+                          ? 'border-purple-600 bg-purple-50/70 dark:bg-purple-950/40 shadow-sm ring-2 ring-purple-500/20'
+                          : step.isActive
+                          ? 'border-purple-200 dark:border-purple-800/70 bg-white dark:bg-zinc-900 hover:border-purple-400'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-zinc-900/40 opacity-60'
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <Badge
+                          variant={step.isActive ? 'default' : 'secondary'}
+                          className={cn(
+                            'text-[9px] px-1.5 py-0 font-bold',
+                            step.isActive ? 'bg-purple-600 text-white' : ''
+                          )}
+                        >
+                          Etapa {idx + 1} {step.isActive ? '• Ativa' : '• Pausada'}
+                        </Badge>
+                        {step.includeRenewalButton && (
+                          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                            <MousePointerClick className="h-3 w-3" /> +Botão
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-bold text-xs mt-1.5 truncate text-slate-800 dark:text-slate-100">
+                        {step.name || `Etapa ${idx + 1}`}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                        Após {formatDelayLabel(step.delayValue, step.delayUnit)} sem renovar
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddFollowUpStep}
+                  className="shrink-0 h-16 border-dashed border-2 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30 rounded-xl px-4 font-bold text-xs gap-1.5 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nova Etapa
+                </Button>
+              </div>
+            </div>
+
+            {/* SELETOR DE ABAS DAS ETAPAS + BOTÃO ADICIONAR */}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {followUpSteps.map((step, index) => (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => setActiveStepTab(step.id)}
+                      className={cn(
+                        'px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border cursor-pointer',
+                        activeStepTab === step.id
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/20'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'w-2 h-2 rounded-full',
+                          step.isActive ? 'bg-emerald-400' : 'bg-slate-400'
+                        )}
+                      />
+                      <span>
+                        Etapa {index + 1}: +{formatDelayLabel(step.delayValue, step.delayUnit)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddFollowUpStep}
+                  className="border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-xs gap-1.5 h-9 rounded-xl cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar Etapa ao Funil
+                </Button>
+              </div>
+
+              {/* EDITOR DA ETAPA SELECIONADA */}
+              {followUpSteps.map((step, index) => {
+                if (step.id !== activeStepTab) return null;
+                const previewBtnText = (step.customButtonText || buttonText || 'SIM, RENOVAR AGORA').trim();
+                const previewFooter = (step.customFooterText || footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️').trim();
+
+                return (
+                  <div
+                    key={step.id}
+                    className="p-5 rounded-2xl border-2 border-purple-200/80 dark:border-purple-900/50 bg-slate-50/40 dark:bg-slate-900/30 space-y-5"
+                  >
+                    {/* CABEÇALHO DA ETAPA */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
+                      <div className="flex-1 space-y-1.5">
+                        <Label className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">
+                          Nome de Identificação da Etapa {index + 1}
+                        </Label>
+                        <Input
+                          value={step.name}
+                          onChange={e => handleUpdateFollowUpStep(step.id, { name: e.target.value })}
+                          placeholder="Ex: 1º Lembrete - Esqueceu de Renovar?"
+                          className="font-bold text-sm bg-white dark:bg-zinc-900"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3 self-end sm:self-center">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border">
+                          <Label htmlFor={`step-active-${step.id}`} className="text-xs font-bold cursor-pointer">
+                            {step.isActive ? 'Etapa Ativa' : 'Etapa Pausada'}
+                          </Label>
+                          <Switch
+                            id={`step-active-${step.id}`}
+                            checked={step.isActive}
+                            onCheckedChange={checked => handleUpdateFollowUpStep(step.id, { isActive: checked })}
+                          />
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoveFollowUpStep(step.id)}
+                          className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30 h-9 px-3 rounded-xl gap-1.5 text-xs font-bold cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Excluir
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* CONFIGURAÇÃO DE TEMPO (PASSOU X TEMPO SEM RENOVAR) */}
+                    <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
+                            <Clock className="h-4 w-4 text-purple-600" /> Quando enviar esta mensagem? (Tempo após o disparo da cobrança)
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Se passar esse tempo desde o envio da cobrança e o cliente <strong>continuar sem renovar</strong>, o sistema dispara esta etapa automaticamente.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-bold text-muted-foreground">Após:</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={999}
+                            value={step.delayValue}
+                            onChange={e =>
+                              handleUpdateFollowUpStep(step.id, {
+                                delayValue: Math.max(1, Number(e.target.value) || 1),
+                              })
+                            }
+                            className="w-24 font-mono font-bold text-base text-center"
+                          />
+                          <select
+                            value={step.delayUnit}
+                            onChange={e =>
+                              handleUpdateFollowUpStep(step.id, {
+                                delayUnit: e.target.value as 'minutes' | 'hours' | 'days',
+                              })
+                            }
+                            className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                          >
+                            <option value="minutes">Minutos</option>
+                            <option value="hours">Horas</option>
+                            <option value="days">Dias</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* ATALHOS DE TEMPO COM 1 CLIQUE */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <span className="text-[11px] font-bold text-muted-foreground mr-1">
+                          Atalhos de tempo:
+                        </span>
+                        {[
+                          { label: '5 min (Teste Rápido)', val: 5, unit: 'minutes' as const },
+                          { label: '15 min', val: 15, unit: 'minutes' as const },
+                          { label: '30 min', val: 30, unit: 'minutes' as const },
+                          { label: '1 hora', val: 1, unit: 'hours' as const },
+                          { label: '2 horas', val: 2, unit: 'hours' as const },
+                          { label: '6 horas', val: 6, unit: 'hours' as const },
+                          { label: '12 horas', val: 12, unit: 'hours' as const },
+                          { label: '24 horas (1 dia)', val: 24, unit: 'hours' as const },
+                          { label: '2 dias', val: 2, unit: 'days' as const },
+                        ].map(preset => {
+                          const isSelected = step.delayValue === preset.val && step.delayUnit === preset.unit;
+                          return (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateFollowUpStep(step.id, {
+                                  delayValue: preset.val,
+                                  delayUnit: preset.unit,
+                                })
+                              }
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer',
+                                isSelected
+                                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                                  : 'bg-slate-100 dark:bg-zinc-800 hover:bg-purple-50 dark:hover:bg-purple-950/30 text-slate-700 dark:text-slate-300'
+                              )}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* OPÇÃO DO BOTÃO INTERATIVO DE RENOVAÇÃO */}
+                    <div className="p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border-2 border-emerald-500/30 space-y-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <MousePointerClick className="h-4 w-4 text-emerald-600" />
+                            <Label
+                              htmlFor={`step-btn-${step.id}`}
+                              className="text-sm font-bold text-slate-900 dark:text-white cursor-pointer"
+                            >
+                              Enviar Junto o Mesmo Botão Interativo para Renovar (Link PIX Oficial)
+                            </Label>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Quando ativado, a mensagem de remarketing vai com o botão clicável do WhatsApp que abre o checkout PIX automático do cliente.
+                          </p>
+                        </div>
+                        <Switch
+                          id={`step-btn-${step.id}`}
+                          checked={step.includeRenewalButton}
+                          onCheckedChange={checked =>
+                            handleUpdateFollowUpStep(step.id, { includeRenewalButton: checked })
+                          }
+                        />
+                      </div>
+
+                      {step.includeRenewalButton && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-900/40">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                                Texto do Botão nesta Etapa
+                              </Label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateFollowUpStep(step.id, {
+                                    customButtonText: buttonText || 'SIM, RENOVAR AGORA',
+                                  })
+                                }
+                                className="text-[10px] text-emerald-700 dark:text-emerald-400 underline font-semibold cursor-pointer"
+                              >
+                                Usar igual ao padrão
+                              </button>
+                            </div>
+                            <Input
+                              value={step.customButtonText ?? buttonText}
+                              onChange={e =>
+                                handleUpdateFollowUpStep(step.id, { customButtonText: e.target.value })
+                              }
+                              placeholder={buttonText || 'SIM, RENOVAR AGORA'}
+                              className="bg-white dark:bg-zinc-900 font-bold text-xs text-emerald-700 dark:text-emerald-400"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                                Rodapé Acima do Botão
+                              </Label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateFollowUpStep(step.id, {
+                                    customFooterText: footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
+                                  })
+                                }
+                                className="text-[10px] text-emerald-700 dark:text-emerald-400 underline font-semibold cursor-pointer"
+                              >
+                                Usar igual ao padrão
+                              </button>
+                            </div>
+                            <Input
+                              value={step.customFooterText ?? footerText}
+                              onChange={e =>
+                                handleUpdateFollowUpStep(step.id, { customFooterText: e.target.value })
+                              }
+                              placeholder={footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️'}
+                              className="bg-white dark:bg-zinc-900 text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* OPÇÃO DO BOTÃO "NÃO QUERO RENOVAR" (REMOVE ASSINATURA DO CRM) */}
+                      {step.includeRenewalButton && (
+                        <div className="p-3.5 rounded-xl bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 space-y-3 mt-2">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-0.5">
+                              <Label
+                                htmlFor={`step-cancel-btn-${step.id}`}
+                                className="text-xs font-bold text-red-700 dark:text-red-400 cursor-pointer flex items-center gap-1.5"
+                              >
+                                <XCircle className="h-4 w-4 text-red-600" />
+                                Incluir 2º Botão: "Não quero renovar" (Remove a assinatura do CRM se o cliente clicar)
+                              </Label>
+                              <p className="text-[11px] text-muted-foreground">
+                                Recomendado na <strong>Etapa 3 (Última Etapa)</strong>: caso o cliente clique em "Não quero renovar", a assinatura dele é excluída automaticamente do CRM.
+                              </p>
+                            </div>
+                            <Switch
+                              id={`step-cancel-btn-${step.id}`}
+                              checked={step.includeCancelButton ?? (step.id === 'step_3' || index === 2)}
+                              onCheckedChange={checked =>
+                                handleUpdateFollowUpStep(step.id, {
+                                  includeCancelButton: checked,
+                                  cancelButtonText: step.cancelButtonText || 'Não quero renovar',
+                                })
+                              }
+                            />
+                          </div>
+
+                          {(step.includeCancelButton ?? (step.id === 'step_3' || index === 2)) && (
+                            <div className="pt-2 border-t border-red-200/60 dark:border-red-900/40">
+                              <Label className="text-[11px] font-bold uppercase tracking-wider text-red-700 dark:text-red-400">
+                                Texto do Botão de Cancelamento
+                              </Label>
+                              <Input
+                                value={step.cancelButtonText || 'Não quero renovar'}
+                                onChange={e =>
+                                  handleUpdateFollowUpStep(step.id, { cancelButtonText: e.target.value })
+                                }
+                                placeholder="Não quero renovar"
+                                className="mt-1 bg-white dark:bg-zinc-900 font-bold text-xs text-red-600 dark:text-red-400 max-w-sm"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* EDITOR DE MENSAGEM + PREVIEW LADO A LADO */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                      <div className="lg:col-span-7 space-y-3">
+                        {/* MODELOS PRONTOS COM 1 CLIQUE */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 mr-1">
+                            Modelos prontos:
+                          </span>
+                          {FOLLOWUP_TEMPLATES.map(tpl => (
+                            <button
+                              key={tpl.label}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateFollowUpStep(step.id, {
+                                  message: tpl.message,
+                                  customButtonText: tpl.buttonText,
+                                })
+                              }
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-100/80 dark:bg-purple-950/50 text-purple-800 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-900/60 border border-purple-300/60 dark:border-purple-800 transition-colors cursor-pointer"
+                            >
+                              {tpl.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* TAGS DINÂMICAS */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-bold text-muted-foreground mr-1">Tags:</span>
+                          {[
+                            { label: '{cliente}', tag: '{cliente}' },
+                            { label: '{assinaturas}', tag: '{assinaturas}' },
+                            { label: '{valor}', tag: '{valor}' },
+                            { label: '{vencimento}', tag: '{vencimento}' },
+                            { label: '{link_renovacao}', tag: '{link_renovacao}' },
+                          ].map(item => (
+                            <button
+                              key={item.tag}
+                              type="button"
+                              onClick={() =>
+                                handleUpdateFollowUpStep(step.id, {
+                                  message: `${step.message} ${item.tag}`,
+                                })
+                              }
+                              className="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-white dark:bg-zinc-900 hover:bg-purple-50 dark:hover:bg-purple-950/40 border transition-colors cursor-pointer"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <Textarea
+                          rows={7}
+                          value={step.message}
+                          onChange={e => handleUpdateFollowUpStep(step.id, { message: e.target.value })}
+                          placeholder="Digite a mensagem de remarketing caso o cliente não renove..."
+                          className="font-mono text-sm leading-relaxed bg-white dark:bg-zinc-900"
+                        />
+                      </div>
+
+                      {/* PRÉVIA EM TEMPO REAL DO WHATSAPP DA ETAPA */}
+                      <div className="lg:col-span-5 p-4 rounded-2xl bg-slate-100 dark:bg-slate-900/90 border space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Prévia no WhatsApp ({formatDelayLabel(step.delayValue, step.delayUnit)} depois):
+                          </span>
+                          <Badge variant="outline" className="text-[10px] border-emerald-400 text-emerald-700 dark:text-emerald-400">
+                            {step.includeRenewalButton ? 'Com Botão PIX' : 'Somente Texto'}
+                          </Badge>
+                        </div>
+
+                        <div className="bg-[#d9fdd3] dark:bg-[#005c4b] text-zinc-900 dark:text-zinc-100 rounded-2xl rounded-tr-none p-3.5 shadow-sm space-y-2 text-xs leading-relaxed">
+                          <div className="whitespace-pre-wrap font-sans">
+                            {step.message
+                              .replace(/{cliente}/g, 'João Silva')
+                              .replace(/{assinaturas}/g, 'Netflix 4K Ultra HD')
+                              .replace(/{assinatura}/g, 'Netflix 4K Ultra HD')
+                              .replace(/{vencimento}/g, `${format(new Date(), 'dd/MM')} *Hoje*`)
+                              .replace(/{valor}/g, '35,00')
+                              .replace(
+                                /{link_renovacao}/g,
+                                step.includeRenewalButton ? '' : 'https://pjcrm.site/renovar/abc123'
+                              )
+                              .trim()}
+                          </div>
+
+                          {step.includeRenewalButton && (
+                            <>
+                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 pt-1.5 border-t border-black/10 dark:border-white/10 font-medium">
+                                {previewFooter}
+                              </div>
+                              <div className="pt-1 space-y-1.5">
+                                <div className="w-full py-2.5 px-3 rounded-xl bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-bold text-center border border-emerald-200 dark:border-emerald-800/60 shadow-sm flex items-center justify-center gap-1.5 text-xs">
+                                  <ExternalLink className="h-3.5 w-3.5 text-emerald-600" />
+                                  <span>{previewBtnText}</span>
+                                </div>
+                                {(step.includeCancelButton ?? (step.id === 'step_3' || index === 2)) && (
+                                  <div className="w-full py-2.5 px-3 rounded-xl bg-white dark:bg-zinc-800 text-red-600 dark:text-red-400 font-bold text-center border border-red-200 dark:border-red-900/60 shadow-sm flex items-center justify-center gap-1.5 text-xs">
+                                    <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                    <span>{step.cancelButtonText || 'Não quero renovar'}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* PAINEL AO VIVO: CLIENTES COBRADOS & STATUS DO REMARKETING */}
+            <div className="p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-zinc-900/70 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600">
+                    <BellRing className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                      Rastreamento em Tempo Real • Clientes Cobrados Recentemente
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        Auto-Refresh
+                      </Badge>
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Veja quem recebeu cobrança, quem já renovou (funil encerrado) e quem está aguardando pagamento para receber o remarketing. Você também pode disparar uma etapa manualmente agora se desejar.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-400/40 font-bold text-xs">
+                    ⏳ Pendentes: {billedGroupsMonitor.filter(g => !g.isPaid).length}
+                  </Badge>
+                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/40 font-bold text-xs">
+                    ✅ Renovados: {billedGroupsMonitor.filter(g => g.isPaid).length}
+                  </Badge>
+                </div>
+              </div>
+
+              {billedGroupsMonitor.length === 0 ? (
+                <div className="py-8 text-center space-y-2 text-muted-foreground">
+                  <Users className="h-8 w-8 mx-auto opacity-40" />
+                  <p className="text-xs font-semibold">
+                    Nenhum cliente com cobrança registrada recentemente.
+                  </p>
+                  <p className="text-[11px]">
+                    Assim que você clicar em &quot;Disparar Cobrança Manual Agora&quot; ou o disparo automático rodar, os clientes aparecerão aqui em tempo real!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                  {billedGroupsMonitor.map(group => {
+                    const activeSteps = followUpSteps.filter(s => s.isActive);
+                    const nextPendingStep = activeSteps.find(s => !group.sentStepIds.includes(s.id));
+                    const remainingMs = nextPendingStep
+                      ? Math.max(0, getStepDelayMs(nextPendingStep) - group.elapsedMs)
+                      : 0;
+
+                    return (
+                      <div
+                        key={group.canon}
+                        className={cn(
+                          'p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all',
+                          group.isPaid
+                            ? 'bg-emerald-50/40 dark:bg-emerald-950/15 border-emerald-200 dark:border-emerald-900/40'
+                            : 'bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/80 dark:border-amber-900/40'
+                        )}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                              {group.name}
+                            </span>
+                            <span className="text-xs font-mono text-muted-foreground">
+                              ({group.phone})
+                            </span>
+                            {group.isPaid ? (
+                              <Badge className="bg-emerald-600 text-white text-[10px] font-bold gap-1">
+                                <CheckCheck className="h-3 w-3" /> Renovado • Remarketing Cancelado
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-500 text-white text-[10px] font-bold gap-1">
+                                <Clock className="h-3 w-3" /> Não Renovou Ainda (Cobrado {formatElapsedTime(group.elapsedMs)})
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span>
+                              📦 <strong>{group.subscriptions}</strong>
+                            </span>
+                            <span>
+                              💰 <strong>R$ {group.totalAmount.toFixed(2).replace('.', ',')}</strong>
+                            </span>
+                            {!group.isPaid && nextPendingStep && (
+                              <span className="text-purple-700 dark:text-purple-300 font-semibold">
+                                🔔 Próxima etapa: <strong>{nextPendingStep.name}</strong>{' '}
+                                {remainingMs > 0
+                                  ? `(em ${Math.ceil(remainingMs / 60000)} min)`
+                                  : '(pronta para envio)'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* BOTÕES DE ETAPA / DISPARO IMEDIATO */}
+                        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                          {followUpSteps.map((step, idx) => {
+                            const alreadySent = group.sentStepIds.includes(step.id);
+                            const isDispatchingThis =
+                              dispatchingFollowUpKey === `${group.clientIds[0]}_${step.id}`;
+
+                            return (
+                              <Button
+                                key={step.id}
+                                type="button"
+                                variant={alreadySent ? 'secondary' : 'outline'}
+                                size="sm"
+                                disabled={isDispatchingThis || group.isPaid}
+                                onClick={() =>
+                                  handleDispatchFollowUpNow(group.clientIds, step, group.name)
+                                }
+                                title={
+                                  group.isPaid
+                                    ? 'Cliente já renovou!'
+                                    : alreadySent
+                                    ? 'Já enviada automaticamente (clique se quiser reenviar agora)'
+                                    : `Enviar Etapa ${idx + 1} agora no WhatsApp`
+                                }
+                                className={cn(
+                                  'h-8 px-2.5 text-[11px] font-bold rounded-lg gap-1 cursor-pointer',
+                                  alreadySent
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200 border border-purple-300'
+                                    : 'border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50'
+                                )}
+                              >
+                                {isDispatchingThis ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : alreadySent ? (
+                                  <Check className="h-3 w-3 text-emerald-600" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                                <span>
+                                  {alreadySent ? `Etapa ${idx + 1} Enviada` : `Enviar Etapa ${idx + 1} Agora`}
+                                </span>
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

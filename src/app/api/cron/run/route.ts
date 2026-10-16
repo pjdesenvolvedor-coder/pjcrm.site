@@ -121,6 +121,15 @@ export async function GET(request: Request) {
             const specificConfig = configSnap.docs.find(d => d.id === 'config');
             if (!specificConfig || !specificConfig.exists()) continue;
             const settings = specificConfig.data() as Settings;
+
+            /* --- 0. VERIFICAR AUTOMATICAMENTE SESSÕES PIX DE RENOVAÇÃO PENDENTES --- */
+            try {
+                const { verifyPendingRenewalSessions } = await import('@/lib/renewal-service');
+                await verifyPendingRenewalSessions(userId, settings);
+            } catch (verifyErr) {
+                console.warn('[cron:verify-renewals] Erro ao verificar sessões PIX:', verifyErr);
+            }
+
             const hubToken = settings.webhookToken || '';
             const bToken = settings.billingWebhookToken || '';
             const choice = settings.renewalZapInstance || (settings.useSeparateBillingZap ? 'billing' : 'main');
@@ -310,6 +319,7 @@ export async function GET(request: Request) {
                                         txn.update(ref, {
                                             lastBilledDate: todayDateBrasilia,
                                             lastBilledAt: Timestamp.now(),
+                                            sentRenewalFollowUpIds: [],
                                             status: 'Vencido',
                                         });
                                     });
@@ -626,6 +636,136 @@ export async function GET(request: Request) {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ message: formatMessageWithClient(config.message, client), phoneNumber: client.phone, token: settings.webhookToken }),
                                 }).catch(console.error);
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* --- 3b. PROCESSAR REMARKETING PÓS-COBRANÇA DE RENOVAÇÃO (NÃO RENOVARAM APÓS X TEMPO) --- */
+            const isFollowUpGlobalActive = Boolean(settings.isRenewalFollowUpActive);
+            const activeFollowUpSteps = isFollowUpGlobalActive
+                ? (settings.renewalFollowUpSteps || []).filter((s) => s.isActive && s.message?.trim())
+                : [];
+
+            // Trava estrita: somente cobranças feitas a partir de agora (1792133142000) ou após ativação da regra
+            const RENEWAL_FEATURES_START_MS = 1792137294000;
+            const minBilledCutoffMs = Math.max(
+                RENEWAL_FEATURES_START_MS,
+                Number(settings.renewalFollowUpActivatedAt) || 0
+            );
+
+            if (activeFollowUpSteps.length > 0 && billingToken) {
+                // Filtra clientes que estão Vencidos e possuem registro de disparo de cobrança (lastBilledAt) A PARTIR DE AGORA
+                const billedUnpaidClients = overdueStatusClients.filter((c) => {
+                    const billedMs = getTimestampMs(c.lastBilledAt);
+                    if (!billedMs || billedMs < minBilledCutoffMs) return false;
+                    const renewedMs = getTimestampMs((c as any).lastRenewedAt);
+                    if (renewedMs && renewedMs > billedMs) return false;
+                    return true;
+                });
+
+                if (billedUnpaidClients.length > 0) {
+                    // Agrupa por telefone canônico para enviar 1 mensagem consolidada por cliente
+                    const unpaidByPhone = new Map<string, Client[]>();
+                    for (const c of billedUnpaidClients) {
+                        const canon = getCanonicalPhone(c.phone);
+                        if (!canon) continue;
+                        if (!unpaidByPhone.has(canon)) unpaidByPhone.set(canon, []);
+                        unpaidByPhone.get(canon)!.push(c);
+                    }
+
+                    // Ordena etapas pelo tempo de espera crescente
+                    const getStepDelayMs = (step: { delayValue: number; delayUnit: 'minutes' | 'hours' | 'days' }) => {
+                        const val = Math.max(1, Number(step.delayValue) || 1);
+                        if (step.delayUnit === 'days') return val * 24 * 60 * 60 * 1000;
+                        if (step.delayUnit === 'hours') return val * 60 * 60 * 1000;
+                        return val * 60 * 1000;
+                    };
+
+                    const sortedSteps = [...activeFollowUpSteps].sort((a, b) => getStepDelayMs(a) - getStepDelayMs(b));
+                    let followUpDone = 0;
+
+                    for (const [, clientGroup] of unpaidByPhone.entries()) {
+                        if (followUpDone >= QUEUE_LIMIT) break;
+
+                        const billedAtMs = Math.max(...clientGroup.map((c) => getTimestampMs(c.lastBilledAt) || 0));
+                        if (!billedAtMs || billedAtMs < minBilledCutoffMs) continue;
+
+                        const elapsedMs = now.getTime() - billedAtMs;
+
+                        for (const step of sortedSteps) {
+                            if (followUpDone >= QUEUE_LIMIT) break;
+
+                            // Se a etapa foi criada depois desta cobrança, ignora
+                            const stepCreatedMs = Number(step.createdAt) || 0;
+                            if (stepCreatedMs > 0 && billedAtMs < stepCreatedMs) continue;
+
+                            const requiredDelayMs = getStepDelayMs(step);
+                            if (elapsedMs < requiredDelayMs) continue;
+
+                            // Verifica se algum doc deste grupo já recebeu esta etapa
+                            const alreadyReceivedStep = clientGroup.some(
+                                (c) => Array.isArray(c.sentRenewalFollowUpIds) && c.sentRenewalFollowUpIds.includes(step.id)
+                            );
+                            if (alreadyReceivedStep) continue;
+
+                            // Marca atomicamente no primeiro cliente do grupo (e depois nos demais) garantindo que ainda está Vencido
+                            const primaryClient = clientGroup[0];
+                            const primaryRef = doc(db, 'users', userId, 'clients', primaryClient.id);
+                            let claimedStep = false;
+
+                            try {
+                                await runTransaction(db, async (txn) => {
+                                    const snap = await txn.get(primaryRef);
+                                    if (!snap.exists()) throw new Error('NotFound');
+                                    const data = snap.data() as Client;
+                                    if (data.status !== 'Vencido') throw new Error('AlreadyRenewed');
+                                    const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
+                                    if (sentIds.includes(step.id)) throw new Error('AlreadySent');
+                                    txn.update(primaryRef, {
+                                        sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
+                                    });
+                                    claimedStep = true;
+                                });
+                            } catch {}
+
+                            if (claimedStep) {
+                                // Marca também nos demais docs do mesmo cliente (se tiver >1 assinatura)
+                                for (let i = 1; i < clientGroup.length; i++) {
+                                    const otherRef = doc(db, 'users', userId, 'clients', clientGroup[i].id);
+                                    await runTransaction(db, async (txn) => {
+                                        const snap = await txn.get(otherRef);
+                                        if (!snap.exists()) return;
+                                        const data = snap.data() as Client;
+                                        const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
+                                        txn.update(otherRef, {
+                                            sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
+                                        });
+                                    }).catch(() => {});
+                                }
+
+                                followUpDone++;
+
+                                // Dispara via /api/renewal/dispatch-single passando followUpStepId
+                                try {
+                                    await fetch(`${originUrl}/api/renewal/dispatch-single`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            userId,
+                                            clientIds: clientGroup.map((c) => c.id),
+                                            originUrl,
+                                            force: true,
+                                            followUpStepId: step.id,
+                                        }),
+                                    });
+                                } catch (followUpErr) {
+                                    console.error(`[cron:renewal-followup] Erro ao disparar etapa ${step.name}:`, followUpErr);
+                                }
+
+                                // Envia apenas 1 etapa por vez por cliente em cada ciclo do cron
+                                break;
                             }
                         }
                     }

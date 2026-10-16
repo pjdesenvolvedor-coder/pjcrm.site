@@ -378,24 +378,27 @@ export function FlowWhatsAppSimulator({
                         .replace(/\{qtd_todas_assinaturas\}/gi, '0');
                 }
 
-                const cName = activeClient?.name || 'Pedro Henrique';
+                const toSafeStr = (val: any, fallback = ''): string => {
+                    if (val === undefined || val === null) return fallback;
+                    if (Array.isArray(val)) {
+                        const validItems = val
+                            .map((v) => (v !== undefined && v !== null ? String(v).trim() : ''))
+                            .filter(Boolean);
+                        return validItems.length > 0 ? validItems.join(', ') : fallback;
+                    }
+                    const s = String(val).trim();
+                    return s || fallback;
+                };
+
+                const cName = toSafeStr(activeClient?.name, 'Pedro Henrique');
                 const cFirstName = cName.split(' ')[0] || 'Pedro';
                 const cPhone = getClientPhone(activeClient) || phoneInput || '5577998413534';
-
-                let cEmail = 'cliente@email.com';
-                if (activeClient?.email) {
-                    if (Array.isArray(activeClient.email)) {
-                        cEmail = activeClient.email[0] || 'cliente@email.com';
-                    } else if (typeof activeClient.email === 'string') {
-                        cEmail = activeClient.email;
-                    }
-                }
-
-                const cPassword = activeClient?.password || activeClient?.senha || '123456';
-                const cScreen = activeClient?.screen || activeClient?.tela || 'Tela 1';
-                const cPinScreen = activeClient?.pinScreen || activeClient?.pin_tela || '8888';
-                const cPlan = activeClient?.subscription || activeClient?.plan || activeClient?.plano || 'Plano Completo VIP';
-                const cPayment = activeClient?.paymentMethod || activeClient?.metodo_pagamento || 'PIX';
+                const cEmail = toSafeStr(activeClient?.email, 'cliente@email.com');
+                const cPassword = toSafeStr(activeClient?.password ?? activeClient?.senha, '123456');
+                const cScreen = toSafeStr(activeClient?.screen ?? activeClient?.tela, 'Tela 1');
+                const cPinScreen = toSafeStr(activeClient?.pinScreen ?? activeClient?.pin_tela, '8888');
+                const cPlan = toSafeStr(activeClient?.subscription ?? activeClient?.plan ?? activeClient?.plano, 'Plano Completo VIP');
+                const cPayment = toSafeStr(activeClient?.paymentMethod ?? activeClient?.metodo_pagamento, 'PIX');
 
                 let cAmount = 'R$ 35,00';
                 if (activeClient?.amountPaid) {
@@ -419,9 +422,9 @@ export function FlowWhatsAppSimulator({
                     } catch {}
                 }
 
-                const cStatus = activeClient?.status || 'Ativo';
-                const cLink = activeClient?.accessLink || activeClient?.link || 'https://pjcrm.site/acesso';
-                const cNotes = activeClient?.notes || 'Cliente VIP';
+                const cStatus = toSafeStr(activeClient?.status, 'Ativo');
+                const cLink = toSafeStr(activeClient?.accessLink ?? activeClient?.link, 'https://pjcrm.site/acesso');
+                const cNotes = toSafeStr(activeClient?.notes, 'Cliente VIP');
 
                 // Buscar registros do mesmo cliente na lista de clientes para simulação realista de múltiplas assinaturas
                 const targetPhone = getClientPhone(activeClient) || phoneInput;
@@ -435,9 +438,9 @@ export function FlowWhatsAppSimulator({
                 ];
 
                 const formatSimSubLine = (c: any, customTemplate?: string, withStatus = false) => {
-                    if (customTemplate && customTemplate.trim()) {
-                        const planName = (c.subscription || c.plan || c.plano || 'Assinatura').trim();
-                        const statusVal = (c.status || '').trim();
+                    if (customTemplate && String(customTemplate).trim()) {
+                        const planName = toSafeStr(c.subscription ?? c.plan ?? c.plano, 'Assinatura');
+                        const statusVal = toSafeStr(c.status, '');
                         let dueVal = '';
                         if (c.dueDate) {
                             try {
@@ -458,13 +461,13 @@ export function FlowWhatsAppSimulator({
                             const raw = String(c.amountPaid);
                             amountVal = raw.includes('R$') ? raw : `R$ ${raw}`;
                         }
-                        const payMethod = (c.paymentMethod || 'PIX').trim();
-                        const emailVal = (c.email || 'cliente@email.com').trim();
-                        const passVal = (c.password || c.senha || '********').trim();
-                        const screenVal = (c.screen || 'Tela 1').trim();
-                        const pinVal = (c.pinScreen || c.pin || '1234').trim();
-                        const linkVal = (c.accessLink || 'https://link.com').trim();
-                        const notesVal = (c.notes || '').trim();
+                        const payMethod = toSafeStr(c.paymentMethod, 'PIX');
+                        const emailVal = toSafeStr(c.email, 'cliente@email.com');
+                        const passVal = toSafeStr(c.password ?? c.senha, '********');
+                        const screenVal = toSafeStr(c.screen, 'Tela 1');
+                        const pinVal = toSafeStr(c.pinScreen ?? c.pin, '1234');
+                        const linkVal = toSafeStr(c.accessLink, 'https://link.com');
+                        const notesVal = toSafeStr(c.notes, '');
 
                         return customTemplate
                             .replace(/\{plano\}/gi, planName)
@@ -489,7 +492,7 @@ export function FlowWhatsAppSimulator({
                             .replace(/\{observacoes\}/gi, notesVal);
                     }
 
-                    const name = (c.subscription || c.plan || c.plano || 'Assinatura').trim();
+                    const name = toSafeStr(c.subscription ?? c.plan ?? c.plano, 'Assinatura');
                     const parts: string[] = [];
                     if (withStatus && c.status) parts.push(c.status);
                     if (c.dueDate) {

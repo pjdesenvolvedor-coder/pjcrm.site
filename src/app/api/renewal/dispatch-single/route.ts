@@ -8,6 +8,7 @@ import {
   addDoc,
   updateDoc,
   serverTimestamp,
+  arrayUnion,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { format } from 'date-fns';
@@ -16,6 +17,8 @@ import {
   getOrCreateRenewalSession,
   resolveRenewalWhatsAppTokens,
   sendWhatsAppButtonWithFallback,
+  sendWhatsAppWithFallback,
+  verifyPendingRenewalSessions,
 } from '@/lib/renewal-service';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +29,7 @@ const db = getFirestore(app);
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, clientIds, isSimulation, originUrl, force } = body;
+    const { userId, clientIds, isSimulation, originUrl, force, followUpStepId } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId é obrigatório.' }, { status: 400 });
@@ -67,6 +70,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 2.5. Antes de disparar cobrança ou remarketing, verifica se o cliente já pagou algum PIX pendente!
+    await verifyPendingRenewalSessions(userId, settings).catch(() => {});
+
     // 3. Carrega os clientes do grupo
     const clientDocs = await Promise.all(
       clientIds.map((cid: string) => getDoc(doc(db, 'users', userId, 'clients', cid)))
@@ -85,13 +91,23 @@ export async function POST(req: NextRequest) {
     const primaryClient = clientGroup[0];
     const origin = originUrl || req.nextUrl.origin || 'https://pjcrm.site';
 
+    // Se for disparo de etapa de remarketing e o cliente já estiver Ativo (já renovou), cancela envio imediatamente
+    if (followUpStepId && clientGroup.every((c) => c.status === 'Ativo')) {
+      return NextResponse.json({
+        ok: true,
+        success: true,
+        skipped: true,
+        message: `Cliente ${primaryClient.name} já renovou sua assinatura. Remarketing cancelado.`,
+      });
+    }
+
     // Data de hoje em Brasília (UTC-3)
     const offset = -3 * 60 * 60 * 1000;
     const nowBr = new Date(Date.now() + offset);
     const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
 
-    // Bloqueio anti-duplicidade: impede cobrar novamente quem já recebeu cobrança hoje (se não for force manual)
-    if (!force) {
+    // Bloqueio anti-duplicidade: impede cobrar novamente quem já recebeu cobrança hoje (se não for force manual e não for remarketing)
+    if (!force && !followUpStepId) {
       const alreadyBilled = clientGroup.some((c) => c.lastBilledDate === todayDateBrasilia);
       if (alreadyBilled) {
         return NextResponse.json({
@@ -118,8 +134,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Monta a mensagem personalizada (sempre o modelo oficial de Cobrança com Botão)
-    // Se tiver mais de 1 assinatura, os nomes vão separados por vírgula na tag {assinaturas}
+    // 5. Monta a mensagem personalizada
     const subNamesComma = clientGroup
       .map((c) => c.subscription?.trim() || 'Assinatura')
       .filter(Boolean)
@@ -133,61 +148,92 @@ export async function POST(req: NextRequest) {
       ? totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : (primaryClient.amountPaid || '0,00');
 
+    const followUpStep = followUpStepId
+      ? (settings.renewalFollowUpSteps || []).find((s) => s.id === followUpStepId)
+      : null;
+
     const defaultTemplate =
       'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
       '📦 *Assinatura(s):* {assinaturas}\n' +
       '📅 *Vencimento:* {vencimento}\n\n' +
       '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
 
-    let template = settings.renewalBillingMessage?.trim() || defaultTemplate;
+    let template = followUpStep
+      ? (followUpStep.message?.trim() || defaultTemplate)
+      : (settings.renewalBillingMessage?.trim() || defaultTemplate);
 
-    // Remove tags de links crus do corpo do texto pois irão no botão interativo nativo
-    template = template
-      .replace(/🔗?\s*{link_renovacao}/gi, '')
-      .replace(/🔗?\s*{link}/gi, '')
-      .trim();
+    const shouldSendButton = followUpStep ? followUpStep.includeRenewalButton !== false : true;
+
+    // Se usar botão interativo, remove tags de links crus do corpo do texto
+    if (shouldSendButton) {
+      template = template
+        .replace(/🔗?\s*{link_renovacao}/gi, '')
+        .replace(/🔗?\s*{link}/gi, '')
+        .trim();
+    }
 
     const todayFormatted = format(new Date(), 'dd/MM');
     const dueFormatted = `${todayFormatted} *Hoje*`;
 
     const formattedMessage = template
-      .replace(/{cliente}/g, primaryClient.name || 'Cliente')
-      .replace(/{telefone}/g, primaryClient.phone || '')
+      .replace(/{cliente}/gi, primaryClient.name || 'Cliente')
+      .replace(/{nome}/gi, primaryClient.name || 'Cliente')
+      .replace(/{telefone}/gi, primaryClient.phone || '')
       .replace(
-        /{email}/g,
+        /{email}/gi,
         Array.isArray(primaryClient.email)
           ? primaryClient.email.join(', ')
           : primaryClient.email || ''
       )
-      .replace(/{assinatura}/g, subNamesComma)
-      .replace(/{assinaturas}/g, subNamesComma)
+      .replace(/{assinatura}/gi, subNamesComma)
+      .replace(/{assinaturas}/gi, subNamesComma)
       .replace(/{vencimento}\s*\*?Hoje\*?/gi, dueFormatted)
-      .replace(/{vencimento}/g, dueFormatted)
-      .replace(/{valor}/g, formattedValor)
-      .replace(/{senha}/g, primaryClient.password || 'N/A')
-      .replace(/{tela}/g, primaryClient.screen || 'N/A')
-      .replace(/{pin_tela}/g, primaryClient.pinScreen || 'N/A')
-      .replace(/{status}/g, 'Vencido');
+      .replace(/{vencimento}/gi, dueFormatted)
+      .replace(/{valor}/gi, formattedValor)
+      .replace(/{link_renovacao}/gi, renewalLink)
+      .replace(/{link}/gi, renewalLink)
+      .replace(/{senha}/gi, primaryClient.password || 'N/A')
+      .replace(/{tela}/gi, primaryClient.screen || 'N/A')
+      .replace(/{pin_tela}/gi, primaryClient.pinScreen || 'N/A')
+      .replace(/{status}/gi, 'Vencido');
 
-    // 6. Envia via WhatsApp com Botão Interativo
-    const buttonLabel = settings.renewalButtonText || 'SIM, RENOVAR AGORA';
-    const footerText = settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️';
+    // 6. Envia via WhatsApp (com Botão Interativo ou Texto)
+    const buttonLabel = (followUpStep?.customButtonText?.trim()) || settings.renewalButtonText || 'SIM, RENOVAR AGORA';
+    const footerText = (followUpStep?.customFooterText?.trim()) || settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️';
+    const shouldIncludeCancel = followUpStep
+      ? (followUpStep.includeCancelButton !== undefined ? followUpStep.includeCancelButton : followUpStep.id === 'step_3')
+      : false;
+    const cancelButtonLabel = followUpStep?.cancelButtonText?.trim() || 'Não quero renovar';
+    const cancelButtonUrl = shouldIncludeCancel ? `${renewalLink}?action=cancel` : undefined;
 
-    const sendRes = await sendWhatsAppButtonWithFallback({
-      number: primaryClient.phone,
-      text: formattedMessage,
-      footerText,
-      buttonLabel,
-      buttonUrl: renewalLink,
-      primaryToken,
-      fallbackToken,
-    });
+    let sendRes: { success: boolean; tokenUsed: string; withButton?: boolean; error?: string };
+    if (shouldSendButton) {
+      sendRes = await sendWhatsAppButtonWithFallback({
+        number: primaryClient.phone,
+        text: formattedMessage,
+        footerText,
+        buttonLabel,
+        buttonUrl: renewalLink,
+        cancelButtonLabel,
+        cancelButtonUrl,
+        primaryToken,
+        fallbackToken,
+      });
+    } else {
+      const textRes = await sendWhatsAppWithFallback(
+        primaryClient.phone,
+        formattedMessage,
+        primaryToken,
+        fallbackToken
+      );
+      sendRes = { ...textRes, withButton: false };
+    }
 
     // 7. Registra Log
     try {
       await addDoc(collection(db, 'users', userId, 'logs'), {
         userId,
-        type: 'Cobrança Manual',
+        type: followUpStep ? `Remarketing Renovação (${followUpStep.name})` : 'Cobrança Manual',
         clientName: primaryClient.name,
         target: primaryClient.phone,
         status: sendRes.success ? 'Enviado' : 'Erro',
@@ -208,17 +254,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 8. Atualiza status para 'Vencido' e grava lastBilledDate de todos os clientes do grupo
+    // 8. Atualiza clientes do grupo
     for (const c of clientGroup) {
       try {
         const clientRef = doc(db, 'users', userId, 'clients', c.id);
-        await updateDoc(clientRef, {
-          lastBilledDate: todayDateBrasilia,
-          lastBilledAt: serverTimestamp(),
-          status: 'Vencido',
-        });
+        if (followUpStep) {
+          await updateDoc(clientRef, {
+            sentRenewalFollowUpIds: arrayUnion(followUpStep.id),
+          });
+        } else {
+          await updateDoc(clientRef, {
+            lastBilledDate: todayDateBrasilia,
+            lastBilledAt: serverTimestamp(),
+            sentRenewalFollowUpIds: [],
+            status: 'Vencido',
+          });
+        }
       } catch (clientUpdateErr) {
-        console.warn(`[dispatch-single] Falha ao atualizar lastBilledDate do cliente ${c.id}:`, clientUpdateErr);
+        console.warn(`[dispatch-single] Falha ao atualizar cliente ${c.id}:`, clientUpdateErr);
       }
     }
 

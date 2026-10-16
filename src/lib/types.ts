@@ -87,12 +87,28 @@ export type Client = {
   sentUpsell2Ids?: string[];
   sentUpsellMenuIds?: string[];
   sentRemarketingIds?: string[];
+  sentRenewalFollowUpIds?: string[];
   lastBilledDate?: string | null;
   lastBilledAt?: Timestamp | null;
 
   agentId?: string;
   agentName?: string;
   n8nExported?: boolean;
+};
+
+export type RenewalFollowUpStep = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  delayValue: number;
+  delayUnit: 'minutes' | 'hours' | 'days';
+  message: string;
+  includeRenewalButton: boolean;
+  customButtonText?: string;
+  customFooterText?: string;
+  includeCancelButton?: boolean;
+  cancelButtonText?: string;
+  createdAt?: number;
 };
 
 export type MessageLog = {
@@ -160,6 +176,11 @@ export type Settings = {
   renewalButtonText?: string;
   renewalFooterText?: string;
   renewalZapInstance?: 'main' | 'billing' | 'auto';
+
+  // Remarketing Pós-Cobrança de Renovação (caso não renove após X tempo)
+  isRenewalFollowUpActive?: boolean;
+  renewalFollowUpSteps?: RenewalFollowUpStep[];
+  renewalFollowUpActivatedAt?: number;
 };
 
 export type RenewalSessionItem = {
@@ -180,9 +201,10 @@ export type RenewalSession = {
   clientName: string;
   clientIds: string[];
   subscriptions: RenewalSessionItem[];
-  status: 'pending' | 'paid' | 'expired';
+  status: 'pending' | 'paid' | 'expired' | 'canceled';
   gateway?: 'pjpay' | 'linkinpay';
   pixTransactionId?: string;
+  pixTransactionIds?: string[];
   pixCode?: string;
   pixQrCodeBase64?: string;
   totalAmountPaid?: number; // em centavos
@@ -261,6 +283,7 @@ export type ScheduledMessage = {
   id: string;
   userId: string;
   jid: string;
+  groupName?: string | null;
   message: string;
   imageUrl?: string | null;
   sendAt: Timestamp;

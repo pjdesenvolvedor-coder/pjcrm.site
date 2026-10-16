@@ -71,17 +71,29 @@ export async function createPjPayPix({
     throw new Error(`Falha na PJ Pay Gateway (${res.status}): ${errorText.slice(0, 200)}`);
   }
 
-  const data = await res.json();
-  const qrCode = data.pix?.qr_code || data.qr_code || data.pix?.code || "";
-  const qrCodeBase64 = data.pix?.qr_code_base64 || data.qr_code_base64 || "";
-  const paymentId = data.id || data.payment_id || `pjpay_${Date.now()}`;
+  const raw = await res.json();
+  const data = raw?.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? raw.data : (raw?.payment || raw);
+  const qrCode =
+    data?.pix?.qr_code ||
+    data?.qr_code ||
+    data?.pix?.code ||
+    raw?.pix?.qr_code ||
+    raw?.qr_code ||
+    "";
+  const qrCodeBase64 =
+    data?.pix?.qr_code_base64 ||
+    data?.qr_code_base64 ||
+    raw?.pix?.qr_code_base64 ||
+    raw?.qr_code_base64 ||
+    "";
+  const paymentId = data?.id || data?.payment_id || raw?.id || raw?.payment_id || `pjpay_${Date.now()}`;
 
   return {
     id: String(paymentId),
     qr_code: qrCode,
     qr_code_base64: qrCodeBase64,
-    value: data.amount || amountInCents,
-    status: data.status || "pending",
+    value: data?.amount || raw?.amount || amountInCents,
+    status: data?.status || raw?.status || "pending",
   };
 }
 
@@ -91,7 +103,7 @@ export async function createPjPayPix({
 export async function checkPjPayTransaction(
   transactionId: string,
   apiToken?: string
-): Promise<{ paid: boolean; status: string; rawStatus: string }> {
+): Promise<{ paid: boolean; status: string; rawStatus: string; amount?: number }> {
   const token = apiToken?.trim() || DEFAULT_PJPAY_TOKEN;
 
   const res = await fetch(`${PJPAY_BASE_URL}/payments/${transactionId}`, {
@@ -110,20 +122,32 @@ export async function checkPjPayTransaction(
   }
 
   const txData = await res.json();
-  const rawStatus = String(txData.status || "").toLowerCase();
+  const inner =
+    txData?.data && typeof txData.data === "object" && !Array.isArray(txData.data)
+      ? txData.data
+      : txData?.payment || txData;
 
-  const isPaid = [
-    "paid",
-    "completed",
-    "completo",
-    "pago",
-    "aprovado",
-    "approved",
-  ].includes(rawStatus);
+  const candidates = [
+    inner?.status,
+    txData?.status,
+    inner?.payment_status,
+    txData?.payment_status,
+  ]
+    .filter(Boolean)
+    .map((s) => String(s).toLowerCase().trim());
+
+  const paidKeywords = ["paid", "completed", "completo", "pago", "aprovado", "approved", "liquidado"];
+  const isPaid =
+    candidates.some((c) => paidKeywords.includes(c)) ||
+    Boolean(inner?.paid_at || txData?.paid_at);
+
+  const rawStatus = candidates[0] || "pending";
 
   return {
     paid: isPaid,
     status: isPaid ? "paid" : rawStatus,
     rawStatus,
+    amount: inner?.amount || txData?.amount,
   };
 }
+

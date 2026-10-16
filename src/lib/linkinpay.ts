@@ -101,16 +101,32 @@ export async function checkLinkinPayTransaction(
   }
 
   const txData = await res.json();
-  const rawStatus = String(txData.status || "").toLowerCase();
+  const inner =
+    txData?.data && typeof txData.data === "object" && !Array.isArray(txData.data)
+      ? txData.data
+      : txData?.transaction || txData;
 
-  const isPaid = [
+  const candidates = [
+    inner?.status,
+    txData?.status,
+    inner?.transaction_status,
+    txData?.transaction_status,
+  ]
+    .filter(Boolean)
+    .map((s) => String(s).toLowerCase().trim());
+
+  const paidKeywords = [
     "paid",
     "completed",
     "completo",
     "pago",
     "aprovado",
     "approved",
-  ].includes(rawStatus);
+    "liquidado",
+  ];
+
+  const isPaid = candidates.some((c) => paidKeywords.includes(c));
+  const rawStatus = candidates[0] || "pending";
 
   return {
     paid: isPaid,
@@ -118,3 +134,4 @@ export async function checkLinkinPayTransaction(
     rawStatus,
   };
 }
+

@@ -3,7 +3,9 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { executeRenewalPayment } from '@/lib/renewal-service';
-import type { RenewalSession } from '@/lib/types';
+import { checkPjPayTransaction, DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
+import { checkLinkinPayTransaction, DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
+import type { RenewalSession, Settings } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,10 +20,29 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     console.log('[renewal-webhook] Payload recebido:', JSON.stringify(body));
 
-    const txId = body.id || body.data?.id || body.payment?.id || body.transaction_id || body.transactionId;
-    const rawStatus = String(body.status || body.event || body.type || body.transaction_status || '').toLowerCase();
+    const txId =
+      body.id ||
+      body.data?.id ||
+      body.payment?.id ||
+      body.transaction?.id ||
+      body.transaction_id ||
+      body.transactionId ||
+      body.data?.transaction_id;
 
-    const isPaid = [
+    const statusCandidates = [
+      body.status,
+      body.data?.status,
+      body.payment?.status,
+      body.transaction?.status,
+      body.event,
+      body.type,
+      body.transaction_status,
+      body.data?.transaction_status,
+    ]
+      .filter(Boolean)
+      .map((s) => String(s).toLowerCase().trim());
+
+    const paidKeywords = [
       'paid',
       'completed',
       'completo',
@@ -29,22 +50,64 @@ export async function POST(req: NextRequest) {
       'aprovado',
       'pixcashin',
       'approved',
-    ].some((s) => rawStatus.includes(s));
+      'payment.paid',
+      'liquidado',
+    ];
 
-    if (!isPaid) {
-      console.log(`[renewal-webhook] Status não é de pagamento aprovado (${rawStatus}). Ignorando.`);
-      return NextResponse.json({ received: true, ignored: true, status: rawStatus }, { status: 200 });
-    }
+    let isPaid =
+      statusCandidates.some((raw) => paidKeywords.some((kw) => raw.includes(kw))) ||
+      Boolean(body.paid_at || body.data?.paid_at || body.payment?.paid_at);
 
     let targetSessionId = querySessionId;
 
-    // Se não veio sessionId na query, busca pela transação no Firestore
+    // Se não veio sessionId na query, busca pela transação no Firestore (em pixTransactionId ou pixTransactionIds)
     if (!targetSessionId && txId) {
-      const q = query(collection(db, 'renewal_sessions'), where('pixTransactionId', '==', String(txId)));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        targetSessionId = snap.docs[0].id;
+      const txStr = String(txId).trim();
+      const q1 = query(collection(db, 'renewal_sessions'), where('pixTransactionId', '==', txStr));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        targetSessionId = snap1.docs[0].id;
+      } else {
+        const q2 = query(collection(db, 'renewal_sessions'), where('pixTransactionIds', 'array-contains', txStr));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          targetSessionId = snap2.docs[0].id;
+        }
       }
+    }
+
+    // Se ainda não confirmou isPaid pelo texto do webhook, mas temos txId, consulta direto na API do Gateway
+    if (!isPaid && txId) {
+      try {
+        let pjToken = DEFAULT_PJPAY_TOKEN;
+        let lkToken = DEFAULT_LINKINPAY_TOKEN;
+        if (targetSessionId) {
+          const sSnap = await getDoc(doc(db, 'renewal_sessions', targetSessionId));
+          if (sSnap.exists()) {
+            const sData = sSnap.data() as RenewalSession;
+            const cSnap = await getDoc(doc(db, 'users', sData.userId, 'settings', 'config'));
+            if (cSnap.exists()) {
+              const cfg = cSnap.data() as Settings;
+              pjToken = cfg.pjpayToken?.trim() || pjToken;
+              lkToken = cfg.linkinpayToken?.trim() || lkToken;
+            }
+          }
+        }
+        const isPj = String(txId).startsWith('pay_');
+        const check = isPj
+          ? await checkPjPayTransaction(String(txId), pjToken)
+          : await checkLinkinPayTransaction(String(txId), lkToken);
+        if (check.paid) {
+          isPaid = true;
+        }
+      } catch {}
+    }
+
+    if (!isPaid) {
+      console.log(
+        `[renewal-webhook] Status não é de pagamento aprovado (${statusCandidates.join(', ')}). Ignorando.`
+      );
+      return NextResponse.json({ received: true, ignored: true, status: statusCandidates[0] || '' }, { status: 200 });
     }
 
     if (!targetSessionId) {
@@ -57,15 +120,23 @@ export async function POST(req: NextRequest) {
     const result = await executeRenewalPayment({
       sessionId: targetSessionId,
       pixTransactionId: String(txId || ''),
-      amountInCents: body.value || body.amount || body.data?.amount || body.data?.value,
+      amountInCents:
+        body.value ||
+        body.amount ||
+        body.data?.amount ||
+        body.data?.value ||
+        body.payment?.amount,
     });
 
-    return NextResponse.json({
-      received: true,
-      renewed: result.success,
-      renewedCount: result.renewedCount,
-      messageSent: result.messageSent,
-    }, { status: 200 });
+    return NextResponse.json(
+      {
+        received: true,
+        renewed: result.success,
+        renewedCount: result.renewedCount,
+        messageSent: result.messageSent,
+      },
+      { status: 200 }
+    );
   } catch (error: any) {
     console.error('[renewal-webhook] Erro:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -75,3 +146,4 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   return NextResponse.json({ status: 'ok', endpoint: 'Renewal Webhook (LinkinPay & PJ Pay Gateway)' });
 }
+

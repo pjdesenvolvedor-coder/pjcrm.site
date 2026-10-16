@@ -123,9 +123,13 @@ export async function sendWhatsAppWithFallback(
   return { success: false, tokenUsed: currentToken, error: firstErr || `Status ${res.status}` };
 }
 
+// Timestamp de corte: todas as novas automações de remarketing pós-cobrança e verificação em background
+// funcionam ESTRITAMENTE para cobranças feitas a partir de agora (2026-10-16T06:45:42Z), ignorando clientes passados.
+export const RENEWAL_FEATURES_START_MS = 1792137294000;
+
 /**
  * Envia mensagem no WhatsApp com botão interativo de URL (CTA) no formato nativo da Uazapi (/send/menu).
- * Ex: Botão "SIM, RENOVAR AGORA" que abre o link de renovação diretamente sem exibir a URL no texto.
+ * Ex: Botão "SIM, RENOVAR AGORA" e opcionalmente 2º botão "Não quero renovar".
  */
 export async function sendWhatsAppButtonWithFallback({
   number,
@@ -133,6 +137,8 @@ export async function sendWhatsAppButtonWithFallback({
   footerText = 'Entrega Automática • ⬇️Clique No Botão⬇️',
   buttonLabel = 'SIM, RENOVAR AGORA',
   buttonUrl,
+  cancelButtonLabel,
+  cancelButtonUrl,
   primaryToken,
   fallbackToken,
 }: {
@@ -141,6 +147,8 @@ export async function sendWhatsAppButtonWithFallback({
   footerText?: string;
   buttonLabel?: string;
   buttonUrl: string;
+  cancelButtonLabel?: string;
+  cancelButtonUrl?: string;
   primaryToken: string;
   fallbackToken?: string;
 }): Promise<{ success: boolean; tokenUsed: string; withButton: boolean; error?: string }> {
@@ -151,13 +159,18 @@ export async function sendWhatsAppButtonWithFallback({
   const cleanNum = formatPhoneWith55(number);
   const cleanButtonUrl = (buttonUrl || '').trim();
   const cleanLabel = (buttonLabel || '').trim() || 'SIM, RENOVAR AGORA';
-  const choice = `${cleanLabel}|${cleanButtonUrl}`;
+  const choices: string[] = [`${cleanLabel}|${cleanButtonUrl}`];
+
+  if (cancelButtonUrl && cancelButtonUrl.trim()) {
+    const cleanCancelLabel = (cancelButtonLabel || '').trim() || 'Não quero renovar';
+    choices.push(`${cleanCancelLabel}|${cancelButtonUrl.trim()}`);
+  }
 
   const payload: any = {
     number: cleanNum,
     type: 'button',
     text: text.trim(),
-    choices: [choice],
+    choices,
   };
 
   if (footerText && footerText.trim()) {
@@ -175,7 +188,7 @@ export async function sendWhatsAppButtonWithFallback({
     });
 
     if (res.ok) {
-      console.log(`[sendWhatsAppButton] Botão "${cleanLabel}" enviado com sucesso via /send/menu`);
+      console.log(`[sendWhatsAppButton] Botão(ões) "${choices.join(' / ')}" enviado com sucesso via /send/menu`);
       return { success: true, tokenUsed: currentToken, withButton: true };
     }
 
@@ -192,7 +205,7 @@ export async function sendWhatsAppButtonWithFallback({
       });
 
       if (fallbackRes.ok) {
-        console.log(`[sendWhatsAppButton] Botão "${cleanLabel}" enviado com sucesso via fallback`);
+        console.log(`[sendWhatsAppButton] Botão(ões) enviado com sucesso via fallback`);
         return { success: true, tokenUsed: currentToken, withButton: true };
       }
     }
@@ -202,7 +215,11 @@ export async function sendWhatsAppButtonWithFallback({
 
   // Fallback de segurança: se /send/menu falhar, envia mensagem convencional anexando o link
   console.log(`[sendWhatsAppButton] Fazendo fallback para texto simples com link...`);
-  const textWithLink = `${text.trim()}\n\n🔗 ${cleanButtonUrl}`;
+  let textWithLink = `${text.trim()}\n\n🔗 ${cleanButtonUrl}`;
+  if (cancelButtonUrl && cancelButtonUrl.trim()) {
+    const cleanCancelLabel = (cancelButtonLabel || '').trim() || 'Não quero renovar';
+    textWithLink += `\n\n❌ ${cleanCancelLabel}: ${cancelButtonUrl.trim()}`;
+  }
   const textResult = await sendWhatsAppWithFallback(number, textWithLink, primaryToken, fallbackToken);
   return {
     success: textResult.success,
@@ -232,6 +249,16 @@ export async function getOrCreateRenewalSession(
   const now = Date.now();
   const sessionsRef = collection(db, 'renewal_sessions');
 
+  const subscriptions = clients.map((c) => ({
+    clientId: c.id,
+    name: c.subscription || 'Assinatura',
+    value: c.amountPaid ? String(c.amountPaid).replace(',', '.') : '25.00',
+    email: c.email || [],
+    screen: c.screen || null,
+    pinScreen: c.pinScreen || null,
+    currentDueDate: c.dueDate || null,
+  }));
+
   if (!forceNew) {
     // Procura sessão ativa recente para este telefone (últimas 24h e status 'pending')
     const q = query(
@@ -245,10 +272,29 @@ export async function getOrCreateRenewalSession(
       const existingSnap = await getDocs(q);
       for (const d of existingSnap.docs) {
         const data = d.data() as RenewalSession;
-        const createdMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
+        const createdMs = data.createdAt?.toMillis
+          ? data.createdAt.toMillis()
+          : data.createdAt?.seconds
+          ? data.createdAt.seconds * 1000
+          : 0;
         if (now - createdMs < 24 * 60 * 60 * 1000) {
+          // Garante que todas as assinaturas enviadas agora estejam sincronizadas na sessão reutilizada
+          const newClientIds = clients.map((c) => c.id);
+          const existingIds = Array.isArray(data.clientIds) ? data.clientIds : [];
+          const hasDiff =
+            newClientIds.length !== existingIds.length ||
+            newClientIds.some((id) => !existingIds.includes(id));
+
+          if (hasDiff) {
+            await updateDoc(doc(db, 'renewal_sessions', d.id), {
+              clientIds: newClientIds,
+              subscriptions,
+              clientName: primaryClient.name,
+            }).catch(() => {});
+          }
+
           return {
-            session: { ...data, id: d.id },
+            session: { ...data, id: d.id, clientIds: newClientIds, subscriptions },
             link: `${originUrl}/renovar/${d.id}`,
           };
         }
@@ -260,16 +306,6 @@ export async function getOrCreateRenewalSession(
 
   // Cria nova sessão com ID curto e amigável
   const sessionId = `ren_${Math.random().toString(36).substring(2, 9)}${Date.now().toString(36).slice(-4)}`;
-
-  const subscriptions = clients.map((c) => ({
-    clientId: c.id,
-    name: c.subscription || 'Assinatura',
-    value: c.amountPaid ? String(c.amountPaid).replace(',', '.') : '25.00',
-    email: c.email || [],
-    screen: c.screen || null,
-    pinScreen: c.pinScreen || null,
-    currentDueDate: c.dueDate || null,
-  }));
 
   const sessionData: RenewalSession = {
     id: sessionId,
@@ -369,6 +405,7 @@ export async function executeRenewalPayment({
             sentUpsell2Ids: [],
             sentUpsellMenuIds: [],
             sentRemarketingIds: [],
+            sentRenewalFollowUpIds: [],
           };
 
           if (hasReportedIssue) {
@@ -610,3 +647,93 @@ export async function executeRenewalPayment({
     return { success: false, renewedCount: 0, messageSent: false, error: error.message };
   }
 }
+
+/**
+ * Verifica automaticamente em background todas as sessões de renovação pendentes do usuário
+ * que já geraram cobrança PIX nas últimas 72h.
+ * Garante que mesmo se o cliente fechar o navegador após copiar o PIX (ou o webhook atrasar/falhar),
+ * o sistema identifique o pagamento, renove o cliente no CRM, cancele o remarketing e envie a confirmação!
+ */
+export async function verifyPendingRenewalSessions(
+  userId: string,
+  settings?: Settings
+): Promise<number> {
+  try {
+    const { checkPjPayTransaction, DEFAULT_PJPAY_TOKEN } = await import('./pjpay');
+    const { checkLinkinPayTransaction, DEFAULT_LINKINPAY_TOKEN } = await import('./linkinpay');
+
+    const pjpayToken = settings?.pjpayToken?.trim() || DEFAULT_PJPAY_TOKEN;
+    const linkinpayToken = settings?.linkinpayToken?.trim() || DEFAULT_LINKINPAY_TOKEN;
+
+    const q = query(
+      collection(db, 'renewal_sessions'),
+      where('userId', '==', userId),
+      where('status', '==', 'pending')
+    );
+
+    const snap = await getDocs(q);
+    if (snap.empty) return 0;
+
+    const nowMs = Date.now();
+    const maxAgeMs = 72 * 60 * 60 * 1000; // 72 horas
+    let confirmedCount = 0;
+
+    for (const d of snap.docs) {
+      const session = { id: d.id, ...d.data() } as RenewalSession;
+
+      const createdMs = session.createdAt?.toMillis
+        ? session.createdAt.toMillis()
+        : session.createdAt?.seconds
+        ? session.createdAt.seconds * 1000
+        : 0;
+
+      // Só verifica cobranças feitas a partir de agora (ignora sessões passadas)
+      if (!createdMs || createdMs < RENEWAL_FEATURES_START_MS) continue;
+      if (nowMs - createdMs > maxAgeMs) continue;
+
+      const txCandidates = Array.from(
+        new Set(
+          [
+            session.pixTransactionId,
+            ...(Array.isArray(session.pixTransactionIds) ? session.pixTransactionIds : []),
+          ].filter((id): id is string => Boolean(id && String(id).trim()))
+        )
+      );
+
+      if (txCandidates.length === 0) continue;
+
+      for (const txId of txCandidates) {
+        const isPjPay =
+          String(txId).startsWith('pay_') ||
+          (session.gateway === 'pjpay' && !String(txId).includes('-'));
+
+        try {
+          const checkRes = isPjPay
+            ? await checkPjPayTransaction(txId, pjpayToken)
+            : await checkLinkinPayTransaction(txId, linkinpayToken);
+
+          if (checkRes.paid) {
+            console.log(
+              `[RenewalService:AutoVerify] PIX ${txId} da sessão ${session.id} (${session.clientName}) identificado como PAGO em background! Executando renovação...`
+            );
+            await executeRenewalPayment({
+              sessionId: session.id,
+              pixTransactionId: txId,
+              amountInCents: session.totalAmountPaid,
+            });
+            confirmedCount++;
+            break;
+          }
+        } catch (err: any) {
+          // Ignora erros temporários de rede em transações individuais
+        }
+      }
+    }
+
+    return confirmedCount;
+  } catch (e: any) {
+    console.warn('[RenewalService:AutoVerify] Erro ao verificar sessões pendentes:', e?.message);
+    return 0;
+  }
+}
+

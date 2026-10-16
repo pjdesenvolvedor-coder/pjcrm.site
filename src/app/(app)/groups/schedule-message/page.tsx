@@ -85,7 +85,7 @@ const compressImage = (file: File, maxWidth = 1024, maxHeight = 1024, quality = 
 };
 
 const scheduleSchema = z.object({
-    jid: z.string().min(1, { message: "O JID do grupo é obrigatório." }),
+    jid: z.string().optional(),
     message: z.string().min(1, { message: "A mensagem é obrigatória." }),
     image: z.instanceof(File).optional(),
     sendDate: z.string().min(10, { message: "A data é obrigatória no formato dd/mm/aaaa." }),
@@ -103,6 +103,11 @@ interface ListedGroup {
     jid: string;
     name: string;
     participantCount: number;
+}
+
+interface SelectedGroupItem {
+    jid: string;
+    name?: string;
 }
 
 function ScheduleMessageForm({ 
@@ -127,7 +132,15 @@ function ScheduleMessageForm({
     const [availableGroups, setAvailableGroups] = useState<ListedGroup[] | null>(null);
     const [showGroupPicker, setShowGroupPicker] = useState(false);
     const [groupSearchQuery, setGroupSearchQuery] = useState('');
-    const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
+    const [selectedGroups, setSelectedGroups] = useState<SelectedGroupItem[]>(() => {
+        if (initialMessage?.jid) {
+            return [{ jid: initialMessage.jid, name: initialMessage.groupName || undefined }];
+        }
+        if (initialJid) {
+            return [{ jid: initialJid }];
+        }
+        return [];
+    });
 
     const [buttons, setButtons] = useState<ScheduledGroupButton[]>(() => {
         if (initialMessage?.buttons && initialMessage.buttons.length > 0) {
@@ -152,7 +165,7 @@ function ScheduleMessageForm({
     const form = useForm<ScheduleFormData>({
         resolver: zodResolver(scheduleSchema),
         defaultValues: {
-            jid: initialJid || '',
+            jid: '',
             message: '',
             image: undefined,
             sendDate: '',
@@ -169,7 +182,7 @@ function ScheduleMessageForm({
         if (initialMessage) {
             const date = initialMessage.sendAt.toDate();
             form.reset({
-                jid: initialMessage.jid,
+                jid: '',
                 message: initialMessage.message,
                 image: undefined,
                 sendDate: format(date, 'dd/MM/yyyy'),
@@ -180,6 +193,7 @@ function ScheduleMessageForm({
                 supportNumber: initialMessage.supportNumber || '',
                 siteLink: initialMessage.siteLink || '',
             });
+            setSelectedGroups([{ jid: initialMessage.jid, name: initialMessage.groupName || undefined }]);
             setImagePreview(initialMessage.imageUrl || null);
 
             if (initialMessage.buttons && initialMessage.buttons.length > 0) {
@@ -200,12 +214,14 @@ function ScheduleMessageForm({
                 ]);
             }
         } else if (initialJid) {
-            form.setValue('jid', initialJid);
+            form.setValue('jid', '');
+            setSelectedGroups([{ jid: initialJid }]);
             setButtons([
                 { id: 'btn-1', label: 'Comprar Agora', type: 'url', value: '' },
                 { id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: '' },
             ]);
         } else {
+            setSelectedGroups([]);
             setButtons([
                 { id: 'btn-1', label: 'Comprar Agora', type: 'url', value: '' },
                 { id: 'btn-2', label: 'Preciso de Suporte', type: 'contact', value: '' },
@@ -264,16 +280,16 @@ function ScheduleMessageForm({
                 throw new Error(data.error || 'Falha ao buscar grupos.');
             }
 
-            const groups = data.groups || [];
+            const groups: ListedGroup[] = data.groups || [];
             setAvailableGroups(groups);
             setShowGroupPicker(true);
 
-            // Atualiza nome do grupo selecionado se já houver JID
-            const currentJid = form.getValues('jid');
-            if (currentJid) {
-                const found = groups.find((g: ListedGroup) => g.jid === currentJid);
-                if (found) setSelectedGroupName(found.name);
-            }
+            // Completa o nome dos grupos já selecionados se encontrarmos na lista
+            setSelectedGroups(prev => prev.map(item => {
+                if (item.name) return item;
+                const found = groups.find((g: ListedGroup) => g.jid === item.jid);
+                return found ? { ...item, name: found.name } : item;
+            }));
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Erro ao listar grupos', description: err.message });
         } finally {
@@ -298,11 +314,68 @@ function ScheduleMessageForm({
         );
     }, [availableGroups, groupSearchQuery]);
 
-    const handleSelectGroup = (group: ListedGroup) => {
-        form.setValue('jid', group.jid);
-        setSelectedGroupName(group.name);
+    const handleToggleGroup = (group: ListedGroup) => {
+        setSelectedGroups(prev => {
+            const exists = prev.some(g => g.jid === group.jid);
+            if (exists) {
+                return prev.filter(g => g.jid !== group.jid);
+            }
+            return [...prev, { jid: group.jid, name: group.name }];
+        });
+        form.clearErrors('jid');
+    };
+
+    const handleAddManualJid = () => {
+        const rawInput = (form.getValues('jid') || '').trim();
+        if (!rawInput) return;
+
+        // Suporta adicionar um ou vários JIDs separados por vírgula ou quebra de linha
+        const parts = rawInput.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+        if (parts.length === 0) return;
+
+        const newItems: SelectedGroupItem[] = [];
+        for (const part of parts) {
+            const matched = availableGroups?.find(
+                g => g.jid.toLowerCase() === part.toLowerCase() || g.name.toLowerCase() === part.toLowerCase()
+            );
+            if (matched) {
+                newItems.push({ jid: matched.jid, name: matched.name });
+            } else {
+                newItems.push({ jid: part });
+            }
+        }
+
+        setSelectedGroups(prev => {
+            const combined = [...prev];
+            for (const item of newItems) {
+                if (!combined.some(g => g.jid === item.jid)) {
+                    combined.push(item);
+                }
+            }
+            return combined;
+        });
+
+        form.setValue('jid', '');
         setGroupSearchQuery('');
-        setShowGroupPicker(false);
+        form.clearErrors('jid');
+    };
+
+    const handleRemoveSelectedGroup = (jidToRemove: string) => {
+        setSelectedGroups(prev => prev.filter(g => g.jid !== jidToRemove));
+    };
+
+    const handleSelectAllFiltered = () => {
+        if (!filteredGroups.length) return;
+        setSelectedGroups(prev => {
+            const combined = [...prev];
+            for (const g of filteredGroups) {
+                if (!combined.some(item => item.jid === g.jid)) {
+                    combined.push({ jid: g.jid, name: g.name });
+                }
+            }
+            return combined;
+        });
+        form.clearErrors('jid');
     };
 
     const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -336,6 +409,27 @@ function ScheduleMessageForm({
 
     const onSubmit = async (values: ScheduleFormData) => {
         if (!targetUserId) return;
+
+        // Monta lista final de grupos (incluindo o que estiver digitado no input caso o usuário não tenha clicado em "+ Adicionar")
+        const finalGroups: SelectedGroupItem[] = [...selectedGroups];
+        const pendingInput = (values.jid || '').trim();
+        if (pendingInput && (finalGroups.length === 0 || pendingInput.includes('@g.us'))) {
+            const parts = pendingInput.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+            for (const part of parts) {
+                const matched = availableGroups?.find(
+                    g => g.jid.toLowerCase() === part.toLowerCase() || g.name.toLowerCase() === part.toLowerCase()
+                );
+                const itemToAdd = matched ? { jid: matched.jid, name: matched.name } : { jid: part };
+                if (!finalGroups.some(g => g.jid === itemToAdd.jid)) {
+                    finalGroups.push(itemToAdd);
+                }
+            }
+        }
+
+        if (finalGroups.length === 0) {
+            form.setError('jid', { type: 'manual', message: 'Selecione na lista ou adicione pelo menos um JID de grupo.' });
+            return;
+        }
 
         setIsSending(true);
 
@@ -398,9 +492,11 @@ function ScheduleMessageForm({
 
         try {
             if (isEditMode && initialMessage) {
+                const [firstGroup, ...extraGroups] = finalGroups;
                 const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', initialMessage.id);
                 await updateDoc(docRef, {
-                    jid: values.jid,
+                    jid: firstGroup.jid,
+                    groupName: firstGroup.name || null,
                     message: values.message,
                     sendAt: sendAtTimestamp,
                     repeatDaily: Boolean(values.repeatDaily),
@@ -413,25 +509,59 @@ function ScheduleMessageForm({
                     errorReason: null,
                     retryCount: 0
                 });
-                toast({ title: "Agendamento Atualizado!", description: "Os detalhes do agendamento foram atualizados com sucesso." });
+
+                // Se durante a edição o usuário adicionou mais grupos extras, cria os agendamentos adicionais
+                for (const grp of extraGroups) {
+                    addDocumentNonBlocking(collection(firestore, 'users', targetUserId, 'scheduled_messages'), {
+                        userId: targetUserId,
+                        jid: grp.jid,
+                        groupName: grp.name || null,
+                        message: values.message,
+                        sendAt: sendAtTimestamp,
+                        repeatDaily: Boolean(values.repeatDaily),
+                        status: 'Scheduled' as const,
+                        imageUrl: finalImageUrl || null,
+                        useBillingZap: Boolean(values.useBillingZap),
+                        buttons: validButtons,
+                        supportNumber: legacySupportNumber,
+                        siteLink: legacySiteLink,
+                        errorReason: null,
+                        retryCount: 0,
+                    });
+                }
+
+                toast({
+                    title: extraGroups.length > 0 ? `Agendamento Atualizado + ${extraGroups.length} Novo(s)!` : "Agendamento Atualizado!",
+                    description: "Os detalhes do agendamento foram salvos com sucesso.",
+                });
             } else {
-                const newScheduledMessageForFirestore = {
-                    userId: targetUserId,
-                    jid: values.jid,
-                    message: values.message,
-                    sendAt: sendAtTimestamp,
-                    repeatDaily: Boolean(values.repeatDaily),
-                    status: 'Scheduled' as const,
-                    imageUrl: finalImageUrl || null,
-                    useBillingZap: Boolean(values.useBillingZap),
-                    buttons: validButtons,
-                    supportNumber: legacySupportNumber,
-                    siteLink: legacySiteLink,
-                    errorReason: null,
-                    retryCount: 0,
-                };
-                addDocumentNonBlocking(collection(firestore, 'users', targetUserId, 'scheduled_messages'), newScheduledMessageForFirestore);
-                toast({ title: "Mensagem Agendada!", description: "Sua mensagem foi salva e será enviada no horário programado." });
+                const colRef = collection(firestore, 'users', targetUserId, 'scheduled_messages');
+                for (const grp of finalGroups) {
+                    const newScheduledMessageForFirestore = {
+                        userId: targetUserId,
+                        jid: grp.jid,
+                        groupName: grp.name || null,
+                        message: values.message,
+                        sendAt: sendAtTimestamp,
+                        repeatDaily: Boolean(values.repeatDaily),
+                        status: 'Scheduled' as const,
+                        imageUrl: finalImageUrl || null,
+                        useBillingZap: Boolean(values.useBillingZap),
+                        buttons: validButtons,
+                        supportNumber: legacySupportNumber,
+                        siteLink: legacySiteLink,
+                        errorReason: null,
+                        retryCount: 0,
+                    };
+                    addDocumentNonBlocking(colRef, newScheduledMessageForFirestore);
+                }
+
+                toast({
+                    title: finalGroups.length > 1 ? `${finalGroups.length} Grupos Agendados!` : "Mensagem Agendada!",
+                    description: finalGroups.length > 1
+                        ? `O mesmo envio foi programado para ${finalGroups.length} grupos.`
+                        : "Sua mensagem foi salva e será enviada no horário programado.",
+                });
             }
             onFinished();
         } catch (error: any) {
@@ -449,25 +579,25 @@ function ScheduleMessageForm({
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? 'Editar Agendamento' : 'Agendar Mensagem de Grupo'}</DialogTitle>
                         <DialogDescription>
-                            Preencha os detalhes para programar o disparo da mensagem no grupo.
+                            Selecione um ou vários grupos para programar o mesmo disparo simultaneamente.
                         </DialogDescription>
                     </DialogHeader>
                     <Alert className="border-yellow-400 bg-yellow-50 text-yellow-800 dark:border-yellow-600 dark:bg-yellow-950/50 dark:text-yellow-300 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle className="font-bold">Atenção</AlertTitle>
                         <AlertDescription>
-                        ⚠️ O WhatsApp conectado precisa participar do grupo para enviar a mensagem. 🔐
+                        ⚠️ O WhatsApp conectado precisa participar dos grupos selecionados para enviar a mensagem. 🔐
                         </AlertDescription>
                     </Alert>
 
-                    {/* Campo de Grupo com Pesquisa Integrada */}
+                    {/* Campo de Grupos com Multi-Seleção e Adição por JID */}
                     <FormField
                         control={form.control}
                         name="jid"
                         render={({ field }) => (
-                            <FormItem className="space-y-1.5">
+                            <FormItem className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <FormLabel>Grupo de Destino (JID)</FormLabel>
+                                    <FormLabel>Grupos de Destino (JID)</FormLabel>
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -482,69 +612,84 @@ function ScheduleMessageForm({
                                 </div>
 
                                 <FormControl>
-                                    <div className="relative">
-                                        <Input 
-                                            placeholder="Digite o JID ou pesquise pelo nome do grupo..." 
-                                            {...field}
-                                            onChange={(e) => {
-                                                field.onChange(e.target.value);
-                                                setGroupSearchQuery(e.target.value);
-                                                if (availableGroups && availableGroups.length > 0) {
-                                                    setShowGroupPicker(true);
-                                                }
-                                                // Se digitou diretamente um JID que coincide com um grupo conhecido
-                                                if (availableGroups) {
-                                                    const match = availableGroups.find(g => g.jid === e.target.value || g.name.toLowerCase() === e.target.value.toLowerCase());
-                                                    if (match) {
-                                                        setSelectedGroupName(match.name);
-                                                    } else {
-                                                        setSelectedGroupName(null);
+                                    <div className="flex items-center gap-2">
+                                        <div className="relative flex-1">
+                                            <Input 
+                                                placeholder="Cole o JID ou pesquise pelo nome do grupo..." 
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e.target.value);
+                                                    setGroupSearchQuery(e.target.value);
+                                                    if (availableGroups && availableGroups.length > 0) {
+                                                        setShowGroupPicker(true);
                                                     }
-                                                }
-                                            }}
-                                            onFocus={() => {
-                                                if (availableGroups && availableGroups.length > 0) {
-                                                    setShowGroupPicker(true);
-                                                }
-                                            }}
-                                        />
+                                                }}
+                                                onFocus={() => {
+                                                    if (availableGroups && availableGroups.length > 0) {
+                                                        setShowGroupPicker(true);
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddManualJid();
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={handleAddManualJid}
+                                            disabled={!field.value?.trim()}
+                                            className="h-10 px-3 gap-1 shrink-0 font-semibold"
+                                            title="Adicionar JID digitado à lista"
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                            Adicionar
+                                        </Button>
                                     </div>
                                 </FormControl>
 
-                                {selectedGroupName && (
-                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-0.5">
-                                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                                        <span>Grupo selecionado: <strong>{selectedGroupName}</strong></span>
-                                    </div>
-                                )}
                                 <FormMessage />
 
-                                {/* Menu Dropdown com Busca e Grupos Conectados */}
+                                {/* Menu Dropdown com Busca e Multi-seleção de Grupos Conectados */}
                                 {showGroupPicker && availableGroups && (
-                                    <div className="mt-2 border rounded-lg p-2.5 bg-card shadow-lg max-h-60 overflow-hidden flex flex-col space-y-2 z-50 border-primary/20">
+                                    <div className="mt-2 border rounded-lg p-2.5 bg-card shadow-lg max-h-64 overflow-hidden flex flex-col space-y-2 z-50 border-primary/20">
                                         <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground pb-1 border-b">
                                             <span className="flex items-center gap-1">
                                                 <Search className="h-3.5 w-3.5 text-primary" />
-                                                Buscar nos Grupos Conectados ({filteredGroups.length})
+                                                Clique nos grupos para adicionar ({filteredGroups.length})
                                             </span>
-                                            <button 
-                                                type="button" 
-                                                onClick={() => setShowGroupPicker(false)} 
-                                                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-                                            >
-                                                Fechar ✕
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                {filteredGroups.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSelectAllFiltered}
+                                                        className="text-[11px] text-primary hover:underline font-medium"
+                                                    >
+                                                        + Todos
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setShowGroupPicker(false)} 
+                                                    className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+                                                >
+                                                    Fechar ✕
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {/* Barra de Pesquisa Rápida */}
                                         <div className="relative">
                                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                                             <Input
-                                                placeholder="Digite para filtrar por nome ou JID..."
+                                                placeholder="Filtrar grupos por nome ou JID..."
                                                 value={groupSearchQuery}
                                                 onChange={(e) => setGroupSearchQuery(e.target.value)}
                                                 className="h-8 pl-8 pr-7 text-xs bg-muted/30"
-                                                autoFocus
                                             />
                                             {groupSearchQuery && (
                                                 <button
@@ -558,32 +703,98 @@ function ScheduleMessageForm({
                                         </div>
 
                                         {/* Lista de Grupos Filtrada */}
-                                        <div className="overflow-y-auto max-h-36 space-y-1 pr-1">
-                                            {filteredGroups.map(g => (
-                                                <button
-                                                    key={g.jid}
-                                                    type="button"
-                                                    onClick={() => handleSelectGroup(g)}
-                                                    className={cn(
-                                                        "w-full flex items-center justify-between p-2 rounded text-left hover:bg-muted text-xs transition-colors",
-                                                        field.value === g.jid && "bg-primary/10 border border-primary/40 text-primary font-medium"
-                                                    )}
-                                                >
-                                                    <div className="min-w-0 flex-1 pr-2">
-                                                        <div className="font-semibold truncate">{g.name}</div>
-                                                        <div className="text-[10px] font-mono text-muted-foreground truncate">{g.jid}</div>
-                                                    </div>
-                                                    {field.value === g.jid && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                                                </button>
-                                            ))}
+                                        <div className="overflow-y-auto max-h-40 space-y-1 pr-1">
+                                            {filteredGroups.map(g => {
+                                                const isAdded = selectedGroups.some(sg => sg.jid === g.jid);
+                                                return (
+                                                    <button
+                                                        key={g.jid}
+                                                        type="button"
+                                                        onClick={() => handleToggleGroup(g)}
+                                                        className={cn(
+                                                            "w-full flex items-center justify-between p-2 rounded text-left hover:bg-muted text-xs transition-colors",
+                                                            isAdded && "bg-emerald-500/10 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-medium"
+                                                        )}
+                                                    >
+                                                        <div className="min-w-0 flex-1 pr-2">
+                                                            <div className="font-semibold truncate">{g.name}</div>
+                                                            <div className="text-[10px] font-mono text-muted-foreground truncate">{g.jid}</div>
+                                                        </div>
+                                                        {isAdded ? (
+                                                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
+                                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                                Adicionado
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+                                                                <Plus className="h-3 w-3" />
+                                                                Selecionar
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
                                             {filteredGroups.length === 0 && (
                                                 <p className="text-xs text-muted-foreground text-center py-3 italic">
-                                                    Nenhum grupo encontrado para "{groupSearchQuery}".
+                                                    Nenhum grupo encontrado para "{groupSearchQuery}". Você pode clicar em "+ Adicionar" acima para usar o JID digitado.
                                                 </p>
                                             )}
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Lista de Grupos Adicionados embaixo */}
+                                <div className="rounded-lg border bg-muted/20 p-2.5 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                            <CheckCircle2 className={cn("h-3.5 w-3.5", selectedGroups.length > 0 ? "text-emerald-600" : "text-muted-foreground")} />
+                                            Grupos Adicionados ({selectedGroups.length})
+                                        </span>
+                                        {selectedGroups.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedGroups([])}
+                                                className="text-[11px] text-destructive hover:underline font-medium"
+                                            >
+                                                Remover todos
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {selectedGroups.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground italic py-1">
+                                            Nenhum grupo adicionado ainda. Clique nos grupos da lista acima ou digite o JID e clique em <strong>+ Adicionar</strong>.
+                                        </p>
+                                    ) : (
+                                        <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                                            {selectedGroups.map((grp, idx) => (
+                                                <div
+                                                    key={grp.jid}
+                                                    className="flex items-center justify-between gap-2 p-2 rounded-md border bg-card text-xs shadow-sm"
+                                                >
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="font-semibold text-foreground truncate">
+                                                            {grp.name ? `${idx + 1}. ${grp.name}` : `${idx + 1}. Grupo via JID`}
+                                                        </div>
+                                                        <div className="text-[10px] font-mono text-muted-foreground truncate">
+                                                            {grp.jid}
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleRemoveSelectedGroup(grp.jid)}
+                                                        className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 shrink-0"
+                                                        title="Remover este grupo"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </FormItem>
                         )}
                     />
@@ -870,6 +1081,8 @@ function ScheduleMessageForm({
                                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                                 Salvando...
                             </>
+                        ) : selectedGroups.length > 1 ? (
+                            `Salvar Agendamento (${selectedGroups.length} grupos)`
                         ) : (
                             'Salvar Agendamento'
                         )}
@@ -1100,7 +1313,16 @@ function ScheduleMessageContent() {
                      )}
                      {!isLoading && scheduledMessages?.map((msg) => (
                         <TableRow key={msg.id}>
-                            <TableCell className="font-medium truncate max-w-xs">{msg.jid}</TableCell>
+                            <TableCell className="font-medium max-w-xs">
+                                {msg.groupName ? (
+                                    <div>
+                                        <div className="font-semibold truncate">{msg.groupName}</div>
+                                        <div className="text-[11px] font-mono text-muted-foreground truncate">{msg.jid}</div>
+                                    </div>
+                                ) : (
+                                    <span className="truncate block font-mono text-xs">{msg.jid}</span>
+                                )}
+                            </TableCell>
                             <TableCell className="max-w-xs">
                                 <div className="truncate font-medium">{msg.message}</div>
                                 {msg.buttons && msg.buttons.length > 0 ? (

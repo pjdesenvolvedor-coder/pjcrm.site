@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import {
   Check,
   Copy,
@@ -13,7 +13,7 @@ import {
   ThumbsUp,
   AlertOctagon,
   ShieldCheck,
-  Sparkles,
+  XCircle,
 } from 'lucide-react';
 import ProductIcon from '@/components/ProductIcon';
 
@@ -30,7 +30,7 @@ interface SessionData {
   id: string;
   clientName: string;
   phone: string;
-  status: 'pending' | 'paid' | 'expired';
+  status: 'pending' | 'paid' | 'expired' | 'canceled';
   subscriptions: SubscriptionItem[];
   pixCode?: string;
   pixQrCodeBase64?: string;
@@ -53,18 +53,31 @@ export default function RenewalPage() {
   // 'select_yes' -> Se clicou SIM e tem >1: escolhe quais quer renovar
   // 'report_issue' -> Se clicou NÃO: marca as que NÃO estão funcionando
   // 'select_after_issue' -> Escolhe quais vai renovar após reportar problema
-  // 'pix' -> Exibe QR Code e Copia e Cola da LinkinPay
+  // 'pix' -> Exibe QR Code e Copia e Cola
   // 'success' -> Pagamento confirmado com sucesso!
+  // 'confirm_cancel' -> Selecionar quais não quer renovar (quando há >1 assinatura)
+  // 'canceled' -> Assinatura encerrada e removida do CRM!
   const [step, setStep] = useState<
-    'question' | 'select_yes' | 'report_issue' | 'select_after_issue' | 'pix' | 'success'
+    | 'question'
+    | 'select_yes'
+    | 'report_issue'
+    | 'select_after_issue'
+    | 'pix'
+    | 'success'
+    | 'confirm_cancel'
+    | 'canceled'
   >('question');
 
   // Seleções do cliente
   const [selectedToRenew, setSelectedToRenew] = useState<string[]>([]);
   const [brokenSubscriptions, setBrokenSubscriptions] = useState<string[]>([]);
+  const [selectedToCancel, setSelectedToCancel] = useState<string[]>([]);
+  const [cancelingSub, setCancelingSub] = useState(false);
+  const [canceledSubNames, setCanceledSubNames] = useState<string[]>([]);
 
   // Estados de geração de PIX e pagamento
   const [generatingPix, setGeneratingPix] = useState(false);
+  const isGeneratingRef = useRef(false);
   const [pixData, setPixData] = useState<{
     qrCodeBase64: string;
     copyPaste: string;
@@ -76,6 +89,34 @@ export default function RenewalPage() {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutos
   const [pixError, setPixError] = useState<string | null>(null);
+
+  // Função para remover assinatura(s) do CRM quando o cliente clica em "Não quero renovar"
+  const executeCancelSubscription = async (targetSessionId: string, clientIdsToRemove: string[]) => {
+    try {
+      setCancelingSub(true);
+      setPixError(null);
+      const res = await fetch('/api/renewal/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: targetSessionId,
+          clientIds: clientIdsToRemove,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Não foi possível cancelar a assinatura.');
+      }
+      if (Array.isArray(data.removedNames) && data.removedNames.length > 0) {
+        setCanceledSubNames(data.removedNames);
+      }
+      setStep('canceled');
+    } catch (err: any) {
+      setPixError(err.message || 'Erro ao cancelar assinatura.');
+    } finally {
+      setCancelingSub(false);
+    }
+  };
 
   // 1. Carrega dados da sessão de renovação
   useEffect(() => {
@@ -98,9 +139,28 @@ export default function RenewalPage() {
             return;
           }
 
+          if (data.session.status === 'canceled') {
+            setStep('canceled');
+            return;
+          }
+
           // Preenche por padrão todas as assinaturas selecionadas
           const allIds = (data.session.subscriptions || []).map((s: SubscriptionItem) => s.clientId);
           setSelectedToRenew(allIds);
+          setSelectedToCancel(allIds);
+
+          // Verifica se veio pelo botão "Não quero renovar" (?action=cancel)
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('action') === 'cancel') {
+              if (allIds.length <= 1) {
+                await executeCancelSubscription(sessionId as string, allIds);
+              } else {
+                setStep('confirm_cancel');
+              }
+              return;
+            }
+          }
         }
       } catch (e: any) {
         setSessionError(e.message || 'Erro ao carregar dados.');
@@ -121,37 +181,51 @@ export default function RenewalPage() {
     return () => clearInterval(timer);
   }, [step, timeLeft]);
 
-  // 3. Polling em tempo real a cada 3s para detectar pagamento instantaneamente
+  // 3. Polling em tempo real a cada 3s + verificação imediata ao voltar do app do banco (visibilitychange / focus)
   useEffect(() => {
-    if (step !== 'pix' || !sessionId) return;
+    const activeTxId = pixData?.transactionId || session?.pixTransactionId;
+    if (step === 'success' || !sessionId || (step !== 'pix' && !activeTxId)) return;
 
     let isSubscribed = true;
-    const interval = setInterval(async () => {
+
+    const checkPaymentNow = async () => {
       try {
         const res = await fetch('/api/renewal/check-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionId,
-            transactionId: pixData?.transactionId,
+            transactionId: activeTxId,
           }),
         });
 
         const data = await res.json();
         if (data.paid && isSubscribed) {
-          clearInterval(interval);
           setStep('success');
         }
       } catch (err) {
         console.error('Erro no polling do PIX:', err);
       }
-    }, 3000);
+    };
+
+    const interval = setInterval(checkPaymentNow, 3000);
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkPaymentNow();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     return () => {
       isSubscribed = false;
       clearInterval(interval);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
-  }, [step, sessionId, pixData?.transactionId]);
+  }, [step, sessionId, pixData?.transactionId, session?.pixTransactionId]);
 
   const subscriptions = session?.subscriptions || [];
   const hasMultiple = subscriptions.length > 1;
@@ -195,11 +269,13 @@ export default function RenewalPage() {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  // Gerar PIX via API LinkinPay
+  // Gerar PIX via API
   const handleGeneratePix = async (
     overrideSelectedIds?: string[],
     overrideBrokenIds?: string[]
   ) => {
+    if (isGeneratingRef.current) return;
+
     // Garante que só use override se for estritamente um Array (evita passar SyntheticEvent / MouseEvent do onClick)
     const finalSelected = (Array.isArray(overrideSelectedIds) && overrideSelectedIds.length > 0)
       ? overrideSelectedIds
@@ -214,6 +290,7 @@ export default function RenewalPage() {
     }
 
     try {
+      isGeneratingRef.current = true;
       setGeneratingPix(true);
       setPixError(null);
 
@@ -246,6 +323,7 @@ export default function RenewalPage() {
     } catch (err: any) {
       setPixError(err.message || 'Erro ao conectar ao gateway de pagamento.');
     } finally {
+      isGeneratingRef.current = false;
       setGeneratingPix(false);
     }
   };
@@ -327,6 +405,7 @@ export default function RenewalPage() {
               {/* Botão VERDE: Sim, tudo funcionando! */}
               <button
                 type="button"
+                disabled={generatingPix}
                 onClick={() => {
                   if (hasMultiple) {
                     setStep('select_yes');
@@ -336,7 +415,7 @@ export default function RenewalPage() {
                     handleGeneratePix(singleId, []);
                   }
                 }}
-                className="w-full py-4 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer"
+                className="w-full py-4 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 active:scale-[0.98] text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer"
               >
                 <ThumbsUp className="w-5 h-5 shrink-0" />
                 <span>Sim, tudo funcionando!</span>
@@ -345,14 +424,38 @@ export default function RenewalPage() {
               {/* Botão VERMELHO: Não está funcionando */}
               <button
                 type="button"
+                disabled={generatingPix || cancelingSub}
                 onClick={() => {
                   setBrokenSubscriptions([]);
                   setStep('report_issue');
                 }}
-                className="w-full py-4 px-5 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-3 shadow-lg shadow-red-600/25 transition-all cursor-pointer"
+                className="w-full py-4 px-5 rounded-2xl bg-red-600 hover:bg-red-700 disabled:opacity-50 active:scale-[0.98] text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-3 shadow-lg shadow-red-600/25 transition-all cursor-pointer"
               >
                 <AlertOctagon className="w-5 h-5 shrink-0" />
                 <span>Não está funcionando</span>
+              </button>
+
+              {/* Botão Cinza/Outline: Não quero renovar */}
+              <button
+                type="button"
+                disabled={generatingPix || cancelingSub}
+                onClick={() => {
+                  const allIds = subscriptions.map((s) => s.clientId).filter(Boolean);
+                  if (allIds.length <= 1) {
+                    executeCancelSubscription(sessionId as string, allIds);
+                  } else {
+                    setSelectedToCancel(allIds);
+                    setStep('confirm_cancel');
+                  }
+                }}
+                className="w-full py-3.5 px-5 rounded-2xl border-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800/50 dark:hover:bg-zinc-800 disabled:opacity-50 active:scale-[0.98] text-zinc-600 dark:text-zinc-300 font-bold text-sm tracking-wide flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                {cancelingSub ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-zinc-400 shrink-0" />
+                )}
+                <span>Não quero renovar</span>
               </button>
             </div>
 
@@ -459,7 +562,7 @@ export default function RenewalPage() {
               <button
                 type="button"
                 onClick={() => handleGeneratePix()}
-                disabled={generatingPix || selectedToRenew.length === 0}
+                disabled={generatingPix || cancelingSub || selectedToRenew.length === 0}
                 className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] disabled:opacity-50 text-white font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer"
               >
                 {generatingPix ? (
@@ -470,6 +573,20 @@ export default function RenewalPage() {
                 ) : (
                   <span>Avançar para Pagamento PIX →</span>
                 )}
+              </button>
+
+              <button
+                type="button"
+                disabled={generatingPix || cancelingSub}
+                onClick={() => {
+                  const allIds = subscriptions.map((s) => s.clientId).filter(Boolean);
+                  setSelectedToCancel(allIds);
+                  setStep('confirm_cancel');
+                }}
+                className="w-full py-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800/50 text-xs font-bold text-zinc-600 dark:text-zinc-300 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <XCircle className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Não quero renovar</span>
               </button>
 
               <button
@@ -672,7 +789,7 @@ export default function RenewalPage() {
               <button
                 type="button"
                 onClick={() => handleGeneratePix()}
-                disabled={generatingPix || selectedToRenew.length === 0}
+                disabled={generatingPix || cancelingSub || selectedToRenew.length === 0}
                 className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] disabled:opacity-40 text-white font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer"
               >
                 {generatingPix ? (
@@ -683,6 +800,29 @@ export default function RenewalPage() {
                 ) : (
                   <span>Prosseguir e Gerar PIX →</span>
                 )}
+              </button>
+
+              {/* Botão Não quero renovar */}
+              <button
+                type="button"
+                disabled={generatingPix || cancelingSub}
+                onClick={() => {
+                  const allIds = subscriptions.map((s) => s.clientId).filter(Boolean);
+                  if (allIds.length <= 1) {
+                    executeCancelSubscription(sessionId as string, allIds);
+                  } else {
+                    setSelectedToCancel(allIds);
+                    setStep('confirm_cancel');
+                  }
+                }}
+                className="w-full py-3.5 rounded-2xl border-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800/50 text-sm font-bold text-zinc-600 dark:text-zinc-300 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {cancelingSub ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-zinc-400" />
+                )}
+                <span>Não quero renovar</span>
               </button>
 
               <button
@@ -790,16 +930,174 @@ export default function RenewalPage() {
                 <span>Aguardando pagamento... A renovação é imediata!</span>
               </div>
 
-              <div className="pt-2">
+              {/* Botão Não quero renovar na Etapa 3 */}
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  disabled={cancelingSub}
+                  onClick={() => {
+                    const idsToRemove = selectedToRenew.length > 0
+                      ? selectedToRenew
+                      : subscriptions.map((s) => s.clientId).filter(Boolean);
+                    if (subscriptions.length <= 1) {
+                      executeCancelSubscription(sessionId as string, idsToRemove);
+                    } else {
+                      setSelectedToCancel(idsToRemove);
+                      setStep('confirm_cancel');
+                    }
+                  }}
+                  className="w-full py-3 px-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800/50 text-xs font-bold text-zinc-600 dark:text-zinc-300 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {cancelingSub ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5 text-zinc-400" />
+                  )}
+                  <span>Não quero renovar</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setStep('question')}
-                  className="text-xs font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  className="text-xs font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors block mx-auto"
                 >
                   ← Alterar assinaturas selecionadas
                 </button>
               </div>
             </section>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* ETAPA DE CONFIRMAÇÃO DE CANCELAMENTO (QUANDO HÁ >1 ASSINATURA) */}
+        {/* ========================================================================= */}
+        {step === 'confirm_cancel' && (
+          <div className="px-6 pt-2 pb-8 space-y-6">
+            <div className="text-center space-y-1">
+              <span className="text-[11px] font-black tracking-widest uppercase text-red-600 dark:text-red-400">
+                Encerrar Assinatura
+              </span>
+              <h2 className="text-xl font-black text-zinc-900 dark:text-white">
+                Qual assinatura não quer renovar?
+              </h2>
+              <p className="text-xs text-zinc-500">
+                Selecione a(s) assinatura(s) que deseja cancelar e remover:
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              {subscriptions.map((sub, idx) => {
+                const subId = sub?.clientId || `sub-${idx}`;
+                const isSelected = selectedToCancel.includes(subId);
+                const subName = sub?.name || 'Assinatura';
+
+                return (
+                  <button
+                    key={subId}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedToCancel(selectedToCancel.filter((id) => id !== subId));
+                      } else {
+                        setSelectedToCancel([...selectedToCancel, subId]);
+                      }
+                    }}
+                    className={`w-full p-3.5 rounded-2xl border-2 flex items-center justify-between text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-red-600 bg-red-50/70 dark:bg-red-950/30'
+                        : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/40 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <ProductIcon name={subName} style={{ width: '44px', height: '44px', borderRadius: '12px' }} />
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
+                          {subName}
+                        </div>
+                        <div className="text-xs text-red-500 font-semibold">
+                          {isSelected ? 'Será cancelada e removida' : 'Manter assinatura'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-colors ${
+                        isSelected
+                          ? 'bg-red-600 border-red-600 text-white'
+                          : 'border-zinc-300 dark:border-zinc-600 bg-transparent'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-4 h-4 stroke-[3]" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {pixError && (
+              <div className="p-3 bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 rounded-xl text-xs font-semibold text-center">
+                {pixError}
+              </div>
+            )}
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                disabled={cancelingSub || selectedToCancel.length === 0}
+                onClick={() => executeCancelSubscription(sessionId as string, selectedToCancel)}
+                className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] disabled:opacity-40 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer"
+              >
+                {cancelingSub ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Cancelando...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-5 h-5" />
+                    <span>Confirmar: Não quero renovar</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep('question')}
+                className="w-full py-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Voltar</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* ETAPA CANCELADA: ASSINATURA REMOVIDA DO CRM */}
+        {/* ========================================================================= */}
+        {step === 'canceled' && (
+          <div className="px-6 pt-4 pb-10 text-center space-y-6">
+            <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 mx-auto flex items-center justify-center shadow-inner">
+              <XCircle className="w-12 h-12 stroke-[2]" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="inline-block px-3 py-1 rounded-full text-[11px] font-black tracking-widest uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                Assinatura Encerrada
+              </span>
+              <h1 className="text-2xl font-black text-zinc-900 dark:text-white">
+                Sua assinatura foi cancelada
+              </h1>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                {canceledSubNames.length > 0
+                  ? `A assinatura (${canceledSubNames.join(', ')}) foi removida com sucesso e você não receberá mais lembretes de renovação.`
+                  : 'Sua assinatura foi removida do sistema e você não receberá mais lembretes de renovação.'}
+              </p>
+            </div>
+
+            <div className="pt-2 text-xs text-zinc-400 font-medium">
+              Agradecemos pelo tempo que esteve conosco! Caso queira voltar no futuro, estaremos sempre à disposição.
+            </div>
           </div>
         )}
 

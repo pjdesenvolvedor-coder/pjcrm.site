@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { createLinkinPayPix, DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
 import { createPjPayPix, DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
@@ -118,16 +118,17 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // Atualiza a sessão com os dados do PIX e gateway utilizado
+    // Atualiza a sessão com os dados do PIX e gateway utilizado (mantendo histórico de todos os txIds gerados)
     await updateDoc(sessionDocRef, {
       gateway: chosenGateway,
       pixTransactionId: pixRes.id,
+      pixTransactionIds: arrayUnion(pixRes.id),
       pixCode: pixRes.qr_code,
       pixQrCodeBase64: pixRes.qr_code_base64,
       totalAmountPaid: totalCents,
       renewedClientIds: selectedClientIds,
       reportedIssues,
-      status: 'pending',
+      status: session.status === 'paid' ? 'paid' : 'pending',
     });
 
     return NextResponse.json({
