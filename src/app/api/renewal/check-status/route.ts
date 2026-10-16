@@ -29,15 +29,8 @@ export async function POST(req: NextRequest) {
 
     const session = sessionSnap.data() as RenewalSession;
 
-    // Se já está pago na sessão, garante que a renovação foi executada e retorna aprovado imediatamente
+    // Se já está pago na sessão, retorna aprovado imediatamente (evita reexecutar e reenviar mensagem no WhatsApp)
     if (session.status === 'paid') {
-      if (!(session as any).messageSent) {
-        await executeRenewalPayment({
-          sessionId,
-          pixTransactionId: session.pixTransactionId,
-          amountInCents: session.totalAmountPaid,
-        }).catch(() => {});
-      }
       return NextResponse.json({
         paid: true,
         status: 'paid',
