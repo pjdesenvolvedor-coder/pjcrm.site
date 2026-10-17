@@ -3,14 +3,13 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
     getFirestore,
     collection,
-    query,
-    where,
     getDocs,
     doc,
     getDoc,
     setDoc,
     updateDoc,
     deleteDoc,
+    runTransaction,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import type {
@@ -24,13 +23,15 @@ import {
     executeFlowNode,
     handleUserMenuResponse,
     FlowRunnerContext,
+    MenuResponseDiag,
     cleanPhone,
     cleanServerUrl,
     sendUazapiText,
     sendUazapiContact,
-    formatPhoneWith55,
     findSupportContactCard,
     isHumanSupportRequest,
+    getCanonicalPhone,
+    clearOutboundDedupForContact,
 } from '@/lib/flow-runner';
 
 export const dynamic = 'force-dynamic';
@@ -42,23 +43,33 @@ const db = getFirestore(app);
 // Cache em memória para deduplicação rápida de IDs de mensagens
 const processedMessageIds = new Set<string>();
 
-// Cache em memória de alta performance para credenciais de instâncias (TTL: 10 minutos)
+// Mutex em memória por contato (userId:canonicalPhone) para impedir execuções concorrentes
+// quando o cliente manda 2, 3 ou mais mensagens seguidas rapidamente
+const activeContactLocks = new Map<string, number>();
+const CONTACT_LOCK_TTL_MS = 40000;
+
+// Cache em memória para credenciais de instâncias (TTL: 30 segundos)
 interface CachedUserCredentials {
     userId: string;
     serverUrl: string;
     instanceToken: string;
     cachedAt: number;
 }
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const CREDS_CACHE_TTL_MS = 30 * 1000;
 const tokenToUserCache = new Map<string, CachedUserCredentials>();
 const userIdToCredsCache = new Map<string, CachedUserCredentials>();
 
-// Cache em memória para configurações de gatilho (flow_config) (TTL: 30 segundos)
+// Cache em memória para configurações de gatilho (flow_config) (TTL: 5 segundos)
 interface CachedFlowConfig {
     config: FlowTriggerSettings;
     cachedAt: number;
 }
 const flowConfigCache = new Map<string, CachedFlowConfig>();
+
+function safeTrimString(val: any): string {
+    if (typeof val === 'string') return val.trim();
+    return '';
+}
 
 // Helper de normalização resiliente de texto para comparação de palavras-chave
 function normalizeTextForMatch(str: string): string {
@@ -71,39 +82,94 @@ function normalizeTextForMatch(str: string): string {
         .trim();
 }
 
-// Resolução instantânea e estritamente isolada do usuário dono da instância de fluxo (uazapi_flow)
+function getTimestampMs(val: any): number {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+        const parsed = Date.parse(val);
+        return isNaN(parsed) ? 0 : parsed;
+    }
+    if (typeof val === 'object') {
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (typeof val.seconds === 'number') return val.seconds * 1000;
+    }
+    return 0;
+}
+
+// Extrai apenas tokens reais em formato string (nunca confunde objetos `body.key` do WhatsApp ou nomes de instância)
+function extractIncomingToken(req: NextRequest, body: any, queryToken: string | null): string {
+    const candidates = [
+        queryToken,
+        req.headers.get('token'),
+        req.headers.get('apikey'),
+        req.headers.get('x-api-key'),
+        req.headers.get('instance-token'),
+        req.headers.get('authorization')?.replace(/^Bearer\s+/i, ''),
+        safeTrimString(body?.token),
+        safeTrimString(body?.instanceToken),
+        safeTrimString(body?.apikey),
+        safeTrimString(body?.instance?.token),
+        safeTrimString(body?.instance?.apikey),
+        safeTrimString(body?.data?.token),
+        safeTrimString(body?.data?.instanceToken),
+        safeTrimString(body?.data?.apikey),
+        typeof body?.key === 'string' ? body.key : '',
+    ];
+
+    for (const c of candidates) {
+        const s = safeTrimString(c);
+        if (s) return s;
+    }
+    return '';
+}
+
+// Resolução instantânea e resiliente do usuário dono da instância de fluxo (uazapi_flow)
 async function resolveUserCredentials(
     queryUserId: string | null,
     incomingToken: string
 ): Promise<{ creds: CachedUserCredentials | null; mismatch?: boolean }> {
     const now = Date.now();
-    const cleanIncoming = (incomingToken || '').trim();
+    const cleanIncoming = safeTrimString(incomingToken);
 
-    // 1. Se temos queryUserId:
+    // 1. Se temos queryUserId na URL do Webhook (?userId=...):
     if (queryUserId) {
-        // Busca o documento exclusivo de conexão de fluxo: settings/uazapi_flow
         const flowConnRef = doc(db, 'users', queryUserId, 'settings', 'uazapi_flow');
         const flowConnSnap = await getDoc(flowConnRef);
 
-        if (!flowConnSnap.exists()) {
-            // Nenhuma instância de fluxo configurada para este usuário
-            return { creds: null };
+        let flowInstanceToken = '';
+        let serverUrl = 'https://travelflow.uazapi.com';
+
+        if (flowConnSnap.exists()) {
+            const data = flowConnSnap.data() as UazapiConnectionConfig;
+            flowInstanceToken = safeTrimString(data.instanceToken);
+            if (data.serverUrl) serverUrl = data.serverUrl;
         }
 
-        const data = flowConnSnap.data() as UazapiConnectionConfig;
-        const flowInstanceToken = (data.instanceToken || '').trim();
-        const serverUrl = data.serverUrl || 'https://travelflow.uazapi.com';
+        // Fallback: se uazapi_flow ainda não tiver token salvo, verifica settings/config
+        if (!flowInstanceToken) {
+            try {
+                const mainSnap = await getDoc(doc(db, 'users', queryUserId, 'settings', 'config'));
+                if (mainSnap.exists()) {
+                    const mainData = mainSnap.data() as Settings;
+                    flowInstanceToken = safeTrimString(mainData.webhookToken);
+                }
+            } catch {}
+        }
 
         if (!flowInstanceToken) {
             return { creds: null };
         }
 
-        // Se recebemos um token identificador no webhook (via header, body ou query),
-        // ele DEVE ser estritamente igual ao token da instância de fluxo cadastrada (uazapi_flow).
-        // Se for diferente, trata-se de webhook disparado por OUTRO WhatsApp conectado (ex: Zap principal, Zap de cobrança, etc.)
+        // Se recebemos um token explícito diferente do token da instância de fluxo,
+        // verifica se esse token pertence a outra instância do mesmo usuário (para evitar conflito entre dois WhatsApps)
         if (cleanIncoming && cleanIncoming !== flowInstanceToken) {
-            console.warn(`[Flow Webhook] Token mismatch para userId ${queryUserId}: webhookToken="${cleanIncoming}" !== flowToken="${flowInstanceToken}". Ignorando mensagem para não conflitar com outro WhatsApp.`);
-            return { creds: null, mismatch: true };
+            // Se o token enviado for um UUID/token de outra instância (e não apenas o nome da instância), ignora
+            const looksLikeToken = cleanIncoming.length >= 16 || cleanIncoming.includes('-');
+            if (looksLikeToken) {
+                console.warn(`[Flow Webhook] Token mismatch para userId ${queryUserId}: webhookToken="${cleanIncoming}" !== flowToken="${flowInstanceToken}". Ignorando.`);
+                return { creds: null, mismatch: true };
+            }
         }
 
         const creds: CachedUserCredentials = {
@@ -121,11 +187,10 @@ async function resolveUserCredentials(
     // 2. Se NÃO temos queryUserId, mas temos incomingToken:
     if (cleanIncoming) {
         const cached = tokenToUserCache.get(cleanIncoming);
-        if (cached && (now - cached.cachedAt) < CACHE_TTL_MS) {
+        if (cached && (now - cached.cachedAt) < CREDS_CACHE_TTL_MS) {
             return { creds: cached };
         }
 
-        // Busca em paralelo APENAS em settings/uazapi_flow de todos os usuários
         try {
             const usersSnap = await getDocs(collection(db, 'users'));
             const results = await Promise.all(
@@ -135,7 +200,7 @@ async function resolveUserCredentials(
                         const flowSnap = await getDoc(doc(db, 'users', uid, 'settings', 'uazapi_flow'));
                         if (flowSnap.exists()) {
                             const data = flowSnap.data() as UazapiConnectionConfig;
-                            const t = (data.instanceToken || '').trim();
+                            const t = safeTrimString(data.instanceToken);
                             if (t) {
                                 return {
                                     userId: uid,
@@ -170,27 +235,98 @@ async function resolveUserCredentials(
     return { creds: null };
 }
 
-// Helper que prioriza JID com @s.whatsapp.net ou @c.us e ignora @lid
-function extractRealPhoneNumber(candidates: any[]): string {
+// Helper que extrai o número de telefone real priorizando @s.whatsapp.net / @c.us / campos _pn,
+// e faz fallback seguro para @lid quando o WhatsApp oculta o número do contato
+function extractPhoneAndJid(candidates: any[]): { phoneNumber: string; recipientJid?: string } {
+    // 1. Prioridade máxima: JID padrão de telefone (@s.whatsapp.net ou @c.us)
     for (const c of candidates) {
         if (typeof c === 'string' && (c.includes('@s.whatsapp.net') || c.includes('@c.us'))) {
+            if (c.includes('@g.us') || c.includes('@broadcast')) continue;
             const num = cleanPhone(c);
-            if (num.length >= 10 && num.length <= 15) return num;
+            if (num.length >= 10 && num.length <= 15) {
+                return { phoneNumber: num, recipientJid: c.trim() };
+            }
         }
     }
+
+    // 2. Segunda prioridade: campos numéricos diretos (sender_pn, chat.phone, etc.) sem @lid
     for (const c of candidates) {
-        if (typeof c === 'string' && !c.includes('@lid') && !c.includes('@g.us') && !c.includes('@broadcast')) {
+        if (typeof c === 'number') {
+            const s = String(c);
+            if (s.length >= 10 && s.length <= 15) {
+                return { phoneNumber: s };
+            }
+        }
+        if (typeof c === 'string' && !c.includes('@lid') && !c.includes('@g.us') && !c.includes('@broadcast') && !c.includes('@newsletter')) {
             const num = cleanPhone(c);
-            if (num.length >= 10 && num.length <= 15) return num;
+            if (num.length >= 10 && num.length <= 15) {
+                return { phoneNumber: num };
+            }
         }
     }
-    return '';
+
+    // 3. Fallback para contatos que usam exclusivamente @lid (Linked Identity do WhatsApp) sem número exposto
+    for (const c of candidates) {
+        if (typeof c === 'string' && c.includes('@lid')) {
+            const lidDigits = cleanPhone(c);
+            if (lidDigits.length >= 8) {
+                return {
+                    phoneNumber: `lid_${lidDigits}`,
+                    recipientJid: c.trim(),
+                };
+            }
+        }
+    }
+
+    return { phoneNumber: '' };
 }
 
-// Extrator universal e ultra-resiliente para mensagens da UazAPI
+// Extrator universal e ultra-resiliente para mensagens da UazAPI (v1, v2, Baileys, WhatsMeow)
 function extractMessageInfo(body: any) {
     if (!body || typeof body !== 'object') {
-        return { msgId: '', fromMe: false, text: '', contactName: '', phoneCandidates: [] };
+        return {
+            msgId: '',
+            fromMe: false,
+            wasSentByApi: false,
+            isNonMessageEvent: true,
+            isMediaMessage: false,
+            text: '',
+            contactName: '',
+            phoneCandidates: [],
+        };
+    }
+
+    // Verifica tipo de evento na raiz para descartar eventos de ACK / leitura / presença / status
+    const rawEventType = String(body.event || body.EventType || body.type || body.action || '').toLowerCase().trim();
+    const ignoredEventTypes = [
+        'messages.update',
+        'message.ack',
+        'messages.reaction',
+        'message.revoke',
+        'presence.update',
+        'presence',
+        'chats.update',
+        'chats.upsert',
+        'contacts.update',
+        'contacts.upsert',
+        'connection.update',
+        'call',
+        'readreceipt',
+        'receipt',
+        'ack',
+        'status',
+    ];
+    if (rawEventType && ignoredEventTypes.includes(rawEventType)) {
+        return {
+            msgId: '',
+            fromMe: false,
+            wasSentByApi: false,
+            isNonMessageEvent: true,
+            isMediaMessage: false,
+            text: '',
+            contactName: '',
+            phoneCandidates: [],
+        };
     }
 
     const candidateObjects: any[] = [];
@@ -203,18 +339,25 @@ function extractMessageInfo(body: any) {
         if (body.data.message && typeof body.data.message === 'object') {
             candidateObjects.push(body.data.message);
         }
+        if (body.data.chat && typeof body.data.chat === 'object') {
+            candidateObjects.push(body.data.chat);
+        }
     }
 
     if (Array.isArray(body.message)) {
         candidateObjects.push(...body.message);
     } else if (body.message && typeof body.message === 'object') {
         candidateObjects.push(body.message);
+        if (body.message.content && typeof body.message.content === 'object') {
+            candidateObjects.push(body.message.content);
+        }
     }
 
     if (Array.isArray(body.messages)) {
         candidateObjects.push(...body.messages);
     }
 
+    if (body.chat && typeof body.chat === 'object') candidateObjects.push(body.chat);
     if (body.payload && typeof body.payload === 'object') candidateObjects.push(body.payload);
     if (body.event && typeof body.event === 'object') candidateObjects.push(body.event);
 
@@ -224,33 +367,106 @@ function extractMessageInfo(body: any) {
     let selectedIndex: number | undefined = undefined;
     let msgId = '';
     let fromMe = false;
+    let wasSentByApi = false;
+    let isNonMessageEvent = false;
+    let isMediaMessage = false;
     let contactName = '';
 
     for (const obj of candidateObjects) {
         if (!obj || typeof obj !== 'object') continue;
 
         if (!msgId) {
-            msgId = obj.id || obj.messageid || obj.messageId || obj.key?.id || '';
+            const candidateId = obj.id || obj.messageid || obj.messageId || obj.key?.id || '';
+            // Evita pegar ID de chat (que contém @) como msgId
+            if (typeof candidateId === 'string' && candidateId && !candidateId.includes('@')) {
+                msgId = candidateId;
+            }
         }
 
-        if (obj.fromMe === true || obj.key?.fromMe === true) {
+        if (obj.fromMe === true || obj.key?.fromMe === true || obj.isFromMe === true || obj.owner === true) {
             fromMe = true;
         }
 
-        if (!contactName) {
-            contactName = obj.senderName || obj.pushName || obj.pushname || obj.name || obj.notifyName || '';
+        if (obj.wasSentByApi === true || obj.sentByApi === true) {
+            wasSentByApi = true;
         }
 
+        // Ignora mensagens de reação ou protocolo internas do WhatsApp
+        const msgTypeLower = String(obj.messageType || obj.type || obj.mediaType || '').toLowerCase().trim();
+        if (
+            msgTypeLower === 'reactionmessage' ||
+            msgTypeLower === 'reaction' ||
+            msgTypeLower === 'protocolmessage' ||
+            msgTypeLower === 'protocol' ||
+            msgTypeLower === 'senderkeydistributionmessage' ||
+            (obj.reactionMessage && !obj.conversation && !obj.extendedTextMessage) ||
+            (obj.protocolMessage && !obj.conversation && !obj.extendedTextMessage)
+        ) {
+            isNonMessageEvent = true;
+        }
+
+        // Detecta se é uma mensagem de mídia válida (áudio, imagem, vídeo, figurinha, documento, localização, contato)
+        if (
+            ['image', 'audio', 'ptt', 'voice', 'video', 'sticker', 'document', 'location', 'contact', 'vcard', 'media', 'imagemessage', 'audiomessage', 'videomessage', 'stickermessage', 'documentmessage', 'locationmessage', 'contactmessage'].includes(msgTypeLower) ||
+            obj.audioMessage ||
+            obj.imageMessage ||
+            obj.videoMessage ||
+            obj.stickerMessage ||
+            obj.documentMessage ||
+            obj.locationMessage ||
+            obj.contactMessage ||
+            obj.content?.mimetype ||
+            obj.content?.URL
+        ) {
+            isMediaMessage = true;
+        }
+
+        if (!contactName) {
+            const candidateName =
+                obj.senderName ||
+                obj.pushName ||
+                obj.pushname ||
+                obj.wa_name ||
+                obj.wa_contactName ||
+                obj.notifyName ||
+                obj.verifiedName ||
+                (obj !== body.chat ? obj.name : '') ||
+                '';
+            if (typeof candidateName === 'string' && candidateName.trim()) {
+                contactName = candidateName.trim();
+            }
+        }
+
+        // Coleta todos os campos possíveis onde o número real ou JID aparece na UazAPI
         phoneCandidates.push(
+            obj.sender_pn,
+            obj.chatid_pn,
+            obj.chatId_pn,
+            obj.participant_pn,
+            obj.senderPn,
+            obj.chatidPn,
+            obj.participantPn,
+            obj.remoteJidAlt,
+            obj.key?.remoteJidAlt,
+            obj.key?.senderPn,
+            obj.key?.participantPn,
+            obj.phone,
+            obj.chat?.phone,
+            obj.chat?.wa_chatid,
+            obj.chat?.wa_fastid,
+            obj.chat?.jid,
+            obj.chat?.remoteJid,
+            obj.chat?.id,
+            obj.wa_chatid,
+            obj.wa_sender,
             obj.chatid,
             obj.chatId,
-            obj.chat,
+            typeof obj.chat === 'string' ? obj.chat : undefined,
             obj.remoteJid,
             obj.key?.remoteJid,
-            obj.sender,
+            typeof obj.sender === 'string' ? obj.sender : obj.sender?.id || obj.sender?.phone,
             obj.from,
             obj.number,
-            obj.phone,
             obj.user
         );
 
@@ -270,6 +486,11 @@ function extractMessageInfo(body: any) {
                 selectedButtonId = obj.listResponseMessage.singleSelectReply.selectedRowId.trim();
             } else if (typeof obj.templateButtonReplyMessage?.selectedId === 'string' && obj.templateButtonReplyMessage.selectedId.trim()) {
                 selectedButtonId = obj.templateButtonReplyMessage.selectedId.trim();
+            } else if (typeof obj.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson === 'string') {
+                try {
+                    const parsedParams = JSON.parse(obj.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson);
+                    if (parsedParams?.id) selectedButtonId = String(parsedParams.id).trim();
+                } catch {}
             }
         }
 
@@ -298,6 +519,8 @@ function extractMessageInfo(body: any) {
                 text = obj.text.trim();
             } else if (typeof obj.content?.text === 'string' && obj.content.text.trim()) {
                 text = obj.content.text.trim();
+            } else if (typeof obj.content === 'string' && obj.content.trim()) {
+                text = obj.content.trim();
             } else if (typeof obj.body === 'string' && obj.body.trim()) {
                 text = obj.body.trim();
             } else if (typeof obj.message === 'string' && obj.message.trim()) {
@@ -306,6 +529,10 @@ function extractMessageInfo(body: any) {
                 text = obj.conversation.trim();
             } else if (typeof obj.extendedTextMessage?.text === 'string' && obj.extendedTextMessage.text.trim()) {
                 text = obj.extendedTextMessage.text.trim();
+            } else if (typeof obj.imageMessage?.caption === 'string' && obj.imageMessage.caption.trim()) {
+                text = obj.imageMessage.caption.trim();
+            } else if (typeof obj.videoMessage?.caption === 'string' && obj.videoMessage.caption.trim()) {
+                text = obj.videoMessage.caption.trim();
             } else if (typeof obj.listResponseMessage?.singleSelectReply?.selectedRowId === 'string' && obj.listResponseMessage.singleSelectReply.selectedRowId.trim()) {
                 text = obj.listResponseMessage.singleSelectReply.selectedRowId.trim();
             } else if (typeof obj.buttonsResponseMessage?.selectedButtonId === 'string' && obj.buttonsResponseMessage.selectedButtonId.trim()) {
@@ -324,20 +551,63 @@ function extractMessageInfo(body: any) {
     return {
         msgId,
         fromMe,
+        wasSentByApi,
+        isNonMessageEvent,
+        isMediaMessage,
         text,
         selectedButtonId: selectedButtonId || undefined,
         selectedIndex,
         contactName,
-        phoneCandidates
+        phoneCandidates,
     };
 }
 
-export async function GET(req: NextRequest) {
-    return NextResponse.json({ status: 'ok', service: 'flows-webhook', version: 'v3_extractMessageInfo' });
+// Localiza o fluxo a ser disparado com fallback automático caso o defaultFlowId esteja vazio, inativo ou tenha sido excluído
+async function resolveFlowToExecute(
+    targetUserId: string,
+    preferredFlowId: string | null
+): Promise<FlowDefinition | null> {
+    if (preferredFlowId) {
+        try {
+            const flowRef = doc(db, 'users', targetUserId, 'flows', preferredFlowId);
+            const flowSnap = await getDoc(flowRef);
+            if (flowSnap.exists()) {
+                const flowData = { id: flowSnap.id, ...flowSnap.data() } as FlowDefinition;
+                if (flowData.isActive !== false && Array.isArray(flowData.nodes) && flowData.nodes.length > 0) {
+                    return flowData;
+                }
+            }
+        } catch (err) {
+            console.error('[Flow Webhook] Erro ao buscar fluxo preferido:', err);
+        }
+    }
+
+    // Fallback: busca automaticamente nos fluxos do usuário o primeiro ativo que tenha blocos
+    try {
+        const flowsSnap = await getDocs(collection(db, 'users', targetUserId, 'flows'));
+        const allFlows = flowsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FlowDefinition));
+        const activeWithNodes = allFlows.find(
+            (f) => f.isActive !== false && Array.isArray(f.nodes) && f.nodes.length > 0
+        );
+        if (activeWithNodes) return activeWithNodes;
+
+        // Último fallback: se o usuário só tem 1 fluxo com blocos (mesmo que isActive esteja desmarcado por engano)
+        const anyWithNodes = allFlows.find((f) => Array.isArray(f.nodes) && f.nodes.length > 0);
+        if (anyWithNodes) return anyWithNodes;
+    } catch (err) {
+        console.error('[Flow Webhook] Erro ao buscar fluxos no fallback:', err);
+    }
+
+    return null;
+}
+
+export async function GET() {
+    return NextResponse.json({ status: 'ok', service: 'flows-webhook', version: 'v4_atomic_lock_and_lid_support' });
 }
 
 export async function POST(req: NextRequest) {
     let currentMsgId = '';
+    let acquiredLockKey = '';
     try {
         const queryUserId = req.nextUrl.searchParams.get('userId');
         const queryToken = req.nextUrl.searchParams.get('token');
@@ -347,66 +617,71 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ received: true }, { status: 200 });
         }
 
-        // Token da instância no header, query ou no payload
-        const incomingToken =
-            queryToken ||
-            req.headers.get('token') ||
-            req.headers.get('apikey') ||
-            req.headers.get('x-api-key') ||
-            req.headers.get('instance-token') ||
-            req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
-            body.token ||
-            body.instanceToken ||
-            body.apikey ||
-            body.key ||
-            (typeof body.instance === 'string' ? body.instance : (body.instance?.token || body.instance?.key || '')) ||
-            body.data?.token ||
-            body.data?.instanceToken ||
-            body.data?.apikey ||
-            '';
+        const incomingToken = extractIncomingToken(req, body, queryToken);
 
         // 1. Extração universal e resiliente da mensagem e remetente
-        const { msgId, fromMe, text, selectedButtonId, selectedIndex, contactName, phoneCandidates } = extractMessageInfo(body);
+        const {
+            msgId,
+            fromMe,
+            wasSentByApi,
+            isNonMessageEvent,
+            isMediaMessage,
+            text,
+            selectedButtonId,
+            selectedIndex,
+            contactName,
+            phoneCandidates,
+        } = extractMessageInfo(body);
         currentMsgId = msgId;
 
-        const phoneNumber = extractRealPhoneNumber(phoneCandidates);
-        const userText = (text || '').trim();
-        const normalizedText = userText.toLowerCase();
-
-        if (!phoneNumber) {
-            console.warn('[Flow Webhook] Nenhum telefone válido identificado no payload:', JSON.stringify(body));
-            return NextResponse.json({ ignored: 'no_phone' }, { status: 200 });
+        if (isNonMessageEvent) {
+            return NextResponse.json({ ignored: 'non_message_event' }, { status: 200 });
         }
 
-        // Ignora mensagens de grupos (@g.us) e status (@broadcast)
+        if (wasSentByApi) {
+            return NextResponse.json({ ignored: 'was_sent_by_api' }, { status: 200 });
+        }
+
+        // Ignora mensagens de grupos (@g.us), canais (@newsletter) e status (@broadcast)
         for (const c of phoneCandidates) {
-            if (typeof c === 'string' && (c.includes('@g.us') || c.includes('@broadcast'))) {
+            if (typeof c === 'string' && (c.includes('@g.us') || c.includes('@broadcast') || c.includes('@newsletter'))) {
                 return NextResponse.json({ ignored: 'group_or_broadcast' }, { status: 200 });
             }
         }
 
-        // Deduplicação de mensagens
+        const { phoneNumber, recipientJid } = extractPhoneAndJid(phoneCandidates);
+        const userText = (text || '').trim();
+        const normalizedText = userText.toLowerCase();
+
+        if (!phoneNumber) {
+            console.warn('[Flow Webhook] Nenhum telefone válido identificado no payload:', JSON.stringify(body).slice(0, 500));
+            return NextResponse.json({ ignored: 'no_phone' }, { status: 200 });
+        }
+
+        // Se o evento não tem texto, não tem clique em botão e não é mídia (ex: ACK vazio da UazAPI), ignora
+        if (!userText && !selectedButtonId && selectedIndex === undefined && !isMediaMessage) {
+            return NextResponse.json({ ignored: 'empty_ack_or_status_payload' }, { status: 200 });
+        }
+
+        // Deduplicação rápida de mensagens por ID em memória
         if (msgId) {
             if (processedMessageIds.has(msgId)) {
-                return NextResponse.json({ ignored: 'duplicate_message' }, { status: 200 });
+                return NextResponse.json({ ignored: 'duplicate_message_id' }, { status: 200 });
             }
             processedMessageIds.add(msgId);
-            if (processedMessageIds.size > 2000) {
+            if (processedMessageIds.size > 2500) {
                 const first = processedMessageIds.values().next().value;
                 if (first) processedMessageIds.delete(first);
             }
         }
 
-        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | btnId="${selectedButtonId || ''}" | fromMe=${fromMe}`);
-
-        // 2. Localizar o usuário dono desta instância de fluxo UazAPI (com isolamento estrito de número)
+        // 2. Localizar o usuário dono desta instância de fluxo UazAPI
         const { creds: userCreds, mismatch } = await resolveUserCredentials(queryUserId, incomingToken);
 
         if (mismatch) {
-            console.log(`[Flow Webhook] Webhook descartado: token recebido ("${incomingToken}") não pertence à instância conectada de fluxo. Evitando conflito com outro WhatsApp.`);
             return NextResponse.json({
                 ignored: 'instance_token_mismatch',
-                message: 'Webhook recebido de outra instância de WhatsApp do CRM. Ignorado para não disparar no Zap de fluxo.',
+                message: 'Webhook recebido de outra instância de WhatsApp do CRM.',
             }, { status: 200 });
         }
 
@@ -419,37 +694,54 @@ export async function POST(req: NextRequest) {
         const userServerUrl = userCreds.serverUrl;
         const userInstanceToken = userCreds.instanceToken;
 
-        const runnerCtx: FlowRunnerContext = {
-            db,
-            userId: targetUserId,
-            serverUrl: cleanServerUrl(userServerUrl),
-            instanceToken: userInstanceToken,
-            phoneNumber,
-            contactName,
-        };
-
-        // 3. Checar configurações de gatilho do usuário (`flow_config`) com cache em memória
+        // 3. Checar configurações de gatilho do usuário (`flow_config`) com cache curto (5s)
         let flowConfig: FlowTriggerSettings;
         const cachedCfg = flowConfigCache.get(targetUserId);
         const now = Date.now();
-        if (cachedCfg && (now - cachedCfg.cachedAt) < 30000) {
+        if (cachedCfg && (now - cachedCfg.cachedAt) < 5000) {
             flowConfig = cachedCfg.config;
         } else {
             const configDocRef = doc(db, 'users', targetUserId, 'settings', 'flow_config');
             const configSnap = await getDoc(configDocRef);
             flowConfig = configSnap.exists()
                 ? (configSnap.data() as FlowTriggerSettings)
-                : { triggerMode: 'all_messages', keywords: [], ignoreIfActiveFlow: false };
+                : { triggerMode: 'all_messages', keywords: [], ignoreIfActiveFlow: true };
             flowConfigCache.set(targetUserId, { config: flowConfig, cachedAt: now });
         }
 
         const resetWord = (flowConfig.resetKeyword || 'reset').toLowerCase().trim();
-        const isReset = normalizedText === resetWord || normalizedText === 'reset';
+        const isReset = Boolean(userText && (normalizedText === resetWord || normalizedText === 'reset'));
 
-        // Se a mensagem NÃO for de reset e for fromMe, ignora para não causar loop
+        // Se a mensagem NÃO for de reset e for enviada por nós mesmos (fromMe), ignora imediatamente
         if (fromMe && !isReset) {
             return NextResponse.json({ ignored: 'fromMe' }, { status: 200 });
         }
+
+        // 3.5 TRAVA DE CONCORRÊNCIA EM MEMÓRIA POR CONTATO
+        // Impede que 2 mensagens seguidas ("Ouu" e "Me ajuda meu brother") executem o fluxo simultaneamente
+        const canonicalPhone = getCanonicalPhone(phoneNumber) || cleanPhone(phoneNumber) || phoneNumber;
+        const contactLockKey = `${targetUserId}:${canonicalPhone}`;
+        const existingLockTs = activeContactLocks.get(contactLockKey);
+
+        if (!isReset && existingLockTs && (now - existingLockTs) < CONTACT_LOCK_TTL_MS) {
+            console.log(`[Flow Webhook] Ignorando mensagem concorrente de ${phoneNumber} ("${userText}"): fluxo já está em execução para este contato.`);
+            return NextResponse.json({ ignored: 'contact_flow_already_executing' }, { status: 200 });
+        }
+
+        activeContactLocks.set(contactLockKey, now);
+        acquiredLockKey = contactLockKey;
+
+        console.log(`[Flow Webhook] Mensagem recebida de ${phoneNumber} (${contactName || 'Sem nome'}): "${userText}" | btnId="${selectedButtonId || ''}" | media=${isMediaMessage}`);
+
+        const runnerCtx: FlowRunnerContext = {
+            db,
+            userId: targetUserId,
+            serverUrl: cleanServerUrl(userServerUrl),
+            instanceToken: userInstanceToken,
+            phoneNumber,
+            recipientJid,
+            contactName,
+        };
 
         // 4. Checar sessão atual do contato (`flow_sessions/{phoneNumber}`)
         const sessionDocRef = doc(db, 'users', targetUserId, 'flow_sessions', phoneNumber);
@@ -458,54 +750,62 @@ export async function POST(req: NextRequest) {
             ? (sessionSnap.data() as FlowContactSession)
             : null;
 
-        // 5. PALAVRA DE RESET DO CHAT (Solicitado pelo usuário: comando reset personalizável)
+        // Deduplicação persistente de msgId na sessão (protege contra retries em instâncias serverless diferentes)
+        if (msgId && currentSession?.recentMsgIds?.includes(msgId)) {
+            return NextResponse.json({ ignored: 'duplicate_message_in_session' }, { status: 200 });
+        }
+
+        // 5. PALAVRA DE RESET DO CHAT (comando reset personalizável)
         if (isReset) {
             console.log(`[Flow Webhook] Palavra de reset "${resetWord}" recebida de ${phoneNumber}. Resetando sessão do chat...`);
+            clearOutboundDedupForContact(targetUserId, phoneNumber);
 
-            // Remove ou limpa a sessão
             await deleteDoc(sessionDocRef).catch(() => {});
+            await sendUazapiText({ ...runnerCtx, bypassDedup: true }, '🔄 *Chat resetado com sucesso!*\nIniciando fluxo...').catch(() => {});
 
-            // Notifica o WhatsApp
-            await sendUazapiText(runnerCtx, '🔄 *Chat resetado com sucesso!*\nIniciando fluxo...').catch(() => {});
+            const flow = await resolveFlowToExecute(targetUserId, flowConfig.defaultFlowId || null);
+            if (flow) {
+                const nodes = flow.nodes || [];
+                const edges = flow.edges || [];
+                const explicitStartNode = nodes.find((n: any) => n.data?.nodeType === 'start');
+                const targetNodeIds = new Set(edges.map((e: any) => e.target));
+                const rootNode = explicitStartNode || nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
 
-            // Imediatamente busca o fluxo e dispara do início
-            let flowToRestartId = flowConfig.defaultFlowId;
-            if (!flowToRestartId) {
-                const flowsSnap = await getDocs(collection(db, 'users', targetUserId, 'flows'));
-                const active = flowsSnap.docs
-                    .map((d) => ({ id: d.id, ...d.data() } as FlowDefinition))
-                    .find((f) => f.isActive !== false);
-                if (active) flowToRestartId = active.id;
-            }
-
-            if (flowToRestartId) {
-                const flowSnap = await getDoc(doc(db, 'users', targetUserId, 'flows', flowToRestartId));
-                if (flowSnap.exists()) {
-                    const flow = flowSnap.data() as FlowDefinition;
-                    const edges = flow.edges || [];
-                    const targetNodeIds = new Set(edges.map((e: any) => e.target));
-                    const rootNode = flow.nodes?.find((n: any) => !targetNodeIds.has(n.id)) || flow.nodes?.[0];
-
-                    if (rootNode) {
-                        await setDoc(sessionDocRef, {
-                            userId: targetUserId,
-                            flowId: flow.id,
-                            flowName: flow.name,
-                            phoneNumber,
-                            contactName: contactName || 'Cliente WhatsApp',
-                            currentNodeId: rootNode.id,
-                            currentNodeLabel: rootNode.data?.label || 'Início',
-                            lastMessageText: userText,
-                            status: 'active',
-                            lastInteractionAt: new Date().toISOString(),
-                        });
-                        await executeFlowNode(runnerCtx, flow, rootNode.id);
-                        return NextResponse.json({ success: true, reset: true, startedFlow: flow.name }, { status: 200 });
-                    }
+                if (rootNode) {
+                    const nowStart = Date.now();
+                    await setDoc(sessionDocRef, {
+                        userId: targetUserId,
+                        flowId: flow.id,
+                        flowName: flow.name,
+                        phoneNumber,
+                        contactName: contactName || 'Cliente WhatsApp',
+                        currentNodeId: rootNode.id,
+                        currentNodeLabel: rootNode.data?.label || 'Início',
+                        lastMessageText: userText,
+                        status: 'active',
+                        executingUntilMs: nowStart + 35000,
+                        lastFlowStartedAtMs: nowStart,
+                        recentMsgIds: msgId ? [msgId] : [],
+                        lastInteractionAt: new Date().toISOString(),
+                    });
+                    await executeFlowNode(runnerCtx, flow, rootNode.id);
+                    return NextResponse.json({ success: true, reset: true, startedFlow: flow.name }, { status: 200 });
                 }
             }
 
             return NextResponse.json({ success: true, reset: true }, { status: 200 });
+        }
+
+        // 5.05 SE A SESSÃO ESTÁ EM EXECUÇÃO ATIVA (ex: aguardando bloco de Delay "Digitando..." de uma mensagem enviada segundos atrás),
+        // IGNORA novas mensagens enviadas durante a execução para nunca duplicar o início ou o menu!
+        if (
+            currentSession &&
+            currentSession.status === 'active' &&
+            currentSession.executingUntilMs &&
+            Date.now() < currentSession.executingUntilMs
+        ) {
+            console.log(`[Flow Webhook] Ignorando mensagem "${userText}" de ${phoneNumber}: sessão já está executando blocos/delay (até ${new Date(currentSession.executingUntilMs).toISOString()}).`);
+            return NextResponse.json({ ignored: 'session_currently_executing_nodes' }, { status: 200 });
         }
 
         // 5.1 VERIFICAR SE O CONTATO ESTÁ EM PAUSA TEMPORÁRIA / COOLDOWN (Bloco Pausar Automação)
@@ -528,12 +828,11 @@ export async function POST(req: NextRequest) {
                     pausedUntil: null,
                     pausedUntilMs: null,
                 }).catch(() => {});
+                currentSession.status = 'completed';
             }
         }
 
         // 5.2 SOLICITAÇÃO DE ATENDIMENTO HUMANO (FALLBACK)
-        // IMPORTANTE: só é avaliada DEPOIS que a mensagem não bateu com nenhuma opção do menu do fluxo,
-        // para nunca atropelar o caminho configurado no funil (ex: botão "Preciso de Suporte").
         const isHumanSupport = isHumanSupportRequest(userText, flowConfig.humanSupportKeywords);
         const tryDispatchHumanSupport = async (): Promise<NextResponse | null> => {
             if (!isHumanSupport) return null;
@@ -548,6 +847,7 @@ export async function POST(req: NextRequest) {
                     contactName: contactName || 'Cliente WhatsApp',
                     lastMessageText: userText,
                     status: 'completed',
+                    executingUntilMs: 0,
                     lastInteractionAt: new Date().toISOString(),
                 }, { merge: true });
                 return NextResponse.json({ success: true, humanSupportDispatched: true, contact: supportCard }, { status: 200 });
@@ -560,63 +860,112 @@ export async function POST(req: NextRequest) {
         const restartKeywords = (flowConfig.restartKeywords || ['menu', 'reiniciar', 'voltar', 'sair']).map((k) =>
             k.toLowerCase().trim()
         );
-        const isRestart = restartKeywords.includes(normalizedText);
+        const isRestart = Boolean(userText && restartKeywords.includes(normalizedText));
 
         if (isRestart && currentSession) {
+            clearOutboundDedupForContact(targetUserId, phoneNumber);
             await setDoc(sessionDocRef, {
                 status: 'completed',
+                executingUntilMs: 0,
+                lastFlowStartedAtMs: 0,
                 lastInteractionAt: new Date().toISOString(),
             }, { merge: true });
+            currentSession.status = 'completed';
         }
 
         // 7. Se está em sessão aguardando resposta de um menu:
         if (currentSession && currentSession.status === 'waiting_user_input' && !isRestart) {
-            // Tenta processar como escolha de uma das opções do menu
-            const handled = await handleUserMenuResponse(runnerCtx, currentSession, userText, selectedButtonId, selectedIndex);
+            const diag: MenuResponseDiag = {};
+            const handled = await handleUserMenuResponse(
+                runnerCtx,
+                currentSession,
+                userText,
+                selectedButtonId,
+                selectedIndex,
+                diag
+            );
+
             if (handled) {
                 console.log(`[Flow Webhook] Opção de menu selecionada por ${phoneNumber}`);
-                // Atualiza última mensagem na sessão
+                const updatedMsgIds = msgId
+                    ? Array.from(new Set([...(currentSession.recentMsgIds || []).slice(-14), msgId]))
+                    : currentSession.recentMsgIds || [];
                 await updateDoc(sessionDocRef, {
                     lastMessageText: userText || selectedButtonId || '',
+                    recentMsgIds: updatedMsgIds,
                     lastInteractionAt: new Date().toISOString(),
                 }).catch(() => {});
                 return NextResponse.json({ handled: 'user_menu_response' }, { status: 200 });
             }
 
-            // Se NÃO bateu com nenhuma opção do menu: antes de avisar, vê se ele pediu atendimento humano
+            // Se NÃO bateu com nenhuma opção do menu: antes de avisar ou reiniciar, vê se pediu atendimento humano
             const humanResp = await tryDispatchHumanSupport();
             if (humanResp) return humanResp;
 
-            // O cliente digitou algo fora das opções do menu. Enviamos o aviso para selecionar uma das opções acima e mantemos o contato no menu!
-            let invalidMsg = flowConfig.invalidOptionMessage;
+            const nowMs = Date.now();
+            const lastInterMs = getTimestampMs(currentSession.lastInteractionAt);
+            const menuSentAtMs = currentSession.menuSentAtMs || 0;
+            const lastFlowStartedAtMs = currentSession.lastFlowStartedAtMs || 0;
 
-            // Tenta verificar se o nó de menu atual possui uma mensagem personalizada
-            try {
-                const currentFlowRef = doc(db, 'users', targetUserId, 'flows', currentSession.flowId);
-                const currentFlowSnap = await getDoc(currentFlowRef);
-                if (currentFlowSnap.exists()) {
-                    const currentFlowData = currentFlowSnap.data() as FlowDefinition;
-                    const menuNode = (currentFlowData.nodes || []).find((n: any) => n.id === currentSession.currentNodeId);
-                    if (menuNode?.data?.invalidOptionMessage) {
-                        invalidMsg = menuNode.data.invalidOptionMessage;
-                    }
-                }
-            } catch {}
-
-            if (!invalidMsg || !invalidMsg.trim()) {
-                invalidMsg = 'Selecione a opção acima';
+            // Se o menu acabou de ser enviado há menos de 4.5 segundos (cliente ainda estava digitando a 2ª/3ª frase inicial como "Me ajuda meu brother" / "O código qual é"),
+            // ignora silenciosamente essa frase extra para não poluir o chat nem reiniciar o fluxo!
+            if (
+                (menuSentAtMs && (nowMs - menuSentAtMs) < 4500) ||
+                (lastFlowStartedAtMs && (nowMs - lastFlowStartedAtMs) < 8000)
+            ) {
+                console.log(`[Flow Webhook] Ignorando mensagem complementar enviada logo após o menu inicial por ${phoneNumber}: "${userText}"`);
+                return NextResponse.json({ ignored: 'trailing_burst_after_menu' }, { status: 200 });
             }
 
-            console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ("${userText}") não corresponde a nenhuma opção do menu. Enviando aviso: "${invalidMsg}"`);
-            await sendUazapiText(runnerCtx, invalidMsg).catch(() => {});
+            // Se o nó de menu não existe mais no fluxo (ex: fluxo foi editado),
+            // OU se a sessão de menu é antiga (mais de 30 minutos de inatividade) e o cliente mandou uma nova mensagem,
+            // OU se o usuário desativou "ignoreIfActiveFlow":
+            // Reinicia o fluxo do começo em vez de prender o cliente em um menu antigo!
+            const isStaleMenuSession = lastInterMs > 0 && (nowMs - lastInterMs) > 30 * 60 * 1000;
+            if (diag.invalidMenuNode || isStaleMenuSession || flowConfig.ignoreIfActiveFlow === false) {
+                console.log(
+                    `[Flow Webhook] Reiniciando fluxo para ${phoneNumber} (invalidMenuNode=${!!diag.invalidMenuNode}, isStale=${isStaleMenuSession}, ignoreIfActiveFlow=${flowConfig.ignoreIfActiveFlow}).`
+                );
+            } else {
+                // O menu é recente e válido, e o cliente digitou algo fora das opções:
+                // Evita mandar aviso repetido se já avisou nos últimos 4 segundos
+                if (currentSession.lastInvalidWarnAtMs && (nowMs - currentSession.lastInvalidWarnAtMs) < 4000) {
+                    return NextResponse.json({ ignored: 'invalid_option_warn_cooldown' }, { status: 200 });
+                }
 
-            // Mantém o estado da sessão em waiting_user_input no mesmo nó
-            await updateDoc(sessionDocRef, {
-                lastMessageText: userText || '',
-                lastInteractionAt: new Date().toISOString(),
-            }).catch(() => {});
+                let invalidMsg = flowConfig.invalidOptionMessage;
+                try {
+                    const currentFlowRef = doc(db, 'users', targetUserId, 'flows', currentSession.flowId);
+                    const currentFlowSnap = await getDoc(currentFlowRef);
+                    if (currentFlowSnap.exists()) {
+                        const currentFlowData = currentFlowSnap.data() as FlowDefinition;
+                        const menuNode = (currentFlowData.nodes || []).find((n: any) => n.id === currentSession.currentNodeId);
+                        if (menuNode?.data?.invalidOptionMessage) {
+                            invalidMsg = menuNode.data.invalidOptionMessage;
+                        }
+                    }
+                } catch {}
 
-            return NextResponse.json({ handled: 'invalid_menu_option_warned', message: invalidMsg }, { status: 200 });
+                if (!invalidMsg || !invalidMsg.trim()) {
+                    invalidMsg = 'Selecione a opção acima';
+                }
+
+                console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ("${userText}") não corresponde a nenhuma opção do menu. Enviando aviso: "${invalidMsg}"`);
+                await sendUazapiText(runnerCtx, invalidMsg).catch(() => {});
+
+                const updatedMsgIds = msgId
+                    ? Array.from(new Set([...(currentSession.recentMsgIds || []).slice(-14), msgId]))
+                    : currentSession.recentMsgIds || [];
+
+                await updateDoc(sessionDocRef, {
+                    lastMessageText: userText || '',
+                    lastInvalidWarnAtMs: nowMs,
+                    recentMsgIds: updatedMsgIds,
+                    lastInteractionAt: new Date().toISOString(),
+                }).catch(() => {});
+
+                return NextResponse.json({ handled: 'invalid_menu_option_warned', message: invalidMsg }, { status: 200 });
+            }
         }
 
         // 7.1 Cliente não está em menu: se pediu atendimento humano explicitamente, envia o card
@@ -624,22 +973,12 @@ export async function POST(req: NextRequest) {
         if (humanRespOutside) return humanRespOutside;
 
         // 8. Determinar qual fluxo disparar
-        let flowToTriggerId: string | null = null;
+        let preferredFlowId: string | null = null;
         const triggerMode = flowConfig.triggerMode || 'all_messages';
+        const hasConfiguredKeywords = Array.isArray(flowConfig.keywords) && flowConfig.keywords.length > 0;
 
-        if (triggerMode === 'all_messages') {
-            flowToTriggerId = flowConfig.defaultFlowId || null;
-
-            // Se defaultFlowId não estiver salvo, busca automaticamente o fluxo ativo do usuário
-            if (!flowToTriggerId) {
-                const flowsSnap = await getDocs(collection(db, 'users', targetUserId, 'flows'));
-                const active = flowsSnap.docs
-                    .map((d) => ({ id: d.id, ...d.data() } as FlowDefinition))
-                    .find((f) => f.isActive !== false);
-                if (active) {
-                    flowToTriggerId = active.id;
-                }
-            }
+        if (triggerMode === 'all_messages' || !hasConfiguredKeywords) {
+            preferredFlowId = flowConfig.defaultFlowId || null;
         } else {
             // Modo palavras-chave
             const triggers = flowConfig.keywords || [];
@@ -648,9 +987,7 @@ export async function POST(req: NextRequest) {
             for (const trig of triggers) {
                 if (!trig.keyword) continue;
 
-                // Suporta múltiplas palavras-chave separadas por vírgula, ponto e vírgula, barra ou quebra de linha
                 const variants = trig.keyword.split(/[,;\n|]+/);
-
                 for (const rawVar of variants) {
                     const varTrim = rawVar.trim();
                     if (!varTrim) continue;
@@ -663,68 +1000,107 @@ export async function POST(req: NextRequest) {
                             (cleanVar && cleanUserText === cleanVar) ||
                             normalizedText === lowerVar
                         ) {
-                            flowToTriggerId = trig.flowId;
+                            preferredFlowId = trig.flowId;
                             break;
                         }
                     } else {
-                        // Contém
                         if (
                             (cleanVar && cleanUserText.includes(cleanVar)) ||
                             normalizedText.includes(lowerVar)
                         ) {
-                            flowToTriggerId = trig.flowId;
+                            preferredFlowId = trig.flowId;
                             break;
                         }
                     }
                 }
 
-                if (flowToTriggerId) break;
+                if (preferredFlowId) break;
+            }
+
+            if (!preferredFlowId) {
+                console.log(`[Flow Webhook] Nenhuma correspondência de palavra-chave para: "${userText}"`);
+                return NextResponse.json({ ignored: 'no_keyword_match' }, { status: 200 });
             }
         }
 
-        if (!flowToTriggerId) {
-            console.log(`[Flow Webhook] Nenhuma correspondência de fluxo para: "${userText}"`);
-            return NextResponse.json({ ignored: 'no_keyword_match' }, { status: 200 });
-        }
-
-        // 9. Carrega o fluxo e inicia a execução
-        const flowRef = doc(db, 'users', targetUserId, 'flows', flowToTriggerId);
-        const flowDocSnap = await getDoc(flowRef);
-        if (!flowDocSnap.exists()) {
-            return NextResponse.json({ error: 'Fluxo configurado não existe mais.' }, { status: 200 });
-        }
-
-        const flow = flowDocSnap.data() as FlowDefinition;
-        if (flow.isActive === false) {
-            return NextResponse.json({ ignored: 'flow_is_inactive' }, { status: 200 });
+        // 9. Carrega o fluxo (com fallback automático se defaultFlowId estiver vazio ou desatualizado)
+        const flow = await resolveFlowToExecute(targetUserId, preferredFlowId);
+        if (!flow) {
+            console.warn(`[Flow Webhook] Nenhum fluxo ativo com blocos encontrado para o usuário ${targetUserId}.`);
+            return NextResponse.json({ ignored: 'no_active_flow_found' }, { status: 200 });
         }
 
         const nodes = flow.nodes || [];
-        if (nodes.length === 0) {
-            return NextResponse.json({ ignored: 'flow_has_no_nodes' }, { status: 200 });
-        }
-
-        // Identifica o nó raiz (prioriza o bloco de início 'start', depois nó sem entrada ou primeiro nó)
         const edges = flow.edges || [];
         const explicitStartNode = nodes.find((n: any) => n.data?.nodeType === 'start');
         const targetNodeIds = new Set(edges.map((e: any) => e.target));
         const rootNode = explicitStartNode || nodes.find((n: any) => !targetNodeIds.has(n.id)) || nodes[0];
 
-        console.log(`[Flow Webhook] Disparando fluxo "${flow.name}" (nó raiz: ${rootNode.id}) para ${phoneNumber}`);
+        if (!rootNode) {
+            return NextResponse.json({ ignored: 'flow_has_no_root_node' }, { status: 200 });
+        }
 
-        // Atualiza a sessão para o Kanban
-        await setDoc(sessionDocRef, {
-            userId: targetUserId,
-            flowId: flow.id,
-            flowName: flow.name,
-            phoneNumber,
-            contactName: contactName || 'Cliente WhatsApp',
-            currentNodeId: rootNode.id,
-            currentNodeLabel: rootNode.data?.label || 'Início',
-            lastMessageText: userText,
-            status: 'active',
-            lastInteractionAt: new Date().toISOString(),
+        // 10. Trava Transacional Atômica no Firestore antes de iniciar o fluxo:
+        // Garante 100% que mesmo em múltiplas instâncias serverless na Vercel,
+        // duas mensagens enviadas juntas NUNCA iniciarão o fluxo duas vezes!
+        const lockResult = await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(sessionDocRef);
+            const nowMs = Date.now();
+            let prevMsgIds: string[] = [];
+
+            if (snap.exists()) {
+                const sData = snap.data() as FlowContactSession;
+                prevMsgIds = Array.isArray(sData.recentMsgIds) ? sData.recentMsgIds : [];
+
+                if (msgId && prevMsgIds.includes(msgId)) {
+                    return { allowed: false, reason: 'duplicate_msg_id' };
+                }
+
+                if (!isRestart) {
+                    // Se já está executando um nó/delay neste exato momento
+                    if (sData.status === 'active' && sData.executingUntilMs && nowMs < sData.executingUntilMs) {
+                        return { allowed: false, reason: 'already_executing' };
+                    }
+                    // Cooldown de 12 segundos entre inícios de fluxo para o mesmo contato (evita disparo duplo em rajada de mensagens)
+                    if (sData.lastFlowStartedAtMs && (nowMs - sData.lastFlowStartedAtMs) < 12000) {
+                        return { allowed: false, reason: 'start_cooldown' };
+                    }
+                }
+            }
+
+            const updatedMsgIds = msgId
+                ? Array.from(new Set([...prevMsgIds.slice(-14), msgId]))
+                : prevMsgIds;
+
+            transaction.set(
+                sessionDocRef,
+                {
+                    userId: targetUserId,
+                    flowId: flow.id,
+                    flowName: flow.name,
+                    phoneNumber,
+                    contactName: contactName || 'Cliente WhatsApp',
+                    currentNodeId: rootNode.id,
+                    currentNodeLabel: rootNode.data?.label || 'Início',
+                    lastMessageText: userText || (isMediaMessage ? '[Mídia]' : ''),
+                    status: 'active',
+                    executingUntilMs: nowMs + 35000,
+                    lastFlowStartedAtMs: nowMs,
+                    recentMsgIds: updatedMsgIds,
+                    lastInteractionAt: new Date().toISOString(),
+                },
+                { merge: true }
+            );
+
+            return { allowed: true, reason: 'ok' };
         });
+
+        if (!lockResult.allowed) {
+            console.log(`[Flow Webhook] Disparo de fluxo bloqueado pela trava atômica para ${phoneNumber} (${lockResult.reason}).`);
+            return NextResponse.json({ ignored: lockResult.reason }, { status: 200 });
+        }
+
+        console.log(`[Flow Webhook] Disparando fluxo "${flow.name}" (nó raiz: ${rootNode.id}) para ${phoneNumber}`);
 
         // Executa o primeiro nó do fluxo
         await executeFlowNode(runnerCtx, flow, rootNode.id);
@@ -737,5 +1113,9 @@ export async function POST(req: NextRequest) {
             processedMessageIds.delete(currentMsgId);
         }
         return NextResponse.json({ error: err.message }, { status: 500 });
+    } finally {
+        if (acquiredLockKey) {
+            activeContactLocks.delete(acquiredLockKey);
+        }
     }
 }

@@ -502,6 +502,11 @@ export type FlowContactSession = {
   pausedReason?: string;
   pausedDurationValue?: number;
   pausedDurationUnit?: 'minutes' | 'hours' | 'days';
+  executingUntilMs?: number;
+  lastFlowStartedAtMs?: number;
+  menuSentAtMs?: number;
+  lastInvalidWarnAtMs?: number;
+  recentMsgIds?: string[];
   variables?: Record<string, any>;
   lastInteractionAt?: any;
   history?: Array<{ nodeId: string; timestamp: number; input?: string }>;

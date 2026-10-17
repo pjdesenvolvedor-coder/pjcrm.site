@@ -37,9 +37,55 @@ export interface FlowRunnerContext {
     serverUrl: string;
     instanceToken: string;
     phoneNumber: string;
+    recipientJid?: string;
     contactName?: string;
     clientData?: any | null;
     clientVariables?: Record<string, string> | null;
+    bypassDedup?: boolean;
+}
+
+export function resolveRecipientNumber(ctx: FlowRunnerContext): string {
+    if (ctx.recipientJid && ctx.recipientJid.includes('@lid') && (!ctx.phoneNumber || ctx.phoneNumber.includes('lid'))) {
+        return ctx.recipientJid;
+    }
+    return formatPhoneWith55(ctx.phoneNumber);
+}
+
+// Trava anti-duplicidade de saída (impede envio de 2 textos ou menus idênticos para o mesmo contato em < 8s)
+const recentOutboundSends = new Map<string, number>();
+const OUTBOUND_DEDUP_WINDOW_MS = 8000;
+
+export function clearOutboundDedupForContact(userId: string, phoneNumber: string): void {
+    const canonical = getCanonicalPhone(phoneNumber) || cleanPhone(phoneNumber) || phoneNumber;
+    const prefix = `${userId}:${canonical}:`;
+    for (const key of Array.from(recentOutboundSends.keys())) {
+        if (key.startsWith(prefix)) {
+            recentOutboundSends.delete(key);
+        }
+    }
+}
+
+function shouldSkipDuplicateOutbound(ctx: FlowRunnerContext, kind: string, signature: string): boolean {
+    if (ctx.bypassDedup) return false;
+    const now = Date.now();
+    // Limpeza periódica leve
+    if (recentOutboundSends.size > 1500) {
+        for (const [k, ts] of Array.from(recentOutboundSends.entries())) {
+            if (now - ts > OUTBOUND_DEDUP_WINDOW_MS * 2) {
+                recentOutboundSends.delete(k);
+            }
+        }
+    }
+    const canonical = getCanonicalPhone(ctx.phoneNumber) || cleanPhone(ctx.phoneNumber) || ctx.phoneNumber;
+    const normSig = (signature || '').trim().toLowerCase().slice(0, 300);
+    const dedupKey = `${ctx.userId}:${canonical}:${kind}:${normSig}`;
+    const lastSentAt = recentOutboundSends.get(dedupKey);
+    if (lastSentAt && (now - lastSentAt) < OUTBOUND_DEDUP_WINDOW_MS) {
+        console.warn(`[FlowRunner] Bloqueado envio duplicado (${kind}) para ${ctx.phoneNumber} em janela de ${now - lastSentAt}ms.`);
+        return true;
+    }
+    recentOutboundSends.set(dedupKey, now);
+    return false;
 }
 
 export function getCanonicalPhone(phone: string): string {
@@ -690,6 +736,10 @@ export async function sendUazapiText(
     text: string
 ): Promise<boolean> {
     try {
+        if (!text || !text.trim()) return true;
+        if (shouldSkipDuplicateOutbound(ctx, 'text', text)) {
+            return true;
+        }
         const base = cleanServerUrl(ctx.serverUrl);
         const res = await fetch(`${base}/send/text`, {
             method: 'POST',
@@ -699,7 +749,7 @@ export async function sendUazapiText(
                 'apikey': ctx.instanceToken,
             },
             body: JSON.stringify({
-                number: formatPhoneWith55(ctx.phoneNumber),
+                number: resolveRecipientNumber(ctx),
                 text,
             }),
         });
@@ -717,6 +767,9 @@ export async function sendUazapiMedia(
     caption?: string
 ): Promise<boolean> {
     try {
+        if (shouldSkipDuplicateOutbound(ctx, `media:${type}`, `${url}|${caption || ''}`)) {
+            return true;
+        }
         const base = cleanServerUrl(ctx.serverUrl);
         const res = await fetch(`${base}/send/media`, {
             method: 'POST',
@@ -726,7 +779,7 @@ export async function sendUazapiMedia(
                 'apikey': ctx.instanceToken,
             },
             body: JSON.stringify({
-                number: formatPhoneWith55(ctx.phoneNumber),
+                number: resolveRecipientNumber(ctx),
                 type,
                 url,
                 caption: caption || '',
@@ -745,7 +798,7 @@ export async function sendUazapiPresence(
 ): Promise<boolean> {
     try {
         const base = cleanServerUrl(ctx.serverUrl);
-        const phone = formatPhoneWith55(ctx.phoneNumber);
+        const phone = resolveRecipientNumber(ctx);
         const headers = {
             'Content-Type': 'application/json',
             'token': ctx.instanceToken,
@@ -790,8 +843,11 @@ export async function sendUazapiContact(
 ): Promise<boolean> {
     try {
         const base = cleanServerUrl(ctx.serverUrl);
-        const recipientPhone = formatPhoneWith55(ctx.phoneNumber);
+        const recipientPhone = resolveRecipientNumber(ctx);
         const contactFormattedPhone = formatPhoneWith55(cleanPhone(phoneNumber));
+        if (shouldSkipDuplicateOutbound(ctx, 'contact', `${fullName}|${contactFormattedPhone}`)) {
+            return true;
+        }
 
         const res = await fetch(`${base}/send/contact`, {
             method: 'POST',
@@ -828,7 +884,7 @@ export async function sendUazapiMenu(
 ): Promise<boolean> {
     try {
         const base = cleanServerUrl(ctx.serverUrl);
-        const phone = formatPhoneWith55(ctx.phoneNumber);
+        const phone = resolveRecipientNumber(ctx);
 
         const rawOptions = menuData.menuOptions;
         const optionsList = Array.isArray(rawOptions)
@@ -848,6 +904,8 @@ export async function sendUazapiMenu(
             };
         });
 
+        const menuSig = `${menuData.menuType || 'button'}|${menuData.menuQuestionText || ''}|${menuOptions.map((o) => o.label).join(',')}`;
+
         // Se for menu numérico ou lista simples:
         if (menuData.menuType === 'numeric') {
             let msg = menuData.menuQuestionText || 'Selecione uma opção:\n';
@@ -863,6 +921,10 @@ export async function sendUazapiMenu(
                 msg += `\n_${menuData.menuFooterText.trim()}_`;
             }
             return await sendUazapiText(ctx, msg.trim());
+        }
+
+        if (shouldSkipDuplicateOutbound(ctx, 'menu', menuSig)) {
+            return true;
         }
 
         // Se for lista nativa do WhatsApp UazAPI
@@ -909,7 +971,7 @@ export async function sendUazapiMenu(
                 if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
                     msg += `\n_${menuData.menuFooterText.trim()}_`;
                 }
-                return await sendUazapiText(ctx, msg.trim());
+                return await sendUazapiText({ ...ctx, bypassDedup: true }, msg.trim());
             }
 
             return true;
@@ -956,7 +1018,7 @@ export async function sendUazapiMenu(
                 if (menuData.menuFooterText && menuData.menuFooterText.trim()) {
                     msg += `\n_${menuData.menuFooterText.trim()}_`;
                 }
-                return await sendUazapiText(ctx, msg.trim());
+                return await sendUazapiText({ ...ctx, bypassDedup: true }, msg.trim());
             }
 
             return true;
@@ -1047,6 +1109,11 @@ export async function executeFlowNode(
             await executeFlowNode(ctx, flow, nextEdge.target);
         } else {
             console.log(`[FlowRunner] Nó de início ${nodeId} não possui saída conectada.`);
+            await setDoc(sessionDocRef, {
+                status: 'completed',
+                executingUntilMs: 0,
+                lastInteractionAt: new Date().toISOString(),
+            }, { merge: true });
         }
         return;
     }
@@ -1072,6 +1139,7 @@ export async function executeFlowNode(
                 flowId: flow.id,
                 currentNodeId: nodeId,
                 status: 'completed',
+                executingUntilMs: 0,
                 lastInteractionAt: new Date().toISOString(),
             }, { merge: true });
         }
@@ -1109,13 +1177,15 @@ export async function executeFlowNode(
             menuOptions: processedOptions,
         });
 
-        // Salvar estado na sessão aguardando input do usuário
+        // Salvar estado na sessão aguardando input do usuário (e liberando a trava de execução em andamento)
         await setDoc(sessionDocRef, {
             userId: ctx.userId,
             flowId: flow.id,
             currentNodeId: nodeId,
             currentNodeLabel: nodeData.label || 'Menu de Opções',
             status: 'waiting_user_input',
+            executingUntilMs: 0,
+            menuSentAtMs: Date.now(),
             lastInteractionAt: new Date().toISOString(),
         }, { merge: true });
         return;
@@ -1134,6 +1204,11 @@ export async function executeFlowNode(
 
         const seconds = Math.min(Math.max(totalSeconds, 1), 30);
         const presence = (nodeData.delayPresence || 'composing') as 'composing' | 'recording' | 'none';
+
+        // Renova trava de execução na sessão pelo tempo do delay + margem
+        await setDoc(sessionDocRef, {
+            executingUntilMs: Date.now() + (seconds + 15) * 1000,
+        }, { merge: true }).catch(() => {});
 
         if (presence !== 'none') {
             await sendUazapiPresence(ctx, presence);
@@ -1157,8 +1232,15 @@ export async function executeFlowNode(
         const nextEdge = edges.find((e: any) => e.source === nodeId);
         if (nextEdge && nextEdge.target) {
             await executeFlowNode(ctx, flow, nextEdge.target);
-        } else if (presence !== 'none') {
-            await sendUazapiPresence(ctx, 'paused').catch(() => {});
+        } else {
+            if (presence !== 'none') {
+                await sendUazapiPresence(ctx, 'paused').catch(() => {});
+            }
+            await setDoc(sessionDocRef, {
+                status: 'completed',
+                executingUntilMs: 0,
+                lastInteractionAt: new Date().toISOString(),
+            }, { merge: true }).catch(() => {});
         }
         return;
     }
@@ -1204,6 +1286,7 @@ export async function executeFlowNode(
             // Atualiza sessão no Kanban como Em Atendimento Humano
             await setDoc(sessionDocRef, {
                 status: 'support',
+                executingUntilMs: 0,
                 currentNodeId: nodeId,
                 currentNodeLabel: nodeData.label || 'Suporte Humano',
                 lastInteractionAt: new Date().toISOString(),
@@ -1217,6 +1300,12 @@ export async function executeFlowNode(
         const nextEdge = edges.find((e: any) => e.source === nodeId);
         if (nextEdge && nextEdge.target) {
             await executeFlowNode(ctx, flow, nextEdge.target);
+        } else if (nodeData.actionType !== 'open_support') {
+            await setDoc(sessionDocRef, {
+                status: 'completed',
+                executingUntilMs: 0,
+                lastInteractionAt: new Date().toISOString(),
+            }, { merge: true });
         }
         return;
     }
@@ -1246,11 +1335,17 @@ export async function executeFlowNode(
                     }, { merge: true });
 
                     await executeFlowNode(ctx, targetFlow, startNode.id);
+                    return;
                 }
             }
         } catch (err) {
             console.error('[FlowRunner] Erro ao transferir fluxo:', err);
         }
+        await setDoc(sessionDocRef, {
+            status: 'completed',
+            executingUntilMs: 0,
+            lastInteractionAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
         return;
     }
 
@@ -1328,6 +1423,7 @@ export async function executeFlowNode(
                 sessionDocRef,
                 {
                     status: 'completed',
+                    executingUntilMs: 0,
                     lastInteractionAt: new Date().toISOString(),
                 },
                 { merge: true }
@@ -1366,6 +1462,7 @@ export async function executeFlowNode(
                 currentNodeId: nodeId,
                 currentNodeLabel: nodeData.label || 'Pausar Automação',
                 status: 'paused',
+                executingUntilMs: 0,
                 pausedUntil: pausedUntilIso,
                 pausedUntilMs: pausedUntilMs,
                 pausedDurationValue: value,
@@ -1382,6 +1479,12 @@ export async function executeFlowNode(
     const defaultNextEdge = edges.find((e: any) => e.source === nodeId);
     if (defaultNextEdge && defaultNextEdge.target) {
         await executeFlowNode(ctx, flow, defaultNextEdge.target);
+    } else {
+        await setDoc(sessionDocRef, {
+            status: 'completed',
+            executingUntilMs: 0,
+            lastInteractionAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
     }
 }
 
@@ -1395,6 +1498,10 @@ const sanitizeOptionText = (str: string) => {
         .trim();
 };
 
+export interface MenuResponseDiag {
+    invalidMenuNode?: boolean;
+}
+
 /**
  * Trata resposta do usuário quando ele já está em um menu esperando input
  */
@@ -1403,15 +1510,26 @@ export async function handleUserMenuResponse(
     session: FlowContactSession,
     userText: string,
     selectedButtonId?: string,
-    selectedIndex?: number
+    selectedIndex?: number,
+    diag?: MenuResponseDiag
 ): Promise<boolean> {
+    if (!session.flowId || !session.currentNodeId) {
+        if (diag) diag.invalidMenuNode = true;
+        return false;
+    }
     const flowRef = doc(ctx.db, 'users', ctx.userId, 'flows', session.flowId);
     const flowSnap = await getDoc(flowRef);
-    if (!flowSnap.exists()) return false;
+    if (!flowSnap.exists()) {
+        if (diag) diag.invalidMenuNode = true;
+        return false;
+    }
 
     const flow = flowSnap.data() as FlowDefinition;
     const currentNode = (flow.nodes || []).find((n: any) => n.id === session.currentNodeId);
-    if (!currentNode || currentNode.data?.nodeType !== 'menu') return false;
+    if (!currentNode || currentNode.data?.nodeType !== 'menu') {
+        if (diag) diag.invalidMenuNode = true;
+        return false;
+    }
 
     const menuData = currentNode.data as FlowNodeData;
     const rawOptions = menuData.menuOptions;
@@ -1430,7 +1548,10 @@ export async function handleUserMenuResponse(
         };
     });
 
-    if (options.length === 0) return false;
+    if (options.length === 0) {
+        if (diag) diag.invalidMenuNode = true;
+        return false;
+    }
 
     const rawInput = (userText || '').trim();
     const btnId = (selectedButtonId || '').trim();
@@ -1519,6 +1640,15 @@ export async function handleUserMenuResponse(
 
     if (targetEdge && targetEdge.target) {
         console.log(`[FlowRunner] Opção "${matchedOption.label}" selecionada com sucesso. Avançando para o bloco: ${targetEdge.target}`);
+        // Marca imediatamente a sessão como em execução ativa para travar cliques/mensagens duplicadas durante delays do próximo bloco!
+        await setDoc(sessionDocRef, {
+            status: 'active',
+            currentNodeId: targetEdge.target,
+            executingUntilMs: Date.now() + 35000,
+            lastMessageText: rawInput || btnId || matchedOption.label,
+            lastInteractionAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+
         // Encontrou o próximo nó conectado à saída desta opção! Executa-o
         await executeFlowNode(ctx, flow, targetEdge.target);
         return true;
@@ -1529,6 +1659,7 @@ export async function handleUserMenuResponse(
     console.warn(`[FlowRunner] Opção "${matchedOption.label}" selecionada no nó "${currentNode.id}", mas NÃO há bloco conectado a esta saída. Encerrando sessão.`);
     await setDoc(sessionDocRef, {
         status: 'completed',
+        executingUntilMs: 0,
         lastInteractionAt: new Date().toISOString(),
     }, { merge: true });
     return true;

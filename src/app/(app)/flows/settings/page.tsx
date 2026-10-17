@@ -49,7 +49,7 @@ export default function FlowSettingsPage() {
     const { data: savedConfig, isLoading: isLoadingConfig } = useDoc<FlowTriggerSettings>(configDocRef);
 
     // Estados do formulário
-    const [triggerMode, setTriggerMode] = useState<'all_messages' | 'keywords'>('keywords');
+    const [triggerMode, setTriggerMode] = useState<'all_messages' | 'keywords'>('all_messages');
     const [defaultFlowId, setDefaultFlowId] = useState<string>('');
     const [keywords, setKeywords] = useState<FlowKeywordTrigger[]>([]);
     const [ignoreIfActiveFlow, setIgnoreIfActiveFlow] = useState<boolean>(true);
