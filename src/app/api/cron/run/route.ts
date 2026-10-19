@@ -39,7 +39,6 @@ function getTimestampMs(val: any): number | null {
 }
 
 // Calcula dias calendário em fuso Brasília (UTC-3)
-// 02/08 23:59 -> 03/08 00:01 = 1 dia (ignora hora, compara só a data)
 function calendarDaysBrasilia(now: Date, startDate: Date): number {
     const offset = -3 * 60 * 60 * 1000; // UTC-3
     const nowBr = new Date(now.getTime() + offset);
@@ -50,7 +49,6 @@ function calendarDaysBrasilia(now: Date, startDate: Date): number {
 }
 
 // Verifica se o horário atual (Brasília) já passou do horário configurado
-// sendTime ex: "12:30" — se não configurado, envia sempre
 function isAfterSendTime(nowUtc: Date, sendTime: string | undefined): boolean {
     if (!sendTime) return true;
     const offset = -3 * 60 * 60 * 1000;
@@ -149,14 +147,12 @@ export async function GET(request: Request) {
             const todayDateBrasilia = format(nowBr, 'yyyy-MM-dd');
             const nowMinutes = nowBr.getUTCHours() * 60 + nowBr.getUTCMinutes();
 
-            // Bloqueio anti-duplicidade: filtra apenas clientes com vencimento até agora e que NÃO foram cobrados hoje (nem manual nem automático)
             const dueNowClients = activeClients.filter(c => {
                 if (!c.dueDate) return false;
                 const due = (c.dueDate as any).toDate ? (c.dueDate as any).toDate() : new Date(c.dueDate);
                 return due <= now && c.lastBilledDate !== todayDateBrasilia;
             });
             if (dueNowClients.length > 0) {
-                // 1.1 Configuração de Renovação Automática e Verificação de Horário
                 const isAutoRenewalActive = Boolean(settings.isAutoRenewalActive);
 
                 let shouldRunAutoRenewalToday = false;
@@ -166,14 +162,10 @@ export async function GET(request: Request) {
                     const targetMinutes = (targetH || 0) * 60 + (targetM || 0);
 
                     if (settings.lastAutoRenewalRunDate === todayDateBrasilia) {
-                        // Já disparou hoje ou foi configurado após o horário hoje -> aguarda amanhã
                         shouldRunAutoRenewalToday = false;
                     } else if (nowMinutes < targetMinutes) {
-                        // Ainda não chegou o horário configurado de hoje
                         shouldRunAutoRenewalToday = false;
                     } else if (nowMinutes > targetMinutes + 2) {
-                        // O horário agendado já passou hoje (ex: configurou 14:00 e já são 14:01+)
-                        // Conforme exigência estrita: NÃO dispara hoje para clientes de hoje, só amanhã pontualmente!
                         shouldRunAutoRenewalToday = false;
                         try {
                             const configDocRef = doc(db, 'users', userId, 'settings', 'config');
@@ -182,7 +174,6 @@ export async function GET(request: Request) {
                             });
                         } catch (e) {}
                     } else {
-                        // Janela exata do horário de disparo! (targetMinutes a targetMinutes + 2)
                         shouldRunAutoRenewalToday = true;
                         try {
                             const configDocRef = doc(db, 'users', userId, 'settings', 'config');
@@ -195,7 +186,6 @@ export async function GET(request: Request) {
 
                 const canSendDueDateMsg = isAutoRenewalActive && shouldRunAutoRenewalToday;
 
-                // Agrupa clientes com vencimento pelo telefone canônico (para enviar apenas 1 mensagem mesmo com >1 assinaturas)
                 const dueGroupsByPhone = new Map<string, Client[]>();
                 for (const client of dueNowClients) {
                     const canon = getCanonicalPhone(client.phone);
@@ -207,7 +197,7 @@ export async function GET(request: Request) {
                 const dueGroupEntries = Array.from(dueGroupsByPhone.entries());
 
                 for (let groupIdx = 0; groupIdx < dueGroupEntries.length; groupIdx++) {
-                    const [phoneKey, clientGroup] = dueGroupEntries[groupIdx];
+                    const [, clientGroup] = dueGroupEntries[groupIdx];
                     const primaryClient = clientGroup[0];
                     const newlyMarkedClientIds: string[] = [];
 
@@ -224,7 +214,6 @@ export async function GET(request: Request) {
                         } catch (e) {}
                     }
 
-                    // Se marcou como vencido e tem envio de mensagem configurado para agora
                     if (newlyMarkedClientIds.length > 0 && canSendDueDateMsg) {
                         let renewalLink = '';
                         if (isAutoRenewalActive) {
@@ -258,7 +247,6 @@ export async function GET(request: Request) {
 
                         let template = settings.renewalBillingMessage?.trim() || defaultBillingTemplate;
 
-                        // Se houver renewalLink e a renovação automática estiver ativa, removemos o link do corpo pois irá no botão interativo
                         if (isAutoRenewalActive && renewalLink) {
                             template = template
                                 .replace(/🔗?\s*{link_renovacao}/gi, '')
@@ -311,7 +299,6 @@ export async function GET(request: Request) {
                                 });
                             }
 
-                            // Grava lastBilledDate para bloqueio anti-duplicidade em todos os clientes do grupo
                             for (const client of clientGroup) {
                                 try {
                                     const ref = doc(db, 'users', userId, 'clients', client.id);
@@ -329,7 +316,6 @@ export async function GET(request: Request) {
                             console.error('[cron:vencimento] Falha ao enviar mensagem de vencimento:', sendErr);
                         }
 
-                        // Delay de segurança anti-banimento entre disparos
                         if (groupIdx < dueGroupEntries.length - 1) {
                             const delayMs = (settings.renewalDelaySeconds || 15) * 1000;
                             await new Promise((r) => setTimeout(r, delayMs));
@@ -338,20 +324,7 @@ export async function GET(request: Request) {
                 }
             }
 
-            /* --- 2. PROCESSAR UPSELL ---
-             *
-             * REGRAS:
-             * - Dedup por DOCUMENTO (sentUpsellIds): se este doc ja recebeu a regra -> pula
-             * - Nova compra = novo documento = sem sentUpsellIds = elegivel para receber upsells
-             * - Dedup por TELEFONE no mesmo run (sentInThisBatch): se outro doc do mesmo
-             *   telefone ja disparou nesta execucao, MARCA este doc no banco mas NAO envia
-             * - Timing: baseado no createdAt deste documento
-             * - Elegibilidade: cliente cadastrado ANTES da criacao da regra nao e elegivel
-             *
-             * Exemplo:
-             *   Doc antigo (marcado) + Doc novo (vazio) -> doc novo envia, 1 mensagem
-             *   Doc1 (vazio) + Doc2 (vazio) no mesmo run -> Doc1 envia, Doc2 so marca
-             */
+            /* --- 2. PROCESSAR UPSELL --- */
             const activeUpsells: UpsellConfig[] = (settings?.upsells || []).filter(
                 (u) => Boolean(u.isActive) && Boolean(u.upsellMessage?.trim())
             );
@@ -359,8 +332,6 @@ export async function GET(request: Request) {
 
             if (activeUpsells.length > 0 && upsellToken) {
                 let upsellsDone = 0;
-
-                // phone -> Set<ruleId> ja enviados NESTE run (impede duplicata no mesmo cron)
                 const sentInThisBatch = new Map<string, Set<string>>();
 
                 for (const client of activeClients) {
@@ -372,7 +343,6 @@ export async function GET(request: Request) {
                     const cleanPhone = getCanonicalPhone(client.phone);
                     if (!cleanPhone) continue;
 
-                    // ruleIds ja enviados para ESTE documento especifico
                     const docSentIds = new Set<string>([
                         ...(Array.isArray(client.sentUpsellIds) ? client.sentUpsellIds as string[] : []),
                         ...(Array.isArray(client.sentUpsell2Ids) ? client.sentUpsell2Ids as string[] : []),
@@ -387,21 +357,16 @@ export async function GET(request: Request) {
                             ? upsell.id.trim()
                             : `rule_${(upsell.upsellMessage || '').slice(0, 20).replace(/\s+/g, '_')}`;
 
-                        // Regra criada depois do cliente -> nao elegivel
                         const ruleCreatedMs = Number(upsell.createdAt) || 0;
                         if (ruleCreatedMs > 0 && clientCreatedMs < ruleCreatedMs) continue;
 
-                        // Tempo de espera nao passou ainda
                         const delayMs = (Number(upsell.upsellDelayMinutes) || 0) * 60 * 1000;
                         if ((now.getTime() - clientCreatedMs) < delayMs) continue;
 
-                        // Este DOCUMENTO ja recebeu esta regra? (nao e nova compra)
                         if (docSentIds.has(ruleId)) continue;
 
-                        // Este telefone ja recebeu neste run?
                         const alreadySentInBatch = sentInThisBatch.get(cleanPhone)?.has(ruleId) ?? false;
 
-                        // Transacao atomica: marca APENAS este documento
                         let markedInDb = false;
                         try {
                             await runTransaction(db, async (txn) => {
@@ -424,7 +389,6 @@ export async function GET(request: Request) {
                             docSentIds.add(ruleId);
 
                             if (!alreadySentInBatch) {
-                                // Primeira vez neste run para este telefone+regra: ENVIA
                                 if (!sentInThisBatch.has(cleanPhone)) sentInThisBatch.set(cleanPhone, new Set());
                                 sentInThisBatch.get(cleanPhone)!.add(ruleId);
                                 upsellsDone++;
@@ -449,10 +413,7 @@ export async function GET(request: Request) {
                 }
             }
 
-            /* --- 2b. PROCESSAR UPSELL COM MENU ---
-             * Mesma logica do upsell normal, mas chama /send/menu com botoes interativos.
-             * Dedup via sentUpsellMenuIds por documento.
-             */
+            /* --- 2b. PROCESSAR UPSELL COM MENU --- */
             const activeUpsellMenus: UpsellMenuConfig[] = (settings?.upsellMenus || []).filter(
                 (u) => Boolean(u.isActive) && Boolean(u.text?.trim()) && Array.isArray(u.buttons) && u.buttons.length > 0
             );
@@ -483,21 +444,16 @@ export async function GET(request: Request) {
                             ? upsellMenu.id.trim()
                             : `menu_${(upsellMenu.text || '').slice(0, 20).replace(/\s+/g, '_')}`;
 
-                        // Regra criada depois do cliente -> nao elegivel
                         const ruleCreatedMs = Number(upsellMenu.createdAt) || 0;
                         if (ruleCreatedMs > 0 && clientCreatedMs < ruleCreatedMs) continue;
 
-                        // Tempo de espera nao passou ainda
                         const delayMs = (Number(upsellMenu.upsellDelayMinutes) || 0) * 60 * 1000;
                         if ((now.getTime() - clientCreatedMs) < delayMs) continue;
 
-                        // Este documento ja recebeu este menu?
                         if (docMenuSentIds.has(ruleId)) continue;
 
-                        // Ja enviou para este telefone neste run?
                         const alreadySentMenuInBatch = sentMenuInThisBatch.get(cleanPhone)?.has(ruleId) ?? false;
 
-                        // Transacao atomica: marca apenas este documento
                         let markedMenu = false;
                         try {
                             await runTransaction(db, async (txn) => {
@@ -523,9 +479,7 @@ export async function GET(request: Request) {
                                 sentMenuInThisBatch.get(cleanPhone)!.add(ruleId);
                                 menuDone++;
 
-                                // Montar choices (botoes) para /send/menu
                                 const choices = upsellMenu.buttons.map((btn) => {
-                                    // Formato: "label|action" ou so "label" para resposta simples
                                     const action = (btn.action || '').trim();
                                     const label = (btn.label || '').trim();
                                     if (!action) return label;
@@ -564,7 +518,7 @@ export async function GET(request: Request) {
             }
 
             /* --- 3. PROCESSAR REMARKETING --- */
-            const isOverallRemarketingActive = settings.isRemarketingActive ?? true;
+            const isOverallRemarketingActive = (settings as any).isRemarketingActive ?? true;
             const isSignupGlobalActive = settings.isPostSignupRemarketingActive ?? true;
             const isDueDateGlobalActive = settings.isPostDueDateRemarketingActive ?? true;
 
@@ -574,9 +528,8 @@ export async function GET(request: Request) {
                 ? (settings.postDueDateRemarketings?.filter(r => r.isActive && r.message) || []) : [];
             let rmkDone = 0;
 
-            // Horários configurados para envio (Brasília)
-            const signupSendTime = settings.postSignupSendTime;    // ex: "12:30"
-            const dueDateSendTimeStr = settings.postDueDateSendTime; // ex: "09:00"
+            const signupSendTime = settings.postSignupSendTime;
+            const dueDateSendTimeStr = settings.postDueDateSendTime;
 
             for (const client of clients) {
                 if (rmkDone >= QUEUE_LIMIT) break;
@@ -586,7 +539,6 @@ export async function GET(request: Request) {
                     const startDate = client.createdAt?.toDate();
                     if (startDate && (!config.createdAt || client.createdAt!.toMillis() >= config.createdAt)) {
                         const daysDiff = calendarDaysBrasilia(now, startDate);
-                        // Dias calendário atingidos E horário de envio configurado já passou
                         if (daysDiff >= config.days && isAfterSendTime(now, signupSendTime) && !client.sentRemarketingIds?.includes(config.id)) {
                             const ref = doc(db, 'users', userId, 'clients', client.id);
                             let processed = false;
@@ -618,7 +570,6 @@ export async function GET(request: Request) {
                     const startDate = client.dueDate?.toDate();
                     if (startDate && (!config.createdAt || client.createdAt!.toMillis() >= config.createdAt)) {
                         const daysDiff = calendarDaysBrasilia(now, startDate);
-                        // Dias calendário atingidos E horário de envio configurado já passou
                         if (daysDiff >= config.days && isAfterSendTime(now, dueDateSendTimeStr) && !client.sentRemarketingIds?.includes(config.id)) {
                             const ref = doc(db, 'users', userId, 'clients', client.id);
                             let processed = false;
@@ -648,7 +599,6 @@ export async function GET(request: Request) {
                 ? (settings.renewalFollowUpSteps || []).filter((s) => s.isActive && s.message?.trim())
                 : [];
 
-            // Trava estrita: somente cobranças feitas a partir de agora (1792133142000) ou após ativação da regra
             const RENEWAL_FEATURES_START_MS = 1792137294000;
             const minBilledCutoffMs = Math.max(
                 RENEWAL_FEATURES_START_MS,
@@ -656,7 +606,6 @@ export async function GET(request: Request) {
             );
 
             if (activeFollowUpSteps.length > 0 && billingToken) {
-                // Filtra clientes que estão Vencidos e possuem registro de disparo de cobrança (lastBilledAt) A PARTIR DE AGORA
                 const billedUnpaidClients = overdueStatusClients.filter((c) => {
                     const billedMs = getTimestampMs(c.lastBilledAt);
                     if (!billedMs || billedMs < minBilledCutoffMs) return false;
@@ -666,7 +615,6 @@ export async function GET(request: Request) {
                 });
 
                 if (billedUnpaidClients.length > 0) {
-                    // Agrupa por telefone canônico para enviar 1 mensagem consolidada por cliente
                     const unpaidByPhone = new Map<string, Client[]>();
                     for (const c of billedUnpaidClients) {
                         const canon = getCanonicalPhone(c.phone);
@@ -675,7 +623,6 @@ export async function GET(request: Request) {
                         unpaidByPhone.get(canon)!.push(c);
                     }
 
-                    // Ordena etapas pelo tempo de espera crescente
                     const getStepDelayMs = (step: { delayValue: number; delayUnit: 'minutes' | 'hours' | 'days' }) => {
                         const val = Math.max(1, Number(step.delayValue) || 1);
                         if (step.delayUnit === 'days') return val * 24 * 60 * 60 * 1000;
@@ -697,20 +644,17 @@ export async function GET(request: Request) {
                         for (const step of sortedSteps) {
                             if (followUpDone >= QUEUE_LIMIT) break;
 
-                            // Se a etapa foi criada depois desta cobrança, ignora
                             const stepCreatedMs = Number(step.createdAt) || 0;
                             if (stepCreatedMs > 0 && billedAtMs < stepCreatedMs) continue;
 
                             const requiredDelayMs = getStepDelayMs(step);
                             if (elapsedMs < requiredDelayMs) continue;
 
-                            // Verifica se algum doc deste grupo já recebeu esta etapa
                             const alreadyReceivedStep = clientGroup.some(
                                 (c) => Array.isArray(c.sentRenewalFollowUpIds) && c.sentRenewalFollowUpIds.includes(step.id)
                             );
                             if (alreadyReceivedStep) continue;
 
-                            // Marca atomicamente no primeiro cliente do grupo (e depois nos demais) garantindo que ainda está Vencido
                             const primaryClient = clientGroup[0];
                             const primaryRef = doc(db, 'users', userId, 'clients', primaryClient.id);
                             let claimedStep = false;
@@ -731,7 +675,6 @@ export async function GET(request: Request) {
                             } catch {}
 
                             if (claimedStep) {
-                                // Marca também nos demais docs do mesmo cliente (se tiver >1 assinatura)
                                 for (let i = 1; i < clientGroup.length; i++) {
                                     const otherRef = doc(db, 'users', userId, 'clients', clientGroup[i].id);
                                     await runTransaction(db, async (txn) => {
@@ -747,7 +690,6 @@ export async function GET(request: Request) {
 
                                 followUpDone++;
 
-                                // Dispara via /api/renewal/dispatch-single passando followUpStepId
                                 try {
                                     await fetch(`${originUrl}/api/renewal/dispatch-single`, {
                                         method: 'POST',
@@ -764,7 +706,6 @@ export async function GET(request: Request) {
                                     console.error(`[cron:renewal-followup] Erro ao disparar etapa ${step.name}:`, followUpErr);
                                 }
 
-                                // Envia apenas 1 etapa por vez por cliente em cada ciclo do cron
                                 break;
                             }
                         }
@@ -775,21 +716,45 @@ export async function GET(request: Request) {
             /* --- 4. PROCESSAR GRUPOS AGENDADOS --- */
             const scheduledSnap = await getDocs(collection(db, 'users', userId, 'scheduled_messages'));
             const scheduled = scheduledSnap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduledMessage));
+            const STALE_SENDING_MS = 10 * 60 * 1000; // 10 minutos
 
-            // Auto-recuperar agendamentos que ficaram travados em 'Sending' por mais de 5 minutos
+            const getNextFutureDailyDate = (baseDate: Date, refNow: Date): Date => {
+                let next = addDays(baseDate, 1);
+                while (next.getTime() <= refNow.getTime()) {
+                    next = addDays(next, 1);
+                }
+                return next;
+            };
+
+            const getGroupSig = (jid: string, message: string): string =>
+                `${(jid || '').trim().toLowerCase()}::${(message || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 300)}`;
+
+            // Auto-recuperar agendamentos que ficaram travados em 'Sending' por mais de 10 minutos desde o claimedAt
             for (const msg of scheduled) {
                 if (msg.status === 'Sending') {
+                    const claimedMs = msg.claimedAt ? getTimestampMs(msg.claimedAt) || 0 : 0;
                     const sendAtMs = msg.sendAt ? getTimestampMs(msg.sendAt) || 0 : 0;
-                    if (sendAtMs > 0 && (now.getTime() - sendAtMs > 5 * 60 * 1000)) {
+                    const refMs = claimedMs || sendAtMs;
+                    if (refMs > 0 && (now.getTime() - refMs > STALE_SENDING_MS)) {
                         const messageDocRef = doc(db, 'users', userId, 'scheduled_messages', msg.id);
                         await runTransaction(db, async (txn) => {
                             txn.update(messageDocRef, {
                                 status: 'Scheduled',
+                                claimedAt: null,
                                 errorReason: 'Destravado automaticamente por tempo excedido em envio.'
                             });
                         }).catch(console.error);
-                        msg.status = 'Scheduled'; // Atualiza referência local
+                        msg.status = 'Scheduled';
                     }
+                }
+            }
+
+            // Assinaturas (JID + mensagem) que já foram enviadas recentemente (nos últimos 90s)
+            const recentlySentGroupSigs = new Set<string>();
+            for (const msg of scheduled) {
+                const lastSentMs = msg.lastSentAt ? getTimestampMs(msg.lastSentAt) || 0 : 0;
+                if (lastSentMs > 0 && (now.getTime() - lastSentMs) < 90000) {
+                    recentlySentGroupSigs.add(getGroupSig(msg.jid, msg.message));
                 }
             }
 
@@ -799,19 +764,80 @@ export async function GET(request: Request) {
                 return sendAtMs > 0 && sendAtMs <= now.getTime();
             }).slice(0, QUEUE_LIMIT);
 
+            const sentGroupSigsInThisRun = new Set<string>();
+
             for (const msg of dueMessages) {
                 const messageDocRef = doc(db, 'users', userId, 'scheduled_messages', msg.id);
+                const sig = getGroupSig(msg.jid, msg.message);
+
+                // Trava anti-duplicidade por grupo: se este mesmo grupo já recebeu a mesma mensagem neste lote ou nos últimos 90s,
+                // marca o documento duplicado como concluído sem enviar novamente no grupo!
+                if (sentGroupSigsInThisRun.has(sig) || recentlySentGroupSigs.has(sig)) {
+                    try {
+                        await runTransaction(db, async (txn) => {
+                            const mSnap = await txn.get(messageDocRef);
+                            if (!mSnap.exists()) return;
+                            const mData = mSnap.data() as ScheduledMessage;
+                            if (mData.status !== 'Scheduled') return;
+                            if (mData.repeatDaily) {
+                                const baseDate = mData.sendAt?.toDate ? mData.sendAt.toDate() : now;
+                                txn.update(messageDocRef, {
+                                    sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
+                                    status: 'Scheduled',
+                                    claimedAt: null,
+                                    lastSentAt: Timestamp.now(),
+                                    lastSentDateKey: todayDateBrasilia,
+                                    retryCount: 0,
+                                    errorReason: null,
+                                });
+                            } else {
+                                txn.update(messageDocRef, {
+                                    status: 'Sent',
+                                    claimedAt: null,
+                                    lastSentAt: Timestamp.now(),
+                                    lastSentDateKey: todayDateBrasilia,
+                                    errorReason: null,
+                                });
+                            }
+                        });
+                    } catch {}
+                    continue;
+                }
+
                 let processed = false;
                 try {
                     await runTransaction(db, async (txn) => {
                         const mSnap = await txn.get(messageDocRef);
-                        if (mSnap.data()?.status !== 'Scheduled') throw new Error('Sent');
-                        txn.update(messageDocRef, { status: 'Sending' });
+                        if (!mSnap.exists()) throw new Error('NotFound');
+                        const mData = mSnap.data() as ScheduledMessage;
+                        if (mData.status !== 'Scheduled') throw new Error('AlreadyClaimed');
+
+                        // Se for repetição diária e já enviou hoje, apenas avança para o próximo dia sem reenviar
+                        if (mData.repeatDaily && mData.lastSentDateKey === todayDateBrasilia) {
+                            const baseDate = mData.sendAt?.toDate ? mData.sendAt.toDate() : now;
+                            txn.update(messageDocRef, {
+                                sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
+                                status: 'Scheduled',
+                                claimedAt: null,
+                            });
+                            throw new Error('AlreadySentToday');
+                        }
+
+                        const lastSentMs = mData.lastSentAt ? getTimestampMs(mData.lastSentAt) || 0 : 0;
+                        if (lastSentMs > 0 && (now.getTime() - lastSentMs) < 90000) {
+                            throw new Error('RecentlySent');
+                        }
+
+                        txn.update(messageDocRef, {
+                            status: 'Sending',
+                            claimedAt: Timestamp.now(),
+                        });
                         processed = true;
                     });
                 } catch (e) {}
 
                 if (processed) {
+                    sentGroupSigsInThisRun.add(sig);
                     try {
                         const msgToken = msg.useBillingZap && settings.useSeparateBillingZap && settings.billingWebhookToken
                             ? settings.billingWebhookToken : settings.webhookToken;
@@ -820,28 +846,47 @@ export async function GET(request: Request) {
                             body: JSON.stringify({ jid: msg.jid, message: msg.message, imageUrl: msg.imageUrl, token: msgToken, buttons: msg.buttons, supportNumber: msg.supportNumber, siteLink: msg.siteLink }),
                         });
                         if (response.ok) {
+                            const baseDate = msg.sendAt?.toDate ? msg.sendAt.toDate() : now;
                             if (msg.repeatDaily) {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { sendAt: Timestamp.fromDate(addDays(msg.sendAt.toDate(), 1)), status: 'Scheduled', retryCount: 0, errorReason: null }));
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, {
+                                    sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
+                                    status: 'Scheduled',
+                                    claimedAt: null,
+                                    lastSentAt: Timestamp.now(),
+                                    lastSentDateKey: todayDateBrasilia,
+                                    retryCount: 0,
+                                    errorReason: null,
+                                }));
                             } else {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Sent', errorReason: null }));
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, {
+                                    status: 'Sent',
+                                    claimedAt: null,
+                                    lastSentAt: Timestamp.now(),
+                                    lastSentDateKey: todayDateBrasilia,
+                                    errorReason: null,
+                                }));
                             }
                         } else {
+                            sentGroupSigsInThisRun.delete(sig);
                             let errorMsg = 'Erro desconhecido';
                             try { const e = await response.json(); errorMsg = e.error || e.details || response.statusText || `Status ${response.status}`; } catch { try { errorMsg = await response.text() || `Status ${response.status}`; } catch {} }
                             const retries = msg.retryCount || 0;
+                            const baseDate = msg.sendAt?.toDate ? msg.sendAt.toDate() : now;
                             if (retries < 1) {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Scheduled', sendAt: Timestamp.fromDate(addDays(msg.sendAt.toDate(), 1)), retryCount: retries + 1, errorReason: errorMsg }));
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Scheduled', claimedAt: null, sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)), retryCount: retries + 1, errorReason: errorMsg }));
                             } else {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error', errorReason: errorMsg }));
+                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error', claimedAt: null, errorReason: errorMsg }));
                             }
                         }
                     } catch (fetchErr: any) {
+                        sentGroupSigsInThisRun.delete(sig);
                         console.error('Scheduled message dispatch failed:', fetchErr);
                         const retries = msg.retryCount || 0;
+                        const baseDate = msg.sendAt?.toDate ? msg.sendAt.toDate() : now;
                         if (retries < 1) {
-                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Scheduled', sendAt: Timestamp.fromDate(addDays(msg.sendAt.toDate(), 1)), retryCount: retries + 1, errorReason: fetchErr.message }));
+                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Scheduled', claimedAt: null, sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)), retryCount: retries + 1, errorReason: fetchErr.message }));
                         } else {
-                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error', errorReason: fetchErr.message }));
+                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error', claimedAt: null, errorReason: fetchErr.message }));
                         }
                     }
                 }

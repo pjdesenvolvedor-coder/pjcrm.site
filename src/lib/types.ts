@@ -290,6 +290,8 @@ export type ScheduledMessage = {
   repeatDaily: boolean;
   status: 'Scheduled' | 'Sent' | 'Error' | 'Sending';
   claimedAt?: Timestamp | null;
+  lastSentAt?: Timestamp | null;
+  lastSentDateKey?: string | null;
   useBillingZap?: boolean;
   errorReason?: string | null;
   retryCount?: number;

@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useFirebase, useUser, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, orderBy, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, Timestamp, doc, getDoc, getDocs, addDoc, updateDoc } from 'firebase/firestore';
 import type { ScheduledMessage, Settings, ScheduledGroupButton } from '@/lib/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -127,6 +127,7 @@ function ScheduleMessageForm({
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
+    const submittingRef = useRef(false);
 
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
     const [availableGroups, setAvailableGroups] = useState<ListedGroup[] | null>(null);
@@ -315,12 +316,13 @@ function ScheduleMessageForm({
     }, [availableGroups, groupSearchQuery]);
 
     const handleToggleGroup = (group: ListedGroup) => {
+        const normTarget = group.jid.trim().toLowerCase();
         setSelectedGroups(prev => {
-            const exists = prev.some(g => g.jid === group.jid);
+            const exists = prev.some(g => g.jid.trim().toLowerCase() === normTarget);
             if (exists) {
-                return prev.filter(g => g.jid !== group.jid);
+                return prev.filter(g => g.jid.trim().toLowerCase() !== normTarget);
             }
-            return [...prev, { jid: group.jid, name: group.name }];
+            return [...prev, { jid: group.jid.trim(), name: group.name }];
         });
         form.clearErrors('jid');
     };
@@ -339,16 +341,17 @@ function ScheduleMessageForm({
                 g => g.jid.toLowerCase() === part.toLowerCase() || g.name.toLowerCase() === part.toLowerCase()
             );
             if (matched) {
-                newItems.push({ jid: matched.jid, name: matched.name });
+                newItems.push({ jid: matched.jid.trim(), name: matched.name });
             } else {
-                newItems.push({ jid: part });
+                newItems.push({ jid: part.trim() });
             }
         }
 
         setSelectedGroups(prev => {
             const combined = [...prev];
             for (const item of newItems) {
-                if (!combined.some(g => g.jid === item.jid)) {
+                const normItemJid = item.jid.trim().toLowerCase();
+                if (!combined.some(g => g.jid.trim().toLowerCase() === normItemJid)) {
                     combined.push(item);
                 }
             }
@@ -361,7 +364,8 @@ function ScheduleMessageForm({
     };
 
     const handleRemoveSelectedGroup = (jidToRemove: string) => {
-        setSelectedGroups(prev => prev.filter(g => g.jid !== jidToRemove));
+        const normRemove = jidToRemove.trim().toLowerCase();
+        setSelectedGroups(prev => prev.filter(g => g.jid.trim().toLowerCase() !== normRemove));
     };
 
     const handleSelectAllFiltered = () => {
@@ -369,8 +373,9 @@ function ScheduleMessageForm({
         setSelectedGroups(prev => {
             const combined = [...prev];
             for (const g of filteredGroups) {
-                if (!combined.some(item => item.jid === g.jid)) {
-                    combined.push({ jid: g.jid, name: g.name });
+                const normJid = g.jid.trim().toLowerCase();
+                if (!combined.some(item => item.jid.trim().toLowerCase() === normJid)) {
+                    combined.push({ jid: g.jid.trim(), name: g.name });
                 }
             }
             return combined;
@@ -409,21 +414,33 @@ function ScheduleMessageForm({
 
     const onSubmit = async (values: ScheduleFormData) => {
         if (!targetUserId) return;
+        if (submittingRef.current) return;
 
         // Monta lista final de grupos (incluindo o que estiver digitado no input caso o usuário não tenha clicado em "+ Adicionar")
-        const finalGroups: SelectedGroupItem[] = [...selectedGroups];
+        const rawGroups: SelectedGroupItem[] = [...selectedGroups];
         const pendingInput = (values.jid || '').trim();
-        if (pendingInput && (finalGroups.length === 0 || pendingInput.includes('@g.us'))) {
+        if (pendingInput && (rawGroups.length === 0 || pendingInput.includes('@g.us'))) {
             const parts = pendingInput.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
             for (const part of parts) {
                 const matched = availableGroups?.find(
                     g => g.jid.toLowerCase() === part.toLowerCase() || g.name.toLowerCase() === part.toLowerCase()
                 );
-                const itemToAdd = matched ? { jid: matched.jid, name: matched.name } : { jid: part };
-                if (!finalGroups.some(g => g.jid === itemToAdd.jid)) {
-                    finalGroups.push(itemToAdd);
-                }
+                const itemToAdd = matched ? { jid: matched.jid.trim(), name: matched.name } : { jid: part.trim() };
+                rawGroups.push(itemToAdd);
             }
+        }
+
+        // Trava de deduplicação estrita: no máximo 1 agendamento por JID de grupo!
+        const seenJids = new Set<string>();
+        const finalGroups: SelectedGroupItem[] = [];
+        for (const grp of rawGroups) {
+            const normJid = (grp.jid || '').trim().toLowerCase();
+            if (!normJid || seenJids.has(normJid)) continue;
+            seenJids.add(normJid);
+            finalGroups.push({
+                jid: grp.jid.trim(),
+                name: grp.name,
+            });
         }
 
         if (finalGroups.length === 0) {
@@ -431,12 +448,9 @@ function ScheduleMessageForm({
             return;
         }
 
-        setIsSending(true);
-
         // Imagem é opcional se já existir preview no modo de edição
         if (!values.image && !imagePreview && !values.message) {
             form.setError('message', { type: 'manual', message: 'Preencha a mensagem ou selecione uma imagem.' });
-            setIsSending(false);
             return;
         }
 
@@ -445,22 +459,24 @@ function ScheduleMessageForm({
         
         if (isNaN(date.getTime())) {
             toast({ variant: 'destructive', title: 'Data inválida' });
-            setIsSending(false);
             return;
         }
 
-        date.setHours(parseInt(values.sendHour, 10), parseInt(values.sendMinute, 10));
+        date.setHours(parseInt(values.sendHour, 10), parseInt(values.sendMinute, 10), 0, 0);
 
         const now = new Date();
-        if (date.getTime() < now.getTime()) {
+        // Permite agendar para o minuto atual (tolerância de 60s para quando clica em "Agora")
+        if (date.getTime() < now.getTime() - 60000) {
             toast({
                 variant: "destructive",
                 title: "Data/Hora inválida",
                 description: "O horário de envio não pode ser no passado.",
             });
-            setIsSending(false);
             return;
         }
+
+        submittingRef.current = true;
+        setIsSending(true);
         
         const sendAtTimestamp = Timestamp.fromDate(date);
 
@@ -471,6 +487,7 @@ function ScheduleMessageForm({
             } catch (error) {
                 console.error("Error compressing image:", error);
                 toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível compactar a imagem.' });
+                submittingRef.current = false;
                 setIsSending(false);
                 return;
             }
@@ -489,8 +506,15 @@ function ScheduleMessageForm({
 
         const legacySiteLink = validButtons.find(b => b.type === 'url')?.value || null;
         const legacySupportNumber = validButtons.find(b => b.type === 'contact')?.value || null;
+        const normalizedMsgText = (values.message || '').trim();
 
         try {
+            const colRef = collection(firestore, 'users', targetUserId, 'scheduled_messages');
+            const existingSnap = await getDocs(colRef);
+            const existingPendingDocs = existingSnap.docs
+                .map(d => ({ id: d.id, ...(d.data() as Omit<ScheduledMessage, 'id'>) }))
+                .filter(d => d.status === 'Scheduled' || d.status === 'Sending');
+
             if (isEditMode && initialMessage) {
                 const [firstGroup, ...extraGroups] = finalGroups;
                 const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', initialMessage.id);
@@ -510,34 +534,20 @@ function ScheduleMessageForm({
                     retryCount: 0
                 });
 
-                // Se durante a edição o usuário adicionou mais grupos extras, cria os agendamentos adicionais
+                // Se durante a edição o usuário adicionou mais grupos extras, cria ou atualiza sem duplicar
                 for (const grp of extraGroups) {
-                    addDocumentNonBlocking(collection(firestore, 'users', targetUserId, 'scheduled_messages'), {
-                        userId: targetUserId,
-                        jid: grp.jid,
-                        groupName: grp.name || null,
-                        message: values.message,
-                        sendAt: sendAtTimestamp,
-                        repeatDaily: Boolean(values.repeatDaily),
-                        status: 'Scheduled' as const,
-                        imageUrl: finalImageUrl || null,
-                        useBillingZap: Boolean(values.useBillingZap),
-                        buttons: validButtons,
-                        supportNumber: legacySupportNumber,
-                        siteLink: legacySiteLink,
-                        errorReason: null,
-                        retryCount: 0,
+                    const normGrpJid = grp.jid.trim().toLowerCase();
+                    const duplicateDoc = existingPendingDocs.find(d => {
+                        if (d.id === initialMessage.id) return false;
+                        const dJid = (d.jid || '').trim().toLowerCase();
+                        if (dJid !== normGrpJid) return false;
+                        const sameMessage = (d.message || '').trim() === normalizedMsgText;
+                        const dTime = d.sendAt?.toDate ? d.sendAt.toDate().getTime() : 0;
+                        const sameTime = Math.abs(dTime - date.getTime()) < 60000;
+                        return sameMessage || sameTime;
                     });
-                }
 
-                toast({
-                    title: extraGroups.length > 0 ? `Agendamento Atualizado + ${extraGroups.length} Novo(s)!` : "Agendamento Atualizado!",
-                    description: "Os detalhes do agendamento foram salvos com sucesso.",
-                });
-            } else {
-                const colRef = collection(firestore, 'users', targetUserId, 'scheduled_messages');
-                for (const grp of finalGroups) {
-                    const newScheduledMessageForFirestore = {
+                    const payload = {
                         userId: targetUserId,
                         jid: grp.jid,
                         groupName: grp.name || null,
@@ -553,13 +563,64 @@ function ScheduleMessageForm({
                         errorReason: null,
                         retryCount: 0,
                     };
-                    addDocumentNonBlocking(colRef, newScheduledMessageForFirestore);
+
+                    if (duplicateDoc) {
+                        await updateDoc(doc(firestore, 'users', targetUserId, 'scheduled_messages', duplicateDoc.id), payload);
+                    } else {
+                        await addDoc(colRef, payload);
+                    }
+                }
+
+                toast({
+                    title: extraGroups.length > 0 ? `Agendamento Atualizado + ${extraGroups.length} Grupo(s)!` : "Agendamento Atualizado!",
+                    description: "Os detalhes do agendamento foram salvos com sucesso (1 mensagem por grupo).",
+                });
+            } else {
+                let createdCount = 0;
+                let updatedCount = 0;
+
+                for (const grp of finalGroups) {
+                    const normGrpJid = grp.jid.trim().toLowerCase();
+                    // Verifica se já existe agendamento pendente para este mesmo grupo com a mesma mensagem ou mesmo horário
+                    const duplicateDoc = existingPendingDocs.find(d => {
+                        const dJid = (d.jid || '').trim().toLowerCase();
+                        if (dJid !== normGrpJid) return false;
+                        const sameMessage = (d.message || '').trim() === normalizedMsgText;
+                        const dTime = d.sendAt?.toDate ? d.sendAt.toDate().getTime() : 0;
+                        const sameTime = Math.abs(dTime - date.getTime()) < 60000;
+                        return sameMessage || sameTime;
+                    });
+
+                    const payload = {
+                        userId: targetUserId,
+                        jid: grp.jid,
+                        groupName: grp.name || null,
+                        message: values.message,
+                        sendAt: sendAtTimestamp,
+                        repeatDaily: Boolean(values.repeatDaily),
+                        status: 'Scheduled' as const,
+                        imageUrl: finalImageUrl || null,
+                        useBillingZap: Boolean(values.useBillingZap),
+                        buttons: validButtons,
+                        supportNumber: legacySupportNumber,
+                        siteLink: legacySiteLink,
+                        errorReason: null,
+                        retryCount: 0,
+                    };
+
+                    if (duplicateDoc) {
+                        await updateDoc(doc(firestore, 'users', targetUserId, 'scheduled_messages', duplicateDoc.id), payload);
+                        updatedCount++;
+                    } else {
+                        await addDoc(colRef, payload);
+                        createdCount++;
+                    }
                 }
 
                 toast({
                     title: finalGroups.length > 1 ? `${finalGroups.length} Grupos Agendados!` : "Mensagem Agendada!",
                     description: finalGroups.length > 1
-                        ? `O mesmo envio foi programado para ${finalGroups.length} grupos.`
+                        ? `Programado 1 envio único para cada um dos ${finalGroups.length} grupos selecionados.`
                         : "Sua mensagem foi salva e será enviada no horário programado.",
                 });
             }
@@ -568,6 +629,7 @@ function ScheduleMessageForm({
             console.error("Error saving scheduled message:", error);
             toast({ variant: 'destructive', title: 'Erro ao salvar agendamento', description: error.message || 'Erro de conexão/servidor.' });
         } finally {
+            submittingRef.current = false;
             setIsSending(false);
         }
     };
@@ -705,7 +767,7 @@ function ScheduleMessageForm({
                                         {/* Lista de Grupos Filtrada */}
                                         <div className="overflow-y-auto max-h-40 space-y-1 pr-1">
                                             {filteredGroups.map(g => {
-                                                const isAdded = selectedGroups.some(sg => sg.jid === g.jid);
+                                                const isAdded = selectedGroups.some(sg => sg.jid.trim().toLowerCase() === g.jid.trim().toLowerCase());
                                                 return (
                                                     <button
                                                         key={g.jid}
@@ -1107,6 +1169,7 @@ function ScheduleMessageContent() {
     jid?: string;
   }>({ mode: 'create', jid: initialJid });
   const [isSendingNow, setIsSendingNow] = useState<Record<string, boolean>>({});
+  const sendingNowRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (initialJid) {
@@ -1161,13 +1224,14 @@ function ScheduleMessageContent() {
 
   const handleSendNow = async (msg: ScheduledMessage) => {
     if (!targetUserId) return;
+    if (sendingNowRef.current.has(msg.id)) return;
+    sendingNowRef.current.add(msg.id);
     setIsSendingNow(prev => ({ ...prev, [msg.id]: true }));
     try {
         const settingsDocRef = doc(firestore, 'users', targetUserId, 'settings', 'config');
         const settingsSnap = await getDoc(settingsDocRef);
         if (!settingsSnap.exists()) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Configurações de token não encontradas.' });
-            setIsSendingNow(prev => ({ ...prev, [msg.id]: false }));
             return;
         }
         const settings = settingsSnap.data() as Settings;
@@ -1177,12 +1241,12 @@ function ScheduleMessageContent() {
             
         if (!msgToken) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Token de disparo não configurado.' });
-            setIsSendingNow(prev => ({ ...prev, [msg.id]: false }));
             return;
         }
 
         const docRef = doc(firestore, 'users', targetUserId, 'scheduled_messages', msg.id);
-        await updateDoc(docRef, { status: 'Sending' });
+        const nowTs = Timestamp.now();
+        await updateDoc(docRef, { status: 'Sending', claimedAt: nowTs });
 
         const response = await fetch('/api/send-group-message', {
             method: 'POST',
@@ -1194,22 +1258,28 @@ function ScheduleMessageContent() {
                 token: msgToken,
                 buttons: msg.buttons,
                 supportNumber: msg.supportNumber,
-                siteLink: msg.siteLink
+                siteLink: msg.siteLink,
+                forceManual: true
             })
         });
 
         if (response.ok) {
+            const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
             if (msg.repeatDaily) {
                 await updateDoc(docRef, {
                     sendAt: Timestamp.fromDate(addDays(msg.sendAt.toDate(), 1)),
                     status: 'Scheduled',
                     retryCount: 0,
-                    errorReason: null
+                    errorReason: null,
+                    lastSentAt: Timestamp.now(),
+                    lastSentDateKey: todayKey
                 });
             } else {
                 await updateDoc(docRef, {
                     status: 'Sent',
-                    errorReason: null
+                    errorReason: null,
+                    lastSentAt: Timestamp.now(),
+                    lastSentDateKey: todayKey
                 });
             }
             toast({ title: 'Mensagem Enviada!', description: 'A mensagem foi disparada com sucesso para o grupo via UazAPI.' });
@@ -1235,6 +1305,7 @@ function ScheduleMessageContent() {
         console.error("Error sending scheduled message now:", err);
         toast({ variant: 'destructive', title: 'Erro de processamento', description: err.message || 'Erro ao processar envio imediato.' });
     } finally {
+        sendingNowRef.current.delete(msg.id);
         setIsSendingNow(prev => ({ ...prev, [msg.id]: false }));
     }
   };

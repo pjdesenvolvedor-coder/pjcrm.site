@@ -3,6 +3,25 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+// Trava anti-duplicidade em memória por grupo (JID + mensagem)
+// Impede que o mesmo grupo receba a mesma mensagem duas vezes em uma janela de 90 segundos
+const inFlightGroupSends = new Set<string>();
+const recentGroupSends = new Map<string, number>();
+const GROUP_DEDUP_WINDOW_MS = 90 * 1000;
+
+function normalizeGroupJid(jid: string): string {
+  const trimmed = (jid || '').trim().toLowerCase();
+  if (!trimmed) return '';
+  return trimmed;
+}
+
+function buildGroupDedupKey(jid: string, message: string, imageUrl?: string | null): string {
+  const normJid = normalizeGroupJid(jid);
+  const normMsg = (message || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 300);
+  const hasImg = imageUrl ? 'img1' : 'img0';
+  return `${normJid}::${hasImg}::${normMsg}`;
+}
+
 function cleanServerUrl(url?: string): string {
   let cleaned = (url || '').trim();
   if (!cleaned) cleaned = 'https://travelflow.uazapi.com';
@@ -43,9 +62,10 @@ function formatSupportUrl(support: string): string {
 }
 
 export async function POST(request: Request) {
+  let acquiredDedupKey = '';
   try {
     const body = await request.json().catch(() => ({}));
-    const { jid, message, token, imageUrl, buttons, supportNumber, siteLink, serverUrl } = body;
+    const { jid, message, token, imageUrl, buttons, supportNumber, siteLink, serverUrl, forceManual } = body;
 
     if (!jid || !message || !token) {
       return NextResponse.json(
@@ -55,11 +75,38 @@ export async function POST(request: Request) {
     }
 
     const destinationJid = String(jid).trim();
+    const finalMessage = String(message).trim();
+    const dedupKey = buildGroupDedupKey(destinationJid, finalMessage, imageUrl);
+    const nowMs = Date.now();
+
+    // Limpeza periódica do cache
+    if (recentGroupSends.size > 1000) {
+      for (const [k, ts] of Array.from(recentGroupSends.entries())) {
+        if (nowMs - ts > GROUP_DEDUP_WINDOW_MS * 2) {
+          recentGroupSends.delete(k);
+        }
+      }
+    }
+
+    // Trava anti-duplicidade: se já está enviando ou já enviou a mesma mensagem para este mesmo grupo nos últimos 90s
+    if (!forceManual) {
+      if (inFlightGroupSends.has(dedupKey)) {
+        console.warn(`[send-group-message] Bloqueado envio concorrente duplicado para o grupo ${destinationJid}`);
+        return NextResponse.json({ success: true, deduplicated: true, reason: 'in_flight' });
+      }
+      const lastSentAt = recentGroupSends.get(dedupKey);
+      if (lastSentAt && (nowMs - lastSentAt) < GROUP_DEDUP_WINDOW_MS) {
+        console.warn(`[send-group-message] Bloqueado reenvio duplicado para o grupo ${destinationJid} (${Math.round((nowMs - lastSentAt) / 1000)}s atrás)`);
+        return NextResponse.json({ success: true, deduplicated: true, reason: 'recent_window' });
+      }
+    }
+
+    inFlightGroupSends.add(dedupKey);
+    acquiredDedupKey = dedupKey;
+
     const baseUrl = cleanServerUrl(serverUrl);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-    const finalMessage = String(message).trim();
 
     // Monta os botões interativos (choices) para /send/menu
     const choices: string[] = [];
@@ -125,9 +172,10 @@ export async function POST(request: Request) {
           signal: controller.signal,
         });
 
-        // Se /send/menu falhar na instância, tenta fallback com links no texto
-        if (!uazapiRes.ok) {
-          console.warn(`[send-group-message] /send/menu falhou (${uazapiRes.status}), tentando fallback...`);
+        // Se /send/menu falhar explicitamente com 4xx (não suportado), tenta fallback com links no texto
+        // (Evita fallback em caso de 502/504 onde a UazAPI já pode ter entregue a mensagem ao grupo)
+        if (!uazapiRes.ok && uazapiRes.status >= 400 && uazapiRes.status < 500) {
+          console.warn(`[send-group-message] /send/menu retornou ${uazapiRes.status}, enviando fallback...`);
           let fallbackMessage = finalMessage;
           for (const item of fallbackLinks) {
             fallbackMessage += `\n\n🔗 ${item.label}: ${item.url}`;
@@ -222,6 +270,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Registra sucesso na janela anti-duplicidade
+    recentGroupSends.set(dedupKey, Date.now());
+
     return NextResponse.json({ success: true, data: responseData });
 
   } catch (error: any) {
@@ -230,5 +281,9 @@ export async function POST(request: Request) {
       { error: error?.message || 'Erro interno ao disparar mensagem para grupo.' },
       { status: 500 }
     );
+  } finally {
+    if (acquiredDedupKey) {
+      inFlightGroupSends.delete(acquiredDedupKey);
+    }
   }
 }
