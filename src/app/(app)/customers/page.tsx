@@ -1052,21 +1052,76 @@ function RenewDialog({ client, onFinished }: { client: Client, onFinished: () =>
     );
 }
 
-function matchesPhone(clientPhone: string, searchInput: string): boolean {
-  if (!clientPhone || !searchInput) return false;
+function extractClientEmails(c: any): string {
+  if (!c) return '';
+  const emailParts: string[] = [];
+
+  const processVal = (val: any) => {
+    if (!val) return;
+    if (typeof val === 'string') {
+      emailParts.push(val.toLowerCase().trim());
+    } else if (typeof val === 'object') {
+      if (val.value && typeof val.value === 'string') {
+        emailParts.push(val.value.toLowerCase().trim());
+      } else {
+        for (const k of Object.keys(val)) {
+          if (typeof val[k] === 'string' && val[k].includes('@')) {
+            emailParts.push(val[k].toLowerCase().trim());
+          }
+        }
+      }
+    }
+  };
+
+  if (Array.isArray(c.email)) {
+    c.email.forEach(processVal);
+  } else if (c.email) {
+    processVal(c.email);
+  }
+
+  if (Array.isArray(c.emails)) {
+    c.emails.forEach(processVal);
+  } else if (c.emails) {
+    processVal(c.emails);
+  }
+
+  return emailParts.join(' ');
+}
+
+function formatClientEmailDisplay(emailVal: any): string {
+  if (!emailVal) return '-';
+  if (typeof emailVal === 'string') return emailVal;
+  if (Array.isArray(emailVal)) {
+    const extracted = emailVal.map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && item.value) return String(item.value);
+      return '';
+    }).filter(Boolean);
+    return extracted.length > 0 ? extracted.join(', ') : '-';
+  }
+  if (typeof emailVal === 'object' && emailVal.value) {
+    return String(emailVal.value);
+  }
+  return '-';
+}
+
+function matchesPhone(clientPhone: any, searchInput: any): boolean {
+  const phoneStr = String(clientPhone || '');
+  const searchStr = String(searchInput || '');
+  if (!phoneStr || !searchStr) return false;
   
   // Se a busca contiver letras ou '@', trata-se de busca de nome ou e-mail, não telefone
-  if (/[a-zA-Z@]/.test(searchInput)) return false;
+  if (/[a-zA-Z@]/.test(searchStr)) return false;
 
-  const rawSearchLower = searchInput.trim().toLowerCase();
+  const rawSearchLower = searchStr.trim().toLowerCase();
   if (!rawSearchLower) return false;
 
-  if (clientPhone.toLowerCase().includes(rawSearchLower)) return true;
+  if (phoneStr.toLowerCase().includes(rawSearchLower)) return true;
 
-  const searchDigits = searchInput.replace(/\D/g, '');
+  const searchDigits = searchStr.replace(/\D/g, '');
   if (searchDigits.length < 3) return false; // Exige pelo menos 3 dígitos para evitar falso positivo
 
-  const phoneDigits = clientPhone.replace(/\D/g, '');
+  const phoneDigits = phoneStr.replace(/\D/g, '');
   if (!phoneDigits) return false;
 
   if (phoneDigits.includes(searchDigits)) return true;
@@ -1123,10 +1178,11 @@ function SendRenewalMessageDialog({
   // Busca todas as assinaturas associadas a este cliente / telefone
   const relatedClients = useMemo(() => {
     if (!client) return [];
-    const clientPhone = (client.phone || '').trim();
+    const clientPhone = String(client.phone || '').trim();
     if (!clientPhone) return [client];
 
-    const matched = allClients.filter(c => {
+    const matched = (allClients || []).filter(c => {
+      if (!c) return false;
       if (c.id === client.id) return true;
       return matchesPhone(c.phone || '', clientPhone);
     });
@@ -1156,7 +1212,7 @@ function SendRenewalMessageDialog({
     return relatedClients
       .filter(c => selectedIds.includes(c.id))
       .reduce((sum, c) => {
-        const val = parseFloat((c.amountPaid || '0').replace(',', '.')) || 0;
+        const val = parseFloat(String(c.amountPaid ?? '0').replace(',', '.')) || 0;
         return sum + val;
       }, 0);
   }, [relatedClients, selectedIds]);
@@ -1235,7 +1291,7 @@ function SendRenewalMessageDialog({
           {relatedClients.map((c) => {
             const isChecked = selectedIds.includes(c.id);
             const formattedDueDate = safeFormatDate(c.dueDate, 'dd/MM/yyyy');
-            const price = parseFloat((c.amountPaid || '0').replace(',', '.')) || 0;
+            const price = parseFloat(String(c.amountPaid ?? '0').replace(',', '.')) || 0;
 
             return (
               <div
@@ -1259,7 +1315,7 @@ function SendRenewalMessageDialog({
                     <div className="text-xs text-muted-foreground flex items-center gap-2">
                       <span>Vence: <strong className="text-foreground">{formattedDueDate}</strong></span>
                       <span>•</span>
-                      <span>Login: {formatClientEmailDisplay(c.email)}</span>
+                      <span>Login: {formatClientEmailDisplay(c.email ?? (c as any).emails)}</span>
                     </div>
                   </div>
                 </div>
@@ -1342,59 +1398,6 @@ export default function CustomersPage() {
     }
     setSortConfig({ key, direction });
   };
-
-function extractClientEmails(c: any): string {
-  if (!c) return '';
-  const emailParts: string[] = [];
-
-  const processVal = (val: any) => {
-    if (!val) return;
-    if (typeof val === 'string') {
-      emailParts.push(val.toLowerCase().trim());
-    } else if (typeof val === 'object') {
-      if (val.value && typeof val.value === 'string') {
-        emailParts.push(val.value.toLowerCase().trim());
-      } else {
-        for (const k of Object.keys(val)) {
-          if (typeof val[k] === 'string' && val[k].includes('@')) {
-            emailParts.push(val[k].toLowerCase().trim());
-          }
-        }
-      }
-    }
-  };
-
-  if (Array.isArray(c.email)) {
-    c.email.forEach(processVal);
-  } else if (c.email) {
-    processVal(c.email);
-  }
-
-  if (Array.isArray(c.emails)) {
-    c.emails.forEach(processVal);
-  } else if (c.emails) {
-    processVal(c.emails);
-  }
-
-  return emailParts.join(' ');
-}
-
-function formatClientEmailDisplay(emailVal: any): string {
-  if (!emailVal) return '-';
-  if (typeof emailVal === 'string') return emailVal;
-  if (Array.isArray(emailVal)) {
-    const extracted = emailVal.map(item => {
-      if (typeof item === 'string') return item;
-      if (item && typeof item === 'object' && item.value) return String(item.value);
-      return '';
-    }).filter(Boolean);
-    return extracted.length > 0 ? extracted.join(', ') : '-';
-  }
-  if (typeof emailVal === 'object' && emailVal.value) {
-    return String(emailVal.value);
-  }
-  return '-';
-}
 
   const filteredClients = useMemo(() => {
     if (!clients) return [];
