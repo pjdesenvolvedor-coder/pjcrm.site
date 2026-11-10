@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { collection, getDocs, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { useFirebase, useUser, useDoc, useMemoFirebase } from '@/firebase';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -126,13 +126,20 @@ export default function ChargeOverduePage() {
         };
         setLogs(prev => [logEntry, ...prev].slice(0, 50));
 
-        // Gera link oficial de renovação PIX com LinkinPay
+        // Gera link oficial de renovação PIX
         let renewalLink = '';
+        let renewalSessionId = '';
         try {
-          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://pjcrm.site';
+          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.pjcrm.site';
           const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
-          const { link } = await getOrCreateRenewalSession(targetUserId, clientGroup, origin);
+          const { session, link } = await getOrCreateRenewalSession(targetUserId, clientGroup, origin);
           renewalLink = link;
+          renewalSessionId = session.id;
+          if (primaryToken) {
+            await updateDoc(doc(firestore, 'renewal_sessions', session.id), {
+              sentWithToken: primaryToken,
+            }).catch(() => {});
+          }
         } catch (linkErr) {
           console.error('Erro ao gerar link de renovação:', linkErr);
         }

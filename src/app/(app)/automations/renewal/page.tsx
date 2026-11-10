@@ -458,7 +458,7 @@ export default function RenewalAutomationPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) {
+      if (!res.ok || (!data.ok && !data.success)) {
         throw new Error(data.error || 'Falha ao disparar remarketing.');
       }
 

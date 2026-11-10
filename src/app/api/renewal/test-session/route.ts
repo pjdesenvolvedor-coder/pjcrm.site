@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { getOrCreateRenewalSession, executeRenewalPayment, formatPhoneWith55 } from '@/lib/renewal-service';
 import type { Client, Settings } from '@/lib/types';
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
         createdClients.push(clientData);
       }
 
-      const origin = req.headers.get('origin') || 'https://pjcrm.site';
+      const origin = req.headers.get('origin') || 'https://www.pjcrm.site';
       const { session, link } = await getOrCreateRenewalSession(userId, createdClients, origin, true /* forceNew */, true /* isTest */);
 
       return NextResponse.json({
@@ -149,6 +149,18 @@ export async function POST(req: NextRequest) {
           { error: `Falha ao enviar via WhatsApp: ${result.error || 'Token inválido ou desconectado'}` },
           { status: 500 }
         );
+      }
+
+      // Salva exatamente qual token enviou a mensagem de cobrança na sessão para que a confirmação saia no mesmo número
+      const extractedSessionId =
+        sessionId ||
+        (renewalLink && String(renewalLink).includes('/renovar/')
+          ? String(renewalLink).split('/renovar/')[1]?.split('?')[0]?.trim()
+          : '');
+      if (extractedSessionId && result.tokenUsed) {
+        await updateDoc(doc(db, 'renewal_sessions', extractedSessionId), {
+          sentWithToken: result.tokenUsed,
+        }).catch(() => {});
       }
 
       return NextResponse.json({ 

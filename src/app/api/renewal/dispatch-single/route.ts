@@ -286,6 +286,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
+      ok: true,
       success: true,
       clientName: primaryClient.name,
       phone: primaryClient.phone,
