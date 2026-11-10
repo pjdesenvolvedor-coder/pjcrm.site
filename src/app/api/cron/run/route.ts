@@ -99,10 +99,10 @@ export async function GET(request: Request) {
         for (const userDoc of usersSnapshot.docs) {
             const userId = userDoc.id;
 
-            // Trava em memoria: evita chamadas duplicadas em menos de 15s
+            // Trava em memoria: evita chamadas duplicadas em menos de 25s
             const nowMs = Date.now();
             const lastUserRun = userLocks.get(userId) || 0;
-            if (Math.abs(nowMs - lastUserRun) < 15000) continue;
+            if (Math.abs(nowMs - lastUserRun) < 25000) continue;
             userLocks.set(userId, nowMs);
 
             const userProfile = userDoc.data() as UserProfile;
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
             try {
                 const lockSnap = await getDoc(cronLockRef);
                 const lastRunMs = lockSnap.exists() ? (lockSnap.data()?.lastRunMs || 0) : 0;
-                if (lastRunMs > 0 && Math.abs(nowMs - lastRunMs) < 15000) {
+                if (lastRunMs > 0 && Math.abs(nowMs - lastRunMs) < 25000) {
                     isUserLockAcquired = false;
                 } else {
                     await setDoc(cronLockRef, { lastRunMs: nowMs, updatedVia: 'cron' }, { merge: true });
@@ -220,11 +220,13 @@ export async function GET(request: Request) {
 
                     if (newlyMarkedClientIds.length > 0 && canSendDueDateMsg) {
                         let renewalLink = '';
+                        let renewalSessionId = '';
                         if (isAutoRenewalActive) {
                             try {
                                 const { getOrCreateRenewalSession } = await import('@/lib/renewal-service');
-                                const { link } = await getOrCreateRenewalSession(userId, clientGroup, originUrl);
+                                const { session, link } = await getOrCreateRenewalSession(userId, clientGroup, originUrl);
                                 renewalLink = link;
+                                renewalSessionId = session.id;
                             } catch (linkErr) {
                                 console.error('[cron:renewal-link] Erro ao gerar link de renovação:', linkErr);
                             }
@@ -281,7 +283,7 @@ export async function GET(request: Request) {
                         try {
                             if (isAutoRenewalActive && renewalLink) {
                                 const { sendWhatsAppButtonWithFallback } = await import('@/lib/renewal-service');
-                                await sendWhatsAppButtonWithFallback({
+                                const btnRes = await sendWhatsAppButtonWithFallback({
                                     number: primaryClient.phone,
                                     text: formattedMessage,
                                     footerText: settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
@@ -290,6 +292,11 @@ export async function GET(request: Request) {
                                     primaryToken: primaryToken,
                                     fallbackToken: fallbackToken,
                                 });
+                                if (renewalSessionId && btnRes.tokenUsed) {
+                                    await updateDoc(doc(db, 'renewal_sessions', renewalSessionId), {
+                                        sentWithToken: btnRes.tokenUsed,
+                                    }).catch(() => {});
+                                }
                             } else {
                                 await fetch(`${originUrl}/api/send-message`, {
                                     method: 'POST',
@@ -667,13 +674,17 @@ export async function GET(request: Request) {
                             const primaryClient = clientGroup[0];
                             const primaryRef = doc(db, 'users', userId, 'clients', primaryClient.id);
                             let claimedStep = false;
+                            let shouldBreakSteps = false;
 
                             try {
                                 const snap = await getDoc(primaryRef);
                                 if (snap.exists()) {
                                     const data = snap.data() as Client;
                                     const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
-                                    if (data.status === 'Vencido' && !sentIds.includes(step.id)) {
+                                    const freshLastSentMs = getTimestampMs((data as any).lastRenewalFollowUpSentAt) || 0;
+                                    if (freshLastSentMs > 0 && (now.getTime() - freshLastSentMs) < minGapBetweenStepsMs) {
+                                        shouldBreakSteps = true;
+                                    } else if (data.status === 'Vencido' && !sentIds.includes(step.id)) {
                                         await updateDoc(primaryRef, {
                                             sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
                                             lastRenewalFollowUpSentAt: Timestamp.now(),
@@ -682,6 +693,10 @@ export async function GET(request: Request) {
                                     }
                                 }
                             } catch {}
+
+                            if (shouldBreakSteps) {
+                                break;
+                            }
 
                             if (claimedStep) {
                                 for (let i = 1; i < clientGroup.length; i++) {

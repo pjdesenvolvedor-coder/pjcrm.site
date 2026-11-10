@@ -21,6 +21,13 @@ export interface PjPayPixResponse {
 export const DEFAULT_PJPAY_TOKEN = "pj_live_W9IMRIG1GFW48ND7YIUEX5sELQB4tDLD";
 const PJPAY_BASE_URL = "https://www.pjgateway.com/api/v1";
 
+function normalizeWebhookUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  return url
+    .trim()
+    .replace(/^https?:\/\/pjcrm\.site(\/|$)/i, "https://www.pjcrm.site$1");
+}
+
 /**
  * Cria uma cobrança PIX via PJ Pay Gateway
  */
@@ -33,6 +40,7 @@ export async function createPjPayPix({
 }: CreatePjPayPixParams): Promise<PjPayPixResponse> {
   const token = apiToken?.trim() || DEFAULT_PJPAY_TOKEN;
   const cleanPayerName = String(payerName || "").trim() || "Cliente";
+  const normalizedWebhook = normalizeWebhookUrl(webhookUrl);
 
   const payload: any = {
     amount: amountInCents,
@@ -44,14 +52,14 @@ export async function createPjPayPix({
   if (description) {
     payload.description = description;
   }
-  if (webhookUrl) {
-    payload.webhook_url = webhookUrl;
+  if (normalizedWebhook) {
+    payload.webhook_url = normalizedWebhook;
   }
 
   console.log("[PJPay] Criando cobrança PIX /api/v1/payments:", {
     amount: amountInCents,
     payer: payload.payer,
-    webhook_url: webhookUrl,
+    webhook_url: normalizedWebhook,
   });
 
   const res = await fetch(`${PJPAY_BASE_URL}/payments`, {
@@ -151,3 +159,38 @@ export async function checkPjPayTransaction(
   };
 }
 
+/**
+ * Busca em lote os últimos 50 pagamentos na PJ Pay Gateway em uma única requisição rápida.
+ */
+export async function fetchRecentPjPayPayments(
+  apiToken?: string
+): Promise<Map<string, { paid: boolean; status: string; amount?: number }>> {
+  const map = new Map<string, { paid: boolean; status: string; amount?: number }>();
+  const token = apiToken?.trim() || DEFAULT_PJPAY_TOKEN;
+  try {
+    const res = await fetch(`${PJPAY_BASE_URL}/payments?limit=50`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return map;
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : raw?.data || raw?.payments || [];
+    const paidKeywords = ["paid", "completed", "completo", "pago", "aprovado", "approved", "liquidado"];
+
+    for (const item of list) {
+      if (!item?.id) continue;
+      const statusRaw = String(item.status || "").toLowerCase().trim();
+      const isPaid = paidKeywords.some((k) => statusRaw.includes(k)) || Boolean(item.paid_at || item.paidAt);
+      map.set(String(item.id), {
+        paid: isPaid,
+        status: isPaid ? "paid" : statusRaw || "pending",
+        amount: item.amount,
+      });
+    }
+  } catch {}
+  return map;
+}

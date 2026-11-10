@@ -124,9 +124,11 @@ export async function POST(req: NextRequest) {
 
     // 4. Cria ou recupera a sessão de renovação
     let renewalLink = '';
+    let sessionId = '';
     try {
       const sessionResult = await getOrCreateRenewalSession(userId, clientGroup, origin);
       renewalLink = sessionResult.link;
+      sessionId = sessionResult.session.id;
     } catch (sessionErr: any) {
       console.error('[dispatch-single] Erro ao criar sessão de renovação:', sessionErr);
       return NextResponse.json(
@@ -253,6 +255,13 @@ export async function POST(req: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    // 7.5. Salva exatamente qual instância de WhatsApp enviou esta cobrança para que a confirmação saia no mesmo número
+    if (sessionId && sendRes.tokenUsed) {
+      await updateDoc(doc(db, 'renewal_sessions', sessionId), {
+        sentWithToken: sendRes.tokenUsed,
+      }).catch(() => {});
     }
 
     // 8. Atualiza clientes do grupo

@@ -514,9 +514,6 @@ export async function executeRenewalPayment({
           dueDate: Timestamp.fromDate(newDueDate),
           renewalCount: (clientData.renewalCount || 0) + 1,
           lastRenewedAt: serverTimestamp(),
-          sentUpsellIds: [],
-          sentUpsell2Ids: [],
-          sentUpsellMenuIds: [],
           sentRemarketingIds: [],
           sentRenewalFollowUpIds: [],
         };
@@ -578,6 +575,13 @@ export async function executeRenewalPayment({
       const settings = configSnap.exists() ? (configSnap.data() as Settings) : {};
 
       let { primaryToken, fallbackToken } = resolveRenewalWhatsAppTokens(settings);
+
+      // Se a sessão registrou exatamente qual instância enviou a cobrança, prioriza SEMPRE esse mesmo número!
+      const billingSentToken = (session as any).sentWithToken?.trim() || '';
+      if (billingSentToken) {
+        fallbackToken = primaryToken && primaryToken !== billingSentToken ? primaryToken : fallbackToken;
+        primaryToken = billingSentToken;
+      }
 
       // Fallbacks adicionais de token se não estiverem configurados em config
       if (!primaryToken && !fallbackToken) {
@@ -750,7 +754,7 @@ export async function verifyPendingRenewalSessions(
   settings?: Settings
 ): Promise<number> {
   try {
-    const { checkPjPayTransaction, DEFAULT_PJPAY_TOKEN } = await import('./pjpay');
+    const { checkPjPayTransaction, fetchRecentPjPayPayments, DEFAULT_PJPAY_TOKEN } = await import('./pjpay');
     const { checkLinkinPayTransaction, DEFAULT_LINKINPAY_TOKEN } = await import('./linkinpay');
 
     const pjpayToken = settings?.pjpayToken?.trim() || DEFAULT_PJPAY_TOKEN;
@@ -762,7 +766,10 @@ export async function verifyPendingRenewalSessions(
       where('status', '==', 'pending')
     );
 
-    const snap = await getDocs(q);
+    const [snap, recentPjPayMap] = await Promise.all([
+      getDocs(q),
+      fetchRecentPjPayPayments(pjpayToken),
+    ]);
     if (snap.empty) return 0;
 
     const nowMs = Date.now();
@@ -781,7 +788,7 @@ export async function verifyPendingRenewalSessions(
 
       // Limpa sessões antigas (> 7 dias) sem PIX pago para manter a coleção leve e rápida
       if (!createdMs || nowMs - createdMs > maxAgeMs) {
-        if (expiredCleaned < 15) {
+        if (expiredCleaned < 20) {
           expiredCleaned++;
           await updateDoc(doc(db, 'renewal_sessions', session.id), {
             status: 'expired',
@@ -810,6 +817,25 @@ export async function verifyPendingRenewalSessions(
           (session.gateway === 'pjpay' && !String(txId).includes('-'));
 
         try {
+          if (isPjPay && recentPjPayMap.has(txId)) {
+            const cached = recentPjPayMap.get(txId)!;
+            if (cached.paid) {
+              console.log(
+                `[RenewalService:AutoVerify] PIX ${txId} da sessão ${session.id} (${session.clientName}) identificado como PAGO via lote PJPay! Executando renovação...`
+              );
+              await executeRenewalPayment({
+                sessionId: session.id,
+                pixTransactionId: txId,
+                amountInCents: cached.amount || session.totalAmountPaid,
+              });
+              confirmedCount++;
+              break;
+            }
+            if (cached.status === 'canceled' || cached.status === 'expired') {
+              continue;
+            }
+          }
+
           const checkRes = isPjPay
             ? await checkPjPayTransaction(txId, pjpayToken)
             : await checkLinkinPayTransaction(txId, linkinpayToken);
@@ -821,7 +847,7 @@ export async function verifyPendingRenewalSessions(
             await executeRenewalPayment({
               sessionId: session.id,
               pixTransactionId: txId,
-              amountInCents: session.totalAmountPaid,
+              amountInCents: checkRes.amount || session.totalAmountPaid,
             });
             confirmedCount++;
             break;
