@@ -62,12 +62,14 @@ export async function GET(req: NextRequest) {
 
             if (checkRes.paid) {
               console.log(`[renewal/details] PIX ${txId} já pago ao reabrir sessão ${sessionId}! Renovando...`);
-              await executeRenewalPayment({
+              const execRes = await executeRenewalPayment({
                 sessionId,
                 pixTransactionId: txId,
                 amountInCents: session.totalAmountPaid,
               });
-              session.status = 'paid';
+              if (execRes.success) {
+                session.status = 'paid';
+              }
               break;
             }
           } catch {}
