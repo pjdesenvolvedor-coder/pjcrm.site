@@ -10,7 +10,7 @@ export async function register() {
     const runServerCron = async () => {
       try {
         const { GET } = await import('@/app/api/cron/run/route');
-        const origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://pjcrm.site';
+        const origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.pjcrm.site';
         await GET(new Request(`${origin}/api/cron/run`));
       } catch (err: any) {
         console.warn('[ServerCron] Erro no ciclo automático:', err?.message || err);

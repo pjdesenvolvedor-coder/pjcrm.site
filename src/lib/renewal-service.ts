@@ -21,6 +21,15 @@ import type { Client, RenewalSession, Settings } from './types';
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const processingSessions = new Set<string>();
+const recentlyCompletedSessions = new Map<string, number>();
+
+function normalizeOriginUrl(originUrl?: string): string {
+  const raw = (originUrl || 'https://www.pjcrm.site').trim().replace(/\/+$/, '');
+  if (raw === 'https://pjcrm.site' || raw === 'http://pjcrm.site') {
+    return 'https://www.pjcrm.site';
+  }
+  return raw;
+}
 
 export function getCanonicalPhone(phone: string): string {
   if (!phone) return '';
@@ -237,7 +246,7 @@ export async function sendWhatsAppButtonWithFallback({
 export async function getOrCreateRenewalSession(
   userId: string,
   clients: Client[],
-  originUrl = 'https://pjcrm.site',
+  originUrl = 'https://www.pjcrm.site',
   forceNew = false,
   isTest = false
 ): Promise<{ session: RenewalSession; link: string }> {
@@ -245,6 +254,7 @@ export async function getOrCreateRenewalSession(
     throw new Error('Nenhum cliente informado para criar a sessão de renovação');
   }
 
+  const normalizedOrigin = normalizeOriginUrl(originUrl);
   const primaryClient = clients[0];
   const canonical = getCanonicalPhone(primaryClient.phone);
 
@@ -262,7 +272,8 @@ export async function getOrCreateRenewalSession(
   }));
 
   if (!forceNew) {
-    // Procura sessão ativa recente para este telefone (últimas 24h e status 'pending')
+    // Procura sessão ativa recente para este telefone (últimos 7 dias e status 'pending')
+    // Assim cobrança inicial + todas as etapas de remarketing/upsell/downsell compartilham a mesma sessão!
     const q = query(
       sessionsRef,
       where('userId', '==', userId),
@@ -272,34 +283,46 @@ export async function getOrCreateRenewalSession(
 
     try {
       const existingSnap = await getDocs(q);
-      for (const d of existingSnap.docs) {
-        const data = d.data() as RenewalSession;
-        const createdMs = data.createdAt?.toMillis
-          ? data.createdAt.toMillis()
-          : data.createdAt?.seconds
-          ? data.createdAt.seconds * 1000
-          : 0;
-        if (now - createdMs < 24 * 60 * 60 * 1000) {
-          // Garante que todas as assinaturas enviadas agora estejam sincronizadas na sessão reutilizada
-          const newClientIds = clients.map((c) => c.id);
-          const existingIds = Array.isArray(data.clientIds) ? data.clientIds : [];
-          const hasDiff =
-            newClientIds.length !== existingIds.length ||
-            newClientIds.some((id) => !existingIds.includes(id));
+      const validDocs = existingSnap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<RenewalSession, 'id'>) } as RenewalSession))
+        .filter((data) => {
+          const createdMs = data.createdAt?.toMillis
+            ? data.createdAt.toMillis()
+            : data.createdAt?.seconds
+            ? data.createdAt.seconds * 1000
+            : 0;
+          return createdMs > 0 && now - createdMs < 7 * 24 * 60 * 60 * 1000;
+        })
+        .sort((a, b) => {
+          // Prioriza sessão que já possui PIX gerado, e depois a mais recente
+          const aHasPix = Boolean(a.pixTransactionId || (a.pixTransactionIds && a.pixTransactionIds.length > 0)) ? 1 : 0;
+          const bHasPix = Boolean(b.pixTransactionId || (b.pixTransactionIds && b.pixTransactionIds.length > 0)) ? 1 : 0;
+          if (aHasPix !== bHasPix) return bHasPix - aHasPix;
+          const aMs = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds || 0) * 1000;
+          const bMs = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds || 0) * 1000;
+          return bMs - aMs;
+        });
 
-          if (hasDiff) {
-            await updateDoc(doc(db, 'renewal_sessions', d.id), {
-              clientIds: newClientIds,
-              subscriptions,
-              clientName: primaryClient.name,
-            }).catch(() => {});
-          }
+      if (validDocs.length > 0) {
+        const chosen = validDocs[0];
+        const newClientIds = clients.map((c) => c.id);
+        const existingIds = Array.isArray(chosen.clientIds) ? chosen.clientIds : [];
+        const hasDiff =
+          newClientIds.length !== existingIds.length ||
+          newClientIds.some((id) => !existingIds.includes(id));
 
-          return {
-            session: { ...data, id: d.id, clientIds: newClientIds, subscriptions },
-            link: `${originUrl}/renovar/${d.id}`,
-          };
+        if (hasDiff) {
+          await updateDoc(doc(db, 'renewal_sessions', chosen.id), {
+            clientIds: newClientIds,
+            subscriptions,
+            clientName: primaryClient.name,
+          }).catch(() => {});
         }
+
+        return {
+          session: { ...chosen, clientIds: newClientIds, subscriptions },
+          link: `${normalizedOrigin}/renovar/${chosen.id}`,
+        };
       }
     } catch (e) {
       console.warn('[RenewalService] Erro ao buscar sessões existentes:', e);
@@ -327,7 +350,7 @@ export async function getOrCreateRenewalSession(
 
   return {
     session: sessionData,
-    link: `${originUrl}/renovar/${sessionId}`,
+    link: `${normalizedOrigin}/renovar/${sessionId}`,
   };
 }
 
@@ -347,9 +370,14 @@ export async function executeRenewalPayment({
   renewedClientIds?: string[];
   reportedIssues?: { clientId: string; subscriptionName: string }[];
 }): Promise<{ success: boolean; renewedCount: number; messageSent: boolean; error?: string }> {
-  // 1. Trava em memória para chamadas simultâneas na mesma instância
+  // 1. Trava em memória para chamadas simultâneas ou recém-concluídas na mesma instância
   if (processingSessions.has(sessionId)) {
     console.log(`[RenewalService] Sessão ${sessionId} já está em processamento simultâneo nesta instância. Ignorando chamada duplicada.`);
+    return { success: true, renewedCount: 0, messageSent: true };
+  }
+
+  const lastCompletedMs = recentlyCompletedSessions.get(sessionId) || 0;
+  if (lastCompletedMs > 0 && Date.now() - lastCompletedMs < 120000) {
     return { success: true, renewedCount: 0, messageSent: true };
   }
 
@@ -358,73 +386,94 @@ export async function executeRenewalPayment({
   try {
     const sessionDocRef = doc(db, 'renewal_sessions', sessionId);
 
-    // 2. Transação atômica no Firestore: garante que se o Webhook e o Polling do navegador
-    // dispararem no mesmo milissegundo, APENAS UM deles reivindica a sessão e envia a mensagem!
-    let claimedSession: RenewalSession | null = null;
-    let alreadyProcessed = false;
-
-    try {
-      await runTransaction(db, async (txn) => {
-        const snap = await txn.get(sessionDocRef);
-        if (!snap.exists()) {
-          throw new Error('SESSION_NOT_FOUND');
-        }
-        const data = snap.data() as RenewalSession & { processingPayment?: boolean; messageSent?: boolean };
-
-        if (
-          data.status === 'paid' ||
-          Boolean(data.paidAt) ||
-          data.processingPayment === true ||
-          data.messageSent === true
-        ) {
-          alreadyProcessed = true;
-          claimedSession = data;
-          return;
-        }
-
-        const effectiveIssues =
-          reportedIssues && reportedIssues.length > 0 ? reportedIssues : data.reportedIssues || [];
-        const effectiveTargets =
-          renewedClientIds && renewedClientIds.length > 0
-            ? renewedClientIds
-            : data.renewedClientIds && data.renewedClientIds.length > 0
-            ? data.renewedClientIds
-            : data.clientIds;
-
-        // Marca IMEDIATAMENTE dentro da transação como 'paid' e 'processingPayment: true'
-        txn.update(sessionDocRef, {
-          status: 'paid',
-          processingPayment: true,
-          messageSent: true,
-          paidAt: serverTimestamp(),
-          pixTransactionId: pixTransactionId || data.pixTransactionId || null,
-          totalAmountPaid: amountInCents || data.totalAmountPaid || 0,
-          renewedClientIds: effectiveTargets,
-          reportedIssues: effectiveIssues,
-          hasSupportRequest: effectiveIssues.length > 0,
-        });
-
-        claimedSession = data;
-      });
-    } catch (txnErr: any) {
-      if (txnErr?.message === 'SESSION_NOT_FOUND') {
-        return { success: false, renewedCount: 0, messageSent: false, error: 'Sessão não encontrada' };
-      }
-      console.warn(`[RenewalService] Conflito de transação na sessão ${sessionId} (provável chamada concorrente):`, txnErr?.message);
-      return { success: true, renewedCount: 0, messageSent: true };
+    // 2. Reivindicação rápida e resiliente via getDoc + updateDoc + claimId (sem runTransaction para nunca travar por RESOURCE_EXHAUSTED)
+    const snap = await getDoc(sessionDocRef);
+    if (!snap.exists()) {
+      return { success: false, renewedCount: 0, messageSent: false, error: 'Sessão não encontrada' };
     }
 
-    if (alreadyProcessed || !claimedSession) {
+    const data = snap.data() as RenewalSession & {
+      processingPayment?: boolean;
+      messageSent?: boolean;
+      claimId?: string;
+    };
+
+    if (
+      data.status === 'paid' ||
+      Boolean(data.paidAt) ||
+      data.processingPayment === true ||
+      data.messageSent === true
+    ) {
+      recentlyCompletedSessions.set(sessionId, Date.now());
       console.log(`[RenewalService] Sessão ${sessionId} já processada/confirmada anteriormente. Evitando mensagem duplicada.`);
       return {
         success: true,
-        renewedCount: (claimedSession as RenewalSession | null)?.renewedClientIds?.length || 0,
+        renewedCount: data.renewedClientIds?.length || 0,
         messageSent: true,
       };
     }
 
-    const session = claimedSession as RenewalSession;
+    const effectiveIssues =
+      reportedIssues && reportedIssues.length > 0 ? reportedIssues : data.reportedIssues || [];
+    const effectiveTargets =
+      renewedClientIds && renewedClientIds.length > 0
+        ? renewedClientIds
+        : data.renewedClientIds && data.renewedClientIds.length > 0
+        ? data.renewedClientIds
+        : data.clientIds;
+
+    const myClaimId = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    await updateDoc(sessionDocRef, {
+      status: 'paid',
+      processingPayment: true,
+      messageSent: true,
+      claimId: myClaimId,
+      paidAt: serverTimestamp(),
+      pixTransactionId: pixTransactionId || data.pixTransactionId || null,
+      totalAmountPaid: amountInCents || data.totalAmountPaid || 0,
+      renewedClientIds: effectiveTargets,
+      reportedIssues: effectiveIssues,
+      hasSupportRequest: effectiveIssues.length > 0,
+    });
+
+    // Pequena verificação de concorrência entre instâncias serverless (200ms)
+    await new Promise((r) => setTimeout(r, 200));
+    const verifySnap = await getDoc(sessionDocRef);
+    const verifyData = verifySnap.data() as any;
+    if (verifyData?.claimId && verifyData.claimId !== myClaimId) {
+      console.log(`[RenewalService] Outra instância assumiu a sessão ${sessionId} simultaneamente. Abortando envio duplicado.`);
+      return {
+        success: true,
+        renewedCount: effectiveTargets?.length || 0,
+        messageSent: true,
+      };
+    }
+
+    recentlyCompletedSessions.set(sessionId, Date.now());
+    const session = data as RenewalSession;
     const userId = session.userId;
+
+    // Fecha também quaisquer sessões irmãs pendentes do mesmo cliente/telefone para não ficarem órfãs
+    if (session.canonicalPhone) {
+      try {
+        const siblingQuery = query(
+          collection(db, 'renewal_sessions'),
+          where('userId', '==', userId),
+          where('canonicalPhone', '==', session.canonicalPhone),
+          where('status', '==', 'pending')
+        );
+        const siblingSnap = await getDocs(siblingQuery);
+        for (const sibDoc of siblingSnap.docs) {
+          if (sibDoc.id !== sessionId) {
+            await updateDoc(doc(db, 'renewal_sessions', sibDoc.id), {
+              status: 'paid',
+              paidAt: serverTimestamp(),
+            }).catch(() => {});
+          }
+        }
+      } catch {}
+    }
 
     const effectiveReportedIssues =
       reportedIssues && reportedIssues.length > 0 ? reportedIssues : session.reportedIssues || [];
@@ -717,8 +766,9 @@ export async function verifyPendingRenewalSessions(
     if (snap.empty) return 0;
 
     const nowMs = Date.now();
-    const maxAgeMs = 72 * 60 * 60 * 1000; // 72 horas
+    const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 dias (cobre todo o funil de remarketing/upsell/downsell)
     let confirmedCount = 0;
+    let expiredCleaned = 0;
 
     for (const d of snap.docs) {
       const session = { id: d.id, ...d.data() } as RenewalSession;
@@ -729,9 +779,19 @@ export async function verifyPendingRenewalSessions(
         ? session.createdAt.seconds * 1000
         : 0;
 
+      // Limpa sessões antigas (> 7 dias) sem PIX pago para manter a coleção leve e rápida
+      if (!createdMs || nowMs - createdMs > maxAgeMs) {
+        if (expiredCleaned < 15) {
+          expiredCleaned++;
+          await updateDoc(doc(db, 'renewal_sessions', session.id), {
+            status: 'expired',
+          }).catch(() => {});
+        }
+        continue;
+      }
+
       // Só verifica cobranças feitas a partir de agora (ignora sessões passadas)
-      if (!createdMs || createdMs < RENEWAL_FEATURES_START_MS) continue;
-      if (nowMs - createdMs > maxAgeMs) continue;
+      if (createdMs < RENEWAL_FEATURES_START_MS) continue;
 
       const txCandidates = Array.from(
         new Set(

@@ -72,8 +72,9 @@ export async function POST(req: NextRequest) {
       totalCents = 2500; // Fallback mínimo R$ 25,00
     }
 
-    // Monta webhook_url do nosso próprio servidor
-    const host = req.headers.get('host') || 'pjcrm.site';
+    // Monta webhook_url do nosso próprio servidor (força www.pjcrm.site em produção para evitar 308 Redirect em POST)
+    const rawHost = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'www.pjcrm.site';
+    const host = rawHost === 'pjcrm.site' ? 'www.pjcrm.site' : rawHost;
     const proto = host.includes('localhost') ? 'http' : 'https';
     const webhookUrl = `${proto}://${host}/api/renewal-webhook?sessionId=${sessionId}&gateway=${chosenGateway}`;
 

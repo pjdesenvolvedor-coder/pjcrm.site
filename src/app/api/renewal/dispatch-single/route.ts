@@ -89,7 +89,8 @@ export async function POST(req: NextRequest) {
     }
 
     const primaryClient = clientGroup[0];
-    const origin = originUrl || req.nextUrl.origin || 'https://pjcrm.site';
+    const rawOrigin = originUrl || req.nextUrl.origin || 'https://www.pjcrm.site';
+    const origin = rawOrigin === 'https://pjcrm.site' ? 'https://www.pjcrm.site' : rawOrigin;
 
     // Se for disparo de etapa de remarketing e o cliente já estiver Ativo (já renovou), cancela envio imediatamente
     if (followUpStepId && clientGroup.every((c) => c.status === 'Ativo')) {

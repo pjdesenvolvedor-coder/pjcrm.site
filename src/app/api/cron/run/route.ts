@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, runTransaction, Timestamp, arrayUnion } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, getDoc, setDoc, updateDoc, doc, Timestamp, arrayUnion } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { format, addDays } from 'date-fns';
 import type { Client, Settings, UserProfile, ScheduledMessage, UpsellConfig, UpsellMenuConfig } from '@/lib/types';
@@ -12,9 +12,17 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const userLocks = new Map<string, number>();
 
+function normalizeOriginUrl(rawOrigin: string): string {
+    const clean = (rawOrigin || 'https://www.pjcrm.site').trim().replace(/\/+$/, '');
+    if (clean === 'https://pjcrm.site' || clean === 'http://pjcrm.site') {
+        return 'https://www.pjcrm.site';
+    }
+    return clean;
+}
+
 function getCanonicalPhone(phone: string): string {
     if (!phone) return '';
-    const digits = phone.replace(/\D/g, '');
+    const digits = String(phone).replace(/\D/g, '');
     if (!digits) return '';
     let local = (digits.startsWith('55') && digits.length >= 12) ? digits.slice(2) : digits;
     if (local.length === 11 && local[2] === '9') {
@@ -85,39 +93,41 @@ export async function GET(request: Request) {
     try {
         const usersSnapshot = await getDocs(collection(db, 'users'));
         const now = new Date();
-        const originUrl = new URL(request.url).origin;
+        const originUrl = normalizeOriginUrl(new URL(request.url).origin);
         const QUEUE_LIMIT = 20;
 
         for (const userDoc of usersSnapshot.docs) {
             const userId = userDoc.id;
 
-            // Trava em memoria: evita chamadas duplicadas em menos de 2s
+            // Trava em memoria: evita chamadas duplicadas em menos de 15s
             const nowMs = Date.now();
             const lastUserRun = userLocks.get(userId) || 0;
-            if (nowMs - lastUserRun < 2000) continue;
+            if (Math.abs(nowMs - lastUserRun) < 15000) continue;
             userLocks.set(userId, nowMs);
-
-            // Trava distribuida via Firestore: bloqueia chamadas concorrentes entre servidores
-            const cronLockRef = doc(db, 'users', userId, 'locks', 'cron_lock');
-            let isUserLockAcquired = false;
-            try {
-                await runTransaction(db, async (txn) => {
-                    const lockSnap = await txn.get(cronLockRef);
-                    const lastRunMs = lockSnap.exists() ? (lockSnap.data()?.lastRunMs || 0) : 0;
-                    if (nowMs - lastRunMs < 2000) throw new Error('LockActive');
-                    txn.set(cronLockRef, { lastRunMs: nowMs, updatedVia: 'cron' }, { merge: true });
-                    isUserLockAcquired = true;
-                });
-            } catch (e) { isUserLockAcquired = false; }
-
-            if (!isUserLockAcquired) continue;
 
             const userProfile = userDoc.data() as UserProfile;
             if (userProfile.role !== 'Admin' && userProfile.subscriptionEndDate && userProfile.subscriptionEndDate.toDate() < now) continue;
 
-            const configSnap = await getDocs(collection(db, 'users', userId, 'settings'));
-            const specificConfig = configSnap.docs.find(d => d.id === 'config');
-            if (!specificConfig || !specificConfig.exists()) continue;
+            // Trava distribuida leve via getDoc + setDoc (sem runTransaction para nunca travar por RESOURCE_EXHAUSTED)
+            const cronLockRef = doc(db, 'users', userId, 'locks', 'cron_lock');
+            let isUserLockAcquired = true;
+            try {
+                const lockSnap = await getDoc(cronLockRef);
+                const lastRunMs = lockSnap.exists() ? (lockSnap.data()?.lastRunMs || 0) : 0;
+                if (lastRunMs > 0 && Math.abs(nowMs - lastRunMs) < 15000) {
+                    isUserLockAcquired = false;
+                } else {
+                    await setDoc(cronLockRef, { lastRunMs: nowMs, updatedVia: 'cron' }, { merge: true });
+                }
+            } catch {
+                // Se falhar leitura/escrita do lock, segue com a trava em memória
+                isUserLockAcquired = true;
+            }
+
+            if (!isUserLockAcquired) continue;
+
+            const specificConfig = await getDoc(doc(db, 'users', userId, 'settings', 'config'));
+            if (!specificConfig.exists()) continue;
             const settings = specificConfig.data() as Settings;
 
             /* --- 0. VERIFICAR AUTOMATICAMENTE SESSÕES PIX DE RENOVAÇÃO PENDENTES --- */
@@ -169,17 +179,13 @@ export async function GET(request: Request) {
                         shouldRunAutoRenewalToday = false;
                         try {
                             const configDocRef = doc(db, 'users', userId, 'settings', 'config');
-                            await runTransaction(db, async (txn) => {
-                                txn.update(configDocRef, { lastAutoRenewalRunDate: todayDateBrasilia });
-                            });
+                            await updateDoc(configDocRef, { lastAutoRenewalRunDate: todayDateBrasilia });
                         } catch (e) {}
                     } else {
                         shouldRunAutoRenewalToday = true;
                         try {
                             const configDocRef = doc(db, 'users', userId, 'settings', 'config');
-                            await runTransaction(db, async (txn) => {
-                                txn.update(configDocRef, { lastAutoRenewalRunDate: todayDateBrasilia });
-                            });
+                            await updateDoc(configDocRef, { lastAutoRenewalRunDate: todayDateBrasilia });
                         } catch (e) {}
                     }
                 }
@@ -204,13 +210,11 @@ export async function GET(request: Request) {
                     for (const client of clientGroup) {
                         const ref = doc(db, 'users', userId, 'clients', client.id);
                         try {
-                            await runTransaction(db, async (txn) => {
-                                const snap = await txn.get(ref);
-                                if (snap.exists() && snap.data()?.status === 'Ativo') {
-                                    txn.update(ref, { status: 'Vencido' });
-                                    newlyMarkedClientIds.push(client.id);
-                                }
-                            });
+                            const snap = await getDoc(ref);
+                            if (snap.exists() && snap.data()?.status === 'Ativo') {
+                                await updateDoc(ref, { status: 'Vencido' });
+                                newlyMarkedClientIds.push(client.id);
+                            }
                         } catch (e) {}
                     }
 
@@ -302,13 +306,11 @@ export async function GET(request: Request) {
                             for (const client of clientGroup) {
                                 try {
                                     const ref = doc(db, 'users', userId, 'clients', client.id);
-                                    await runTransaction(db, async (txn) => {
-                                        txn.update(ref, {
-                                            lastBilledDate: todayDateBrasilia,
-                                            lastBilledAt: Timestamp.now(),
-                                            sentRenewalFollowUpIds: [],
-                                            status: 'Vencido',
-                                        });
+                                    await updateDoc(ref, {
+                                        lastBilledDate: todayDateBrasilia,
+                                        lastBilledAt: Timestamp.now(),
+                                        sentRenewalFollowUpIds: [],
+                                        status: 'Vencido',
                                     });
                                 } catch (e) {}
                             }
@@ -369,20 +371,18 @@ export async function GET(request: Request) {
 
                         let markedInDb = false;
                         try {
-                            await runTransaction(db, async (txn) => {
-                                const snap = await txn.get(clientDocRef);
-                                if (!snap.exists()) throw new Error('DocNotFound');
+                            const snap = await getDoc(clientDocRef);
+                            if (snap.exists()) {
                                 const d = snap.data();
                                 const e1 = Array.isArray(d?.sentUpsellIds) ? d.sentUpsellIds as string[] : [];
                                 const e2 = Array.isArray(d?.sentUpsell2Ids) ? d.sentUpsell2Ids as string[] : [];
-                                if ([...e1, ...e2].includes(ruleId)) throw new Error('AlreadySent');
-                                txn.update(clientDocRef, { sentUpsellIds: Array.from(new Set([...e1, ruleId])) });
-                                markedInDb = true;
-                            });
-                        } catch (e: any) {
-                            if (e?.message !== 'AlreadySent' && e?.message !== 'DocNotFound') {
-                                console.error(`[upsell] Transacao falhou: clientId=${client.id} ruleId=${ruleId}:`, e?.message);
+                                if (![...e1, ...e2].includes(ruleId)) {
+                                    await updateDoc(clientDocRef, { sentUpsellIds: Array.from(new Set([...e1, ruleId])) });
+                                    markedInDb = true;
+                                }
                             }
+                        } catch (e: any) {
+                            console.error(`[upsell] Falha ao atualizar clientId=${client.id} ruleId=${ruleId}:`, e?.message);
                         }
 
                         if (markedInDb) {
@@ -456,19 +456,17 @@ export async function GET(request: Request) {
 
                         let markedMenu = false;
                         try {
-                            await runTransaction(db, async (txn) => {
-                                const snap = await txn.get(clientDocRef);
-                                if (!snap.exists()) throw new Error('DocNotFound');
+                            const snap = await getDoc(clientDocRef);
+                            if (snap.exists()) {
                                 const d = snap.data();
                                 const existing = Array.isArray(d?.sentUpsellMenuIds) ? d.sentUpsellMenuIds as string[] : [];
-                                if (existing.includes(ruleId)) throw new Error('AlreadySent');
-                                txn.update(clientDocRef, { sentUpsellMenuIds: Array.from(new Set([...existing, ruleId])) });
-                                markedMenu = true;
-                            });
-                        } catch (e: any) {
-                            if (e?.message !== 'AlreadySent' && e?.message !== 'DocNotFound') {
-                                console.error(`[upsell-menu] Transacao falhou: clientId=${client.id} ruleId=${ruleId}:`, e?.message);
+                                if (!existing.includes(ruleId)) {
+                                    await updateDoc(clientDocRef, { sentUpsellMenuIds: Array.from(new Set([...existing, ruleId])) });
+                                    markedMenu = true;
+                                }
                             }
+                        } catch (e: any) {
+                            console.error(`[upsell-menu] Falha ao atualizar clientId=${client.id} ruleId=${ruleId}:`, e?.message);
                         }
 
                         if (markedMenu) {
@@ -543,12 +541,11 @@ export async function GET(request: Request) {
                             const ref = doc(db, 'users', userId, 'clients', client.id);
                             let processed = false;
                             try {
-                                await runTransaction(db, async (txn) => {
-                                    const snap = await txn.get(ref);
-                                    if (snap.data()?.sentRemarketingIds?.includes(config.id)) throw new Error('Sent');
-                                    txn.update(ref, { sentRemarketingIds: arrayUnion(config.id) });
+                                const snap = await getDoc(ref);
+                                if (snap.exists() && !snap.data()?.sentRemarketingIds?.includes(config.id)) {
+                                    await updateDoc(ref, { sentRemarketingIds: arrayUnion(config.id) });
                                     processed = true;
-                                });
+                                }
                             } catch (e) {}
                             if (processed) {
                                 rmkDone++;
@@ -574,12 +571,11 @@ export async function GET(request: Request) {
                             const ref = doc(db, 'users', userId, 'clients', client.id);
                             let processed = false;
                             try {
-                                await runTransaction(db, async (txn) => {
-                                    const snap = await txn.get(ref);
-                                    if (snap.data()?.status !== 'Vencido' || snap.data()?.sentRemarketingIds?.includes(config.id)) throw new Error('Wait');
-                                    txn.update(ref, { sentRemarketingIds: arrayUnion(config.id) });
+                                const snap = await getDoc(ref);
+                                if (snap.exists() && snap.data()?.status === 'Vencido' && !snap.data()?.sentRemarketingIds?.includes(config.id)) {
+                                    await updateDoc(ref, { sentRemarketingIds: arrayUnion(config.id) });
                                     processed = true;
-                                });
+                                }
                             } catch (e) {}
                             if (processed) {
                                 rmkDone++;
@@ -641,6 +637,11 @@ export async function GET(request: Request) {
 
                         const elapsedMs = now.getTime() - billedAtMs;
 
+                        // Verifica quando foi enviado o último lembrete para evitar disparos simultâneos (ex: step_1, step_2 e step_3 no mesmo minuto)
+                        const lastFollowUpSentMs = Math.max(
+                            ...clientGroup.map((c) => getTimestampMs((c as any).lastRenewalFollowUpSentAt) || 0)
+                        );
+
                         for (const step of sortedSteps) {
                             if (followUpDone >= QUEUE_LIMIT) break;
 
@@ -655,37 +656,47 @@ export async function GET(request: Request) {
                             );
                             if (alreadyReceivedStep) continue;
 
+                            // Espaçamento mínimo entre etapas consecutivas (mínimo 2 horas se a etapa for em horas/dias, ou o próprio delay se em minutos)
+                            const minGapBetweenStepsMs = step.delayUnit === 'minutes'
+                                ? Math.min(requiredDelayMs, 15 * 60 * 1000)
+                                : 2 * 60 * 60 * 1000;
+                            if (lastFollowUpSentMs > 0 && (now.getTime() - lastFollowUpSentMs) < minGapBetweenStepsMs) {
+                                break;
+                            }
+
                             const primaryClient = clientGroup[0];
                             const primaryRef = doc(db, 'users', userId, 'clients', primaryClient.id);
                             let claimedStep = false;
 
                             try {
-                                await runTransaction(db, async (txn) => {
-                                    const snap = await txn.get(primaryRef);
-                                    if (!snap.exists()) throw new Error('NotFound');
+                                const snap = await getDoc(primaryRef);
+                                if (snap.exists()) {
                                     const data = snap.data() as Client;
-                                    if (data.status !== 'Vencido') throw new Error('AlreadyRenewed');
                                     const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
-                                    if (sentIds.includes(step.id)) throw new Error('AlreadySent');
-                                    txn.update(primaryRef, {
-                                        sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
-                                    });
-                                    claimedStep = true;
-                                });
+                                    if (data.status === 'Vencido' && !sentIds.includes(step.id)) {
+                                        await updateDoc(primaryRef, {
+                                            sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
+                                            lastRenewalFollowUpSentAt: Timestamp.now(),
+                                        });
+                                        claimedStep = true;
+                                    }
+                                }
                             } catch {}
 
                             if (claimedStep) {
                                 for (let i = 1; i < clientGroup.length; i++) {
                                     const otherRef = doc(db, 'users', userId, 'clients', clientGroup[i].id);
-                                    await runTransaction(db, async (txn) => {
-                                        const snap = await txn.get(otherRef);
-                                        if (!snap.exists()) return;
-                                        const data = snap.data() as Client;
-                                        const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
-                                        txn.update(otherRef, {
-                                            sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
-                                        });
-                                    }).catch(() => {});
+                                    try {
+                                        const snap = await getDoc(otherRef);
+                                        if (snap.exists()) {
+                                            const data = snap.data() as Client;
+                                            const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
+                                            await updateDoc(otherRef, {
+                                                sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
+                                                lastRenewalFollowUpSentAt: Timestamp.now(),
+                                            });
+                                        }
+                                    } catch {}
                                 }
 
                                 followUpDone++;
@@ -737,12 +748,10 @@ export async function GET(request: Request) {
                     const refMs = claimedMs || sendAtMs;
                     if (refMs > 0 && (now.getTime() - refMs > STALE_SENDING_MS)) {
                         const messageDocRef = doc(db, 'users', userId, 'scheduled_messages', msg.id);
-                        await runTransaction(db, async (txn) => {
-                            txn.update(messageDocRef, {
-                                status: 'Scheduled',
-                                claimedAt: null,
-                                errorReason: 'Destravado automaticamente por tempo excedido em envio.'
-                            });
+                        await updateDoc(messageDocRef, {
+                            status: 'Scheduled',
+                            claimedAt: null,
+                            errorReason: 'Destravado automaticamente por tempo excedido em envio.'
                         }).catch(console.error);
                         msg.status = 'Scheduled';
                     }
@@ -774,66 +783,61 @@ export async function GET(request: Request) {
                 // marca o documento duplicado como concluído sem enviar novamente no grupo!
                 if (sentGroupSigsInThisRun.has(sig) || recentlySentGroupSigs.has(sig)) {
                     try {
-                        await runTransaction(db, async (txn) => {
-                            const mSnap = await txn.get(messageDocRef);
-                            if (!mSnap.exists()) return;
+                        const mSnap = await getDoc(messageDocRef);
+                        if (mSnap.exists()) {
                             const mData = mSnap.data() as ScheduledMessage;
-                            if (mData.status !== 'Scheduled') return;
-                            if (mData.repeatDaily) {
-                                const baseDate = mData.sendAt?.toDate ? mData.sendAt.toDate() : now;
-                                txn.update(messageDocRef, {
-                                    sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
-                                    status: 'Scheduled',
-                                    claimedAt: null,
-                                    lastSentAt: Timestamp.now(),
-                                    lastSentDateKey: todayDateBrasilia,
-                                    retryCount: 0,
-                                    errorReason: null,
-                                });
-                            } else {
-                                txn.update(messageDocRef, {
-                                    status: 'Sent',
-                                    claimedAt: null,
-                                    lastSentAt: Timestamp.now(),
-                                    lastSentDateKey: todayDateBrasilia,
-                                    errorReason: null,
-                                });
+                            if (mData.status === 'Scheduled') {
+                                if (mData.repeatDaily) {
+                                    const baseDate = mData.sendAt?.toDate ? mData.sendAt.toDate() : now;
+                                    await updateDoc(messageDocRef, {
+                                        sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
+                                        status: 'Scheduled',
+                                        claimedAt: null,
+                                        lastSentAt: Timestamp.now(),
+                                        lastSentDateKey: todayDateBrasilia,
+                                        retryCount: 0,
+                                        errorReason: null,
+                                    });
+                                } else {
+                                    await updateDoc(messageDocRef, {
+                                        status: 'Sent',
+                                        claimedAt: null,
+                                        lastSentAt: Timestamp.now(),
+                                        lastSentDateKey: todayDateBrasilia,
+                                        errorReason: null,
+                                    });
+                                }
                             }
-                        });
+                        }
                     } catch {}
                     continue;
                 }
 
                 let processed = false;
                 try {
-                    await runTransaction(db, async (txn) => {
-                        const mSnap = await txn.get(messageDocRef);
-                        if (!mSnap.exists()) throw new Error('NotFound');
+                    const mSnap = await getDoc(messageDocRef);
+                    if (mSnap.exists()) {
                         const mData = mSnap.data() as ScheduledMessage;
-                        if (mData.status !== 'Scheduled') throw new Error('AlreadyClaimed');
-
-                        // Se for repetição diária e já enviou hoje, apenas avança para o próximo dia sem reenviar
-                        if (mData.repeatDaily && mData.lastSentDateKey === todayDateBrasilia) {
-                            const baseDate = mData.sendAt?.toDate ? mData.sendAt.toDate() : now;
-                            txn.update(messageDocRef, {
-                                sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
-                                status: 'Scheduled',
-                                claimedAt: null,
-                            });
-                            throw new Error('AlreadySentToday');
+                        if (mData.status === 'Scheduled') {
+                            if (mData.repeatDaily && mData.lastSentDateKey === todayDateBrasilia) {
+                                const baseDate = mData.sendAt?.toDate ? mData.sendAt.toDate() : now;
+                                await updateDoc(messageDocRef, {
+                                    sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
+                                    status: 'Scheduled',
+                                    claimedAt: null,
+                                });
+                            } else {
+                                const lastSentMs = mData.lastSentAt ? getTimestampMs(mData.lastSentAt) || 0 : 0;
+                                if (!(lastSentMs > 0 && (now.getTime() - lastSentMs) < 90000)) {
+                                    await updateDoc(messageDocRef, {
+                                        status: 'Sending',
+                                        claimedAt: Timestamp.now(),
+                                    });
+                                    processed = true;
+                                }
+                            }
                         }
-
-                        const lastSentMs = mData.lastSentAt ? getTimestampMs(mData.lastSentAt) || 0 : 0;
-                        if (lastSentMs > 0 && (now.getTime() - lastSentMs) < 90000) {
-                            throw new Error('RecentlySent');
-                        }
-
-                        txn.update(messageDocRef, {
-                            status: 'Sending',
-                            claimedAt: Timestamp.now(),
-                        });
-                        processed = true;
-                    });
+                    }
                 } catch (e) {}
 
                 if (processed) {
@@ -848,7 +852,7 @@ export async function GET(request: Request) {
                         if (response.ok) {
                             const baseDate = msg.sendAt?.toDate ? msg.sendAt.toDate() : now;
                             if (msg.repeatDaily) {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, {
+                                await updateDoc(messageDocRef, {
                                     sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)),
                                     status: 'Scheduled',
                                     claimedAt: null,
@@ -856,15 +860,15 @@ export async function GET(request: Request) {
                                     lastSentDateKey: todayDateBrasilia,
                                     retryCount: 0,
                                     errorReason: null,
-                                }));
+                                });
                             } else {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, {
+                                await updateDoc(messageDocRef, {
                                     status: 'Sent',
                                     claimedAt: null,
                                     lastSentAt: Timestamp.now(),
                                     lastSentDateKey: todayDateBrasilia,
                                     errorReason: null,
-                                }));
+                                });
                             }
                         } else {
                             sentGroupSigsInThisRun.delete(sig);
@@ -873,9 +877,9 @@ export async function GET(request: Request) {
                             const retries = msg.retryCount || 0;
                             const baseDate = msg.sendAt?.toDate ? msg.sendAt.toDate() : now;
                             if (retries < 1) {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Scheduled', claimedAt: null, sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)), retryCount: retries + 1, errorReason: errorMsg }));
+                                await updateDoc(messageDocRef, { status: 'Scheduled', claimedAt: null, sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)), retryCount: retries + 1, errorReason: errorMsg });
                             } else {
-                                await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error', claimedAt: null, errorReason: errorMsg }));
+                                await updateDoc(messageDocRef, { status: 'Error', claimedAt: null, errorReason: errorMsg });
                             }
                         }
                     } catch (fetchErr: any) {
@@ -884,9 +888,9 @@ export async function GET(request: Request) {
                         const retries = msg.retryCount || 0;
                         const baseDate = msg.sendAt?.toDate ? msg.sendAt.toDate() : now;
                         if (retries < 1) {
-                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Scheduled', claimedAt: null, sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)), retryCount: retries + 1, errorReason: fetchErr.message }));
+                            await updateDoc(messageDocRef, { status: 'Scheduled', claimedAt: null, sendAt: Timestamp.fromDate(getNextFutureDailyDate(baseDate, now)), retryCount: retries + 1, errorReason: fetchErr.message });
                         } else {
-                            await runTransaction(db, async (txn) => txn.update(messageDocRef, { status: 'Error', claimedAt: null, errorReason: fetchErr.message }));
+                            await updateDoc(messageDocRef, { status: 'Error', claimedAt: null, errorReason: fetchErr.message });
                         }
                     }
                 }
