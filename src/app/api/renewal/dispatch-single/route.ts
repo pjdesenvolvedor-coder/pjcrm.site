@@ -271,6 +271,7 @@ export async function POST(req: NextRequest) {
         if (followUpStep) {
           await updateDoc(clientRef, {
             sentRenewalFollowUpIds: arrayUnion(followUpStep.id),
+            lastRenewalFollowUpSentAt: serverTimestamp(),
           });
         } else {
           await updateDoc(clientRef, {

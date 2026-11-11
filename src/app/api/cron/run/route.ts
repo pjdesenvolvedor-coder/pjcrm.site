@@ -633,7 +633,9 @@ export async function GET(request: Request) {
                         return val * 60 * 1000;
                     };
 
-                    const sortedSteps = [...activeFollowUpSteps].sort((a, b) => getStepDelayMs(a) - getStepDelayMs(b));
+                    // O funil segue a ORDEM em que as etapas aparecem na tela (Etapa 1 → 2 → 3).
+                    // Cada atraso conta a partir do passo anterior: Etapa 1 = X após a cobrança, Etapa 2 = Y após a Etapa 1, etc.
+                    const orderedSteps = [...activeFollowUpSteps];
                     let followUpDone = 0;
 
                     for (const [, clientGroup] of unpaidByPhone.entries()) {
@@ -642,98 +644,86 @@ export async function GET(request: Request) {
                         const billedAtMs = Math.max(...clientGroup.map((c) => getTimestampMs(c.lastBilledAt) || 0));
                         if (!billedAtMs || billedAtMs < minBilledCutoffMs) continue;
 
-                        const elapsedMs = now.getTime() - billedAtMs;
-
-                        // Verifica quando foi enviado o último lembrete para evitar disparos simultâneos (ex: step_1, step_2 e step_3 no mesmo minuto)
                         const lastFollowUpSentMs = Math.max(
                             ...clientGroup.map((c) => getTimestampMs((c as any).lastRenewalFollowUpSentAt) || 0)
                         );
 
-                        for (const step of sortedSteps) {
-                            if (followUpDone >= QUEUE_LIMIT) break;
+                        const sentIdsInGroup = new Set<string>(
+                            clientGroup.flatMap((c) => (Array.isArray(c.sentRenewalFollowUpIds) ? c.sentRenewalFollowUpIds : []))
+                        );
 
-                            const stepCreatedMs = Number(step.createdAt) || 0;
-                            if (stepCreatedMs > 0 && billedAtMs < stepCreatedMs) continue;
+                        // Próxima etapa ainda não enviada (sempre UMA por vez, na ordem do funil)
+                        const step = orderedSteps.find((s) => {
+                            if (sentIdsInGroup.has(s.id)) return false;
+                            const stepCreatedMs = Number(s.createdAt) || 0;
+                            return !(stepCreatedMs > 0 && billedAtMs < stepCreatedMs);
+                        });
+                        if (!step) continue;
 
-                            const requiredDelayMs = getStepDelayMs(step);
-                            if (elapsedMs < requiredDelayMs) continue;
+                        // Âncora do relógio: cobrança (para a 1ª etapa) ou envio da etapa anterior (para as demais)
+                        const hasPreviousStepInThisCycle = sentIdsInGroup.size > 0 && lastFollowUpSentMs > billedAtMs;
+                        const anchorMs = hasPreviousStepInThisCycle ? lastFollowUpSentMs : billedAtMs;
+                        const requiredDelayMs = getStepDelayMs(step);
+                        if (now.getTime() - anchorMs < requiredDelayMs) continue;
 
-                            const alreadyReceivedStep = clientGroup.some(
-                                (c) => Array.isArray(c.sentRenewalFollowUpIds) && c.sentRenewalFollowUpIds.includes(step.id)
-                            );
-                            if (alreadyReceivedStep) continue;
+                        const primaryClient = clientGroup[0];
+                        const primaryRef = doc(db, 'users', userId, 'clients', primaryClient.id);
 
-                            // Espaçamento mínimo entre etapas consecutivas (mínimo 2 horas se a etapa for em horas/dias, ou o próprio delay se em minutos)
-                            const minGapBetweenStepsMs = step.delayUnit === 'minutes'
-                                ? Math.min(requiredDelayMs, 15 * 60 * 1000)
-                                : 2 * 60 * 60 * 1000;
-                            if (lastFollowUpSentMs > 0 && (now.getTime() - lastFollowUpSentMs) < minGapBetweenStepsMs) {
-                                break;
+                        // TRAVA ATÔMICA: só UMA instância/aba consegue enviar esta etapa deste ciclo de cobrança
+                        const { claimOnce } = await import('@/lib/firestore-claim');
+                        const wonClaim = await claimOnce(`followup_${userId}_${primaryClient.id}_${step.id}_${billedAtMs}`);
+                        if (!wonClaim) continue;
+
+                        // Confere o estado mais recente do cliente (pode ter renovado/recebido a etapa há instantes)
+                        let canSend = false;
+                        try {
+                            const snap = await getDoc(primaryRef);
+                            if (snap.exists()) {
+                                const data = snap.data() as Client;
+                                const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
+                                if (data.status === 'Vencido' && !sentIds.includes(step.id)) {
+                                    await updateDoc(primaryRef, {
+                                        sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
+                                        lastRenewalFollowUpSentAt: Timestamp.now(),
+                                    });
+                                    canSend = true;
+                                }
                             }
+                        } catch {}
 
-                            const primaryClient = clientGroup[0];
-                            const primaryRef = doc(db, 'users', userId, 'clients', primaryClient.id);
-                            let claimedStep = false;
-                            let shouldBreakSteps = false;
+                        if (!canSend) continue;
 
+                        for (let i = 1; i < clientGroup.length; i++) {
+                            const otherRef = doc(db, 'users', userId, 'clients', clientGroup[i].id);
                             try {
-                                const snap = await getDoc(primaryRef);
+                                const snap = await getDoc(otherRef);
                                 if (snap.exists()) {
                                     const data = snap.data() as Client;
                                     const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
-                                    const freshLastSentMs = getTimestampMs((data as any).lastRenewalFollowUpSentAt) || 0;
-                                    if (freshLastSentMs > 0 && (now.getTime() - freshLastSentMs) < minGapBetweenStepsMs) {
-                                        shouldBreakSteps = true;
-                                    } else if (data.status === 'Vencido' && !sentIds.includes(step.id)) {
-                                        await updateDoc(primaryRef, {
-                                            sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
-                                            lastRenewalFollowUpSentAt: Timestamp.now(),
-                                        });
-                                        claimedStep = true;
-                                    }
+                                    await updateDoc(otherRef, {
+                                        sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
+                                        lastRenewalFollowUpSentAt: Timestamp.now(),
+                                    });
                                 }
                             } catch {}
+                        }
 
-                            if (shouldBreakSteps) {
-                                break;
-                            }
+                        followUpDone++;
 
-                            if (claimedStep) {
-                                for (let i = 1; i < clientGroup.length; i++) {
-                                    const otherRef = doc(db, 'users', userId, 'clients', clientGroup[i].id);
-                                    try {
-                                        const snap = await getDoc(otherRef);
-                                        if (snap.exists()) {
-                                            const data = snap.data() as Client;
-                                            const sentIds = Array.isArray(data.sentRenewalFollowUpIds) ? data.sentRenewalFollowUpIds : [];
-                                            await updateDoc(otherRef, {
-                                                sentRenewalFollowUpIds: Array.from(new Set([...sentIds, step.id])),
-                                                lastRenewalFollowUpSentAt: Timestamp.now(),
-                                            });
-                                        }
-                                    } catch {}
-                                }
-
-                                followUpDone++;
-
-                                try {
-                                    await fetch(`${originUrl}/api/renewal/dispatch-single`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            userId,
-                                            clientIds: clientGroup.map((c) => c.id),
-                                            originUrl,
-                                            force: true,
-                                            followUpStepId: step.id,
-                                        }),
-                                    });
-                                } catch (followUpErr) {
-                                    console.error(`[cron:renewal-followup] Erro ao disparar etapa ${step.name}:`, followUpErr);
-                                }
-
-                                break;
-                            }
+                        try {
+                            await fetch(`${originUrl}/api/renewal/dispatch-single`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    userId,
+                                    clientIds: clientGroup.map((c) => c.id),
+                                    originUrl,
+                                    force: true,
+                                    followUpStepId: step.id,
+                                }),
+                            });
+                        } catch (followUpErr) {
+                            console.error(`[cron:renewal-followup] Erro ao disparar etapa ${step.name}:`, followUpErr);
                         }
                     }
                 }

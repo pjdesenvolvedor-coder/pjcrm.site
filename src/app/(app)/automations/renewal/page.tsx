@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { doc, collection, getDocs } from 'firebase/firestore';
@@ -55,104 +55,104 @@ import { cn } from '@/lib/utils';
 const DEFAULT_FOLLOWUP_STEPS: RenewalFollowUpStep[] = [
   {
     id: 'step_1',
-    name: '1º Lembrete • Esqueceu de Renovar?',
+    name: '1Âº Lembrete â€¢ Esqueceu de Renovar?',
     isActive: true,
     delayValue: 2,
     delayUnit: 'hours',
     message:
-      '⏳ *LEMBRETE DE RENOVAÇÃO*\n\n' +
-      'Olá *{cliente}*, vimos que você recebeu nossa mensagem mais cedo, mas ainda não identificamos a renovação da sua assinatura.\n\n' +
-      '📦 *Assinatura(s):* {assinaturas}\n' +
-      '💰 *Valor:* R$ {valor}\n\n' +
-      '👉 Para não correr o risco de ficar sem acesso hoje, clique no botão abaixo e renove em segundos via PIX automático:',
+      'â³ *LEMBRETE DE RENOVAÃ‡ÃƒO*\n\n' +
+      'OlÃ¡ *{cliente}*, vimos que vocÃª recebeu nossa mensagem mais cedo, mas ainda nÃ£o identificamos a renovaÃ§Ã£o da sua assinatura.\n\n' +
+      'ðŸ“¦ *Assinatura(s):* {assinaturas}\n' +
+      'ðŸ’° *Valor:* R$ {valor}\n\n' +
+      'ðŸ‘‰ Para nÃ£o correr o risco de ficar sem acesso hoje, clique no botÃ£o abaixo e renove em segundos via PIX automÃ¡tico:',
     includeRenewalButton: true,
     customButtonText: 'SIM, RENOVAR AGORA',
-    customFooterText: 'Liberação Instantânea • ⬇️Clique No Botão⬇️',
+    customFooterText: 'LiberaÃ§Ã£o InstantÃ¢nea â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸',
   },
   {
     id: 'step_2',
-    name: '2º Aviso • Evite a Suspensão do Acesso',
+    name: '2Âº Aviso â€¢ Evite a SuspensÃ£o do Acesso',
     isActive: true,
     delayValue: 6,
     delayUnit: 'hours',
     message:
-      '⚠️ *AVISO IMPORTANTE: ACESSO PRESTES A PAUSAR*\n\n' +
-      'Oi *{cliente}*! Passando para avisar que o sistema ainda não registrou o pagamento da sua assinatura *{assinaturas}*.\n\n' +
-      '🔒 Para evitar que sua tela seja bloqueada automaticamente pelo sistema, finalize sua renovação clicando no botão oficial abaixo:',
+      'âš ï¸ *AVISO IMPORTANTE: ACESSO PRESTES A PAUSAR*\n\n' +
+      'Oi *{cliente}*! Passando para avisar que o sistema ainda nÃ£o registrou o pagamento da sua assinatura *{assinaturas}*.\n\n' +
+      'ðŸ”’ Para evitar que sua tela seja bloqueada automaticamente pelo sistema, finalize sua renovaÃ§Ã£o clicando no botÃ£o oficial abaixo:',
     includeRenewalButton: true,
     customButtonText: 'MANTER MEU ACESSO ATIVO',
-    customFooterText: 'Evite o Bloqueio Automático • ⬇️Clique Abaixo⬇️',
+    customFooterText: 'Evite o Bloqueio AutomÃ¡tico â€¢ â¬‡ï¸Clique Abaixoâ¬‡ï¸',
   },
   {
     id: 'step_3',
-    name: '3º Aviso • Última Chamada (24h após cobrança)',
+    name: '3Âº Aviso â€¢ Ãšltima Chamada (24h apÃ³s cobranÃ§a)',
     isActive: true,
     delayValue: 24,
     delayUnit: 'hours',
     message:
-      '🚨 *ÚLTIMA CHAMADA PARA RENOVAÇÃO*\n\n' +
-      'Olá *{cliente}*, sua assinatura *{assinaturas}* está vencida e a vaga no grupo/conta será liberada para outro cliente em breve.\n\n' +
-      '⚡ Se você deseja continuar com seu acesso, clique no botão abaixo agora mesmo para renovar via PIX ou clique em "Não quero renovar" para encerrar:',
+      'ðŸš¨ *ÃšLTIMA CHAMADA PARA RENOVAÃ‡ÃƒO*\n\n' +
+      'OlÃ¡ *{cliente}*, sua assinatura *{assinaturas}* estÃ¡ vencida e a vaga no grupo/conta serÃ¡ liberada para outro cliente em breve.\n\n' +
+      'âš¡ Se vocÃª deseja continuar com seu acesso, clique no botÃ£o abaixo agora mesmo para renovar via PIX ou clique em "NÃ£o quero renovar" para encerrar:',
     includeRenewalButton: true,
     customButtonText: 'GARANTIR MINHA VAGA AGORA',
-    customFooterText: 'Última Chamada • ⬇️Escolha uma opção abaixo⬇️',
+    customFooterText: 'Ãšltima Chamada â€¢ â¬‡ï¸Escolha uma opÃ§Ã£o abaixoâ¬‡ï¸',
     includeCancelButton: true,
-    cancelButtonText: 'Não quero renovar',
+    cancelButtonText: 'NÃ£o quero renovar',
   },
 ];
 
 const FOLLOWUP_TEMPLATES = [
   {
-    label: '😊 Lembrete Amigável',
-    title: 'Lembrete Amigável',
+    label: 'ðŸ˜Š Lembrete AmigÃ¡vel',
+    title: 'Lembrete AmigÃ¡vel',
     message:
-      '⏳ *LEMBRETE DE RENOVAÇÃO*\n\n' +
-      'Olá *{cliente}*, tudo bem? Vimos que na correria do dia a dia você ainda não conseguiu finalizar a renovação da sua assinatura *{assinaturas}*.\n\n' +
-      '💰 *Valor:* R$ {valor}\n\n' +
-      '👉 Clique no botão abaixo para gerar seu PIX e renovar instantaneamente:',
+      'â³ *LEMBRETE DE RENOVAÃ‡ÃƒO*\n\n' +
+      'OlÃ¡ *{cliente}*, tudo bem? Vimos que na correria do dia a dia vocÃª ainda nÃ£o conseguiu finalizar a renovaÃ§Ã£o da sua assinatura *{assinaturas}*.\n\n' +
+      'ðŸ’° *Valor:* R$ {valor}\n\n' +
+      'ðŸ‘‰ Clique no botÃ£o abaixo para gerar seu PIX e renovar instantaneamente:',
     buttonText: 'SIM, RENOVAR AGORA',
   },
   {
-    label: '⚠️ Aviso de Suspensão',
+    label: 'âš ï¸ Aviso de SuspensÃ£o',
     title: 'Aviso de Bloqueio de Sinal',
     message:
-      '⚠️ *ATENÇÃO: ASSINATURA PENDENTE*\n\n' +
-      'Oi *{cliente}*! O sistema identificou que sua assinatura *{assinaturas}* permanece pendente de renovação.\n\n' +
-      '🔒 Para evitar a pausa automática do seu acesso, clique no botão abaixo e regularize em menos de 1 minuto:',
+      'âš ï¸ *ATENÃ‡ÃƒO: ASSINATURA PENDENTE*\n\n' +
+      'Oi *{cliente}*! O sistema identificou que sua assinatura *{assinaturas}* permanece pendente de renovaÃ§Ã£o.\n\n' +
+      'ðŸ”’ Para evitar a pausa automÃ¡tica do seu acesso, clique no botÃ£o abaixo e regularize em menos de 1 minuto:',
     buttonText: 'REGULARIZAR MEU ACESSO',
   },
   {
-    label: '🚨 Última Chamada / Vaga',
-    title: 'Última Chamada',
+    label: 'ðŸš¨ Ãšltima Chamada / Vaga',
+    title: 'Ãšltima Chamada',
     message:
-      '🚨 *ÚLTIMO AVISO DE RENOVAÇÃO*\n\n' +
-      'Olá *{cliente}*, como ainda não identificamos o pagamento de *{assinaturas}*, o sistema fará a remoção automática do acesso em breve.\n\n' +
-      '⚡ Quer manter sua assinatura ativa? Clique no botão abaixo agora mesmo:',
+      'ðŸš¨ *ÃšLTIMO AVISO DE RENOVAÃ‡ÃƒO*\n\n' +
+      'OlÃ¡ *{cliente}*, como ainda nÃ£o identificamos o pagamento de *{assinaturas}*, o sistema farÃ¡ a remoÃ§Ã£o automÃ¡tica do acesso em breve.\n\n' +
+      'âš¡ Quer manter sua assinatura ativa? Clique no botÃ£o abaixo agora mesmo:',
     buttonText: 'RENOVAR MINHA ASSINATURA',
   },
 ];
 
 const DEFAULT_SUCCESS_MESSAGE =
-  '🎉 *PAGAMENTO CONFIRMADO!*\n\n' +
-  'Olá *{cliente}*, identificamos seu pagamento PIX e sua renovação foi realizada com sucesso!\n\n' +
-  '📦 *Assinatura(s):* {assinaturas}\n' +
-  '📅 *Novo Vencimento:* {novo_vencimento}\n' +
-  '💰 *Valor Pago:* R$ {valor}\n' +
-  '⚡ *Status:* Ativo\n\n' +
-  'Obrigado pela preferência e bom entretenimento! 🚀';
+  'ðŸŽ‰ *PAGAMENTO CONFIRMADO!*\n\n' +
+  'OlÃ¡ *{cliente}*, identificamos seu pagamento PIX e sua renovaÃ§Ã£o foi realizada com sucesso!\n\n' +
+  'ðŸ“¦ *Assinatura(s):* {assinaturas}\n' +
+  'ðŸ“… *Novo Vencimento:* {novo_vencimento}\n' +
+  'ðŸ’° *Valor Pago:* R$ {valor}\n' +
+  'âš¡ *Status:* Ativo\n\n' +
+  'Obrigado pela preferÃªncia e bom entretenimento! ðŸš€';
 
 const DEFAULT_BILLING_MESSAGE =
-  'Olá *{cliente}*! Sua assinatura está próxima do vencimento.\n\n' +
-  '📦 *Assinatura(s):* {assinaturas}\n' +
-  '📅 *Vencimento:* {vencimento}\n\n' +
-  '👉 Para renovar com segurança via PIX e manter seu acesso ativo sem interrupções, clique no botão oficial abaixo:';
+  'OlÃ¡ *{cliente}*! Sua assinatura estÃ¡ prÃ³xima do vencimento.\n\n' +
+  'ðŸ“¦ *Assinatura(s):* {assinaturas}\n' +
+  'ðŸ“… *Vencimento:* {vencimento}\n\n' +
+  'ðŸ‘‰ Para renovar com seguranÃ§a via PIX e manter seu acesso ativo sem interrupÃ§Ãµes, clique no botÃ£o oficial abaixo:';
 
 const DEFAULT_SUPPORT_MESSAGE =
-  '🛠️ *SUPORTE PJ CONTAS - CHAMADO ABERTO*\n\n' +
-  'Olá *{cliente}*! Identificamos o seu relato de problema na assinatura *{assinatura}* ao renovar.\n\n' +
-  '✅ Seu pagamento PIX foi aprovado e sua assinatura já foi renovada com sucesso!\n' +
-  '🚨 O seu chamado de suporte já foi aberto automaticamente em nosso sistema. 🧑‍💻\n\n' +
-  'Nossa equipe técnica já foi notificada e em breve entrará em contato para verificar e resolver seu acesso com prioridade. Fique tranquilo(a)! 🤝✨';
+  'ðŸ› ï¸ *SUPORTE PJ CONTAS - CHAMADO ABERTO*\n\n' +
+  'OlÃ¡ *{cliente}*! Identificamos o seu relato de problema na assinatura *{assinatura}* ao renovar.\n\n' +
+  'âœ… Seu pagamento PIX foi aprovado e sua assinatura jÃ¡ foi renovada com sucesso!\n' +
+  'ðŸš¨ O seu chamado de suporte jÃ¡ foi aberto automaticamente em nosso sistema. ðŸ§‘â€ðŸ’»\n\n' +
+  'Nossa equipe tÃ©cnica jÃ¡ foi notificada e em breve entrarÃ¡ em contato para verificar e resolver seu acesso com prioridade. Fique tranquilo(a)! ðŸ¤âœ¨';
 
 export default function RenewalAutomationPage() {
   const { firestore } = useFirebase();
@@ -181,21 +181,21 @@ export default function RenewalAutomationPage() {
   const [billingMessage, setBillingMessage] = useState(DEFAULT_BILLING_MESSAGE);
   const [supportMessage, setSupportMessage] = useState(DEFAULT_SUPPORT_MESSAGE);
   const [buttonText, setButtonText] = useState('SIM, RENOVAR AGORA');
-  const [footerText, setFooterText] = useState('Entrega Automática • ⬇️Clique No Botão⬇️');
+  const [footerText, setFooterText] = useState('Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸');
   const [renewalPixGateway, setRenewalPixGateway] = useState<'pjpay' | 'linkinpay'>('pjpay');
   const [pjpayToken, setPjpayToken] = useState(DEFAULT_PJPAY_TOKEN);
   const [linkinpayToken, setLinkinpayToken] = useState(DEFAULT_LINKINPAY_TOKEN);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Estados do Remarketing Pós-Cobrança (Clientes que não renovaram)
+  // Estados do Remarketing PÃ³s-CobranÃ§a (Clientes que nÃ£o renovaram)
   const [isRenewalFollowUpActive, setIsRenewalFollowUpActive] = useState(true);
   const [followUpSteps, setFollowUpSteps] = useState<RenewalFollowUpStep[]>(DEFAULT_FOLLOWUP_STEPS);
   const [activeStepTab, setActiveStepTab] = useState<string>('step_1');
   const [dispatchingFollowUpKey, setDispatchingFollowUpKey] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState<number>(Date.now());
 
-  // Instância de WhatsApp escolhida para renovação e status de conexão
+  // InstÃ¢ncia de WhatsApp escolhida para renovaÃ§Ã£o e status de conexÃ£o
   const [renewalZapInstance, setRenewalZapInstance] = useState<'main' | 'billing' | 'auto'>('auto');
   const [hubStatus, setHubStatus] = useState<{ status: 'idle' | 'checking' | 'connected' | 'disconnected'; name?: string; pic?: string }>({ status: 'checking' });
   const [billingStatus, setBillingStatus] = useState<{ status: 'idle' | 'checking' | 'connected' | 'disconnected'; name?: string; pic?: string }>({ status: 'checking' });
@@ -248,7 +248,7 @@ export default function RenewalAutomationPage() {
       setBillingMessage(settings.renewalBillingMessage || DEFAULT_BILLING_MESSAGE);
       setSupportMessage(settings.renewalSupportMessage || settings.supportStartedMessage || DEFAULT_SUPPORT_MESSAGE);
       setButtonText(settings.renewalButtonText || 'SIM, RENOVAR AGORA');
-      setFooterText(settings.renewalFooterText || 'Entrega Automática • ⬇️Clique No Botão⬇️');
+      setFooterText(settings.renewalFooterText || 'Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸');
       setRenewalPixGateway(settings.renewalPixGateway || 'pjpay');
       setPjpayToken(settings.pjpayToken || DEFAULT_PJPAY_TOKEN);
       setLinkinpayToken(settings.linkinpayToken || DEFAULT_LINKINPAY_TOKEN);
@@ -260,7 +260,7 @@ export default function RenewalAutomationPage() {
             return {
               ...s,
               includeCancelButton: s.includeCancelButton ?? true,
-              cancelButtonText: s.cancelButtonText || 'Não quero renovar',
+              cancelButtonText: s.cancelButtonText || 'NÃ£o quero renovar',
             };
           }
           return s;
@@ -290,20 +290,20 @@ export default function RenewalAutomationPage() {
     const newId = `step_${Date.now()}`;
     const newStep: RenewalFollowUpStep = {
       id: newId,
-      name: `${nextNum}º Lembrete de Renovação`,
+      name: `${nextNum}Âº Lembrete de RenovaÃ§Ã£o`,
       isActive: true,
       delayValue: nextNum === 1 ? 2 : nextNum === 2 ? 6 : 24,
       delayUnit: 'hours',
       message:
-        '⏳ *LEMBRETE DE RENOVAÇÃO*\n\n' +
-        'Olá *{cliente}*, vimos que sua assinatura *{assinaturas}* ainda aguarda renovação.\n\n' +
-        '💰 *Valor:* R$ {valor}\n\n' +
-        '👉 Para renovar agora via PIX e manter seu acesso sem pausas, clique no botão abaixo:',
+        'â³ *LEMBRETE DE RENOVAÃ‡ÃƒO*\n\n' +
+        'OlÃ¡ *{cliente}*, vimos que sua assinatura *{assinaturas}* ainda aguarda renovaÃ§Ã£o.\n\n' +
+        'ðŸ’° *Valor:* R$ {valor}\n\n' +
+        'ðŸ‘‰ Para renovar agora via PIX e manter seu acesso sem pausas, clique no botÃ£o abaixo:',
       includeRenewalButton: true,
       customButtonText: buttonText || 'SIM, RENOVAR AGORA',
-      customFooterText: footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
+      customFooterText: footerText || 'Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸',
       includeCancelButton: nextNum >= 3,
-      cancelButtonText: 'Não quero renovar',
+      cancelButtonText: 'NÃ£o quero renovar',
       createdAt: Date.now(),
     };
     const updated = [...followUpSteps, newStep];
@@ -319,8 +319,8 @@ export default function RenewalAutomationPage() {
     if (followUpSteps.length <= 1) {
       toast({
         variant: 'destructive',
-        title: 'Mínimo de 1 etapa',
-        description: 'Mantenha ao menos uma etapa ou desative o funil no botão superior.',
+        title: 'MÃ­nimo de 1 etapa',
+        description: 'Mantenha ao menos uma etapa ou desative o funil no botÃ£o superior.',
       });
       return;
     }
@@ -424,13 +424,13 @@ export default function RenewalAutomationPage() {
   const formatElapsedTime = (ms: number) => {
     if (!ms || ms <= 0) return 'agora mesmo';
     const totalMinutes = Math.floor(ms / 60000);
-    if (totalMinutes < 1) return 'há poucos segundos';
-    if (totalMinutes < 60) return `há ${totalMinutes} min`;
+    if (totalMinutes < 1) return 'hÃ¡ poucos segundos';
+    if (totalMinutes < 60) return `hÃ¡ ${totalMinutes} min`;
     const hours = Math.floor(totalMinutes / 60);
     const remMin = totalMinutes % 60;
-    if (hours < 24) return remMin > 0 ? `há ${hours}h ${remMin}min` : `há ${hours}h`;
+    if (hours < 24) return remMin > 0 ? `hÃ¡ ${hours}h ${remMin}min` : `hÃ¡ ${hours}h`;
     const days = Math.floor(hours / 24);
-    return `há ${days} dia(s)`;
+    return `hÃ¡ ${days} dia(s)`;
   };
 
   const handleDispatchFollowUpNow = async (clientIds: string[], step: RenewalFollowUpStep, clientName: string) => {
@@ -438,7 +438,7 @@ export default function RenewalAutomationPage() {
     const key = `${clientIds[0]}_${step.id}`;
     try {
       setDispatchingFollowUpKey(key);
-      // Salva silenciosamente as etapas atuais antes de disparar para que o endpoint leia a versão mais recente
+      // Salva silenciosamente as etapas atuais antes de disparar para que o endpoint leia a versÃ£o mais recente
       setDocumentNonBlocking(
         settingsDocRef,
         {
@@ -464,13 +464,13 @@ export default function RenewalAutomationPage() {
 
       toast({
         title: 'Remarketing Enviado com Sucesso!',
-        description: `A etapa "${step.name}" foi enviada para ${clientName} no WhatsApp${step.includeRenewalButton ? ' com o botão de renovação PIX' : ''}.`,
+        description: `A etapa "${step.name}" foi enviada para ${clientName} no WhatsApp${step.includeRenewalButton ? ' com o botÃ£o de renovaÃ§Ã£o PIX' : ''}.`,
       });
     } catch (err: any) {
       toast({
         variant: 'destructive',
         title: 'Erro ao Enviar Remarketing',
-        description: err.message || 'Não foi possível enviar a etapa agora.',
+        description: err.message || 'NÃ£o foi possÃ­vel enviar a etapa agora.',
       });
     } finally {
       setDispatchingFollowUpKey(null);
@@ -490,8 +490,8 @@ export default function RenewalAutomationPage() {
     if (isActive && renewalSendTime) {
       const [h, m] = renewalSendTime.split(':').map(Number);
       const targetMinutes = (h || 0) * 60 + (m || 0);
-      // Se o horário definido já passou hoje (ex: definiu 14:00 e já são 14:01+):
-      // Marca lastAutoRenewalRunDate como hoje para que NUNCA dispare hoje, aguardando amanhã pontualmente!
+      // Se o horÃ¡rio definido jÃ¡ passou hoje (ex: definiu 14:00 e jÃ¡ sÃ£o 14:01+):
+      // Marca lastAutoRenewalRunDate como hoje para que NUNCA dispare hoje, aguardando amanhÃ£ pontualmente!
       if (nowMinutes >= targetMinutes) {
         lastAutoRun = todayBrasiliaStr;
       }
@@ -523,8 +523,8 @@ export default function RenewalAutomationPage() {
     setTimeout(() => {
       setIsSaving(false);
       toast({
-        title: 'Configurações Salvas!',
-        description: 'Automação de renovação PIX e Funil de Remarketing Pós-Cobrança salvos com sucesso.',
+        title: 'ConfiguraÃ§Ãµes Salvas!',
+        description: 'AutomaÃ§Ã£o de renovaÃ§Ã£o PIX e Funil de Remarketing PÃ³s-CobranÃ§a salvos com sucesso.',
       });
     }, 400);
   };
@@ -539,7 +539,7 @@ export default function RenewalAutomationPage() {
       const snap = await getDocs(clientsRef);
       const allClients = snap.docs.map(d => ({ id: d.id, ...d.data() } as Client));
 
-      // Calcula data de hoje no fuso de Brasília (UTC-3)
+      // Calcula data de hoje no fuso de BrasÃ­lia (UTC-3)
       const offset = -3 * 60 * 60 * 1000;
       const nowBr = new Date(Date.now() + offset);
       const todayStr = format(nowBr, 'yyyy-MM-dd');
@@ -557,25 +557,25 @@ export default function RenewalAutomationPage() {
       if (todayClients.length === 0) {
         toast({
           title: 'Nenhum cliente para hoje',
-          description: 'Não há clientes com vencimento hoje marcados como Ativo ou Vencido.',
+          description: 'NÃ£o hÃ¡ clientes com vencimento hoje marcados como Ativo ou Vencido.',
         });
         setIsLoadingManual(false);
         return;
       }
 
-      // Bloqueio anti-duplicidade: filtra apenas clientes que ainda NÃO foram cobrados hoje (nem manual nem automático)
+      // Bloqueio anti-duplicidade: filtra apenas clientes que ainda NÃƒO foram cobrados hoje (nem manual nem automÃ¡tico)
       const toRebill = todayClients.filter(c => c.lastBilledDate !== todayStr);
 
       if (toRebill.length === 0) {
         toast({
-          title: 'Clientes de hoje já cobrados!',
-          description: `Todos os ${todayClients.length} cliente(s) com vencimento hoje já foram cobrados (manual ou automaticamente). O bloqueio anti-duplicidade impede cobrar os mesmos clientes mais de uma vez no mesmo dia.`,
+          title: 'Clientes de hoje jÃ¡ cobrados!',
+          description: `Todos os ${todayClients.length} cliente(s) com vencimento hoje jÃ¡ foram cobrados (manual ou automaticamente). O bloqueio anti-duplicidade impede cobrar os mesmos clientes mais de uma vez no mesmo dia.`,
         });
         setIsLoadingManual(false);
         return;
       }
 
-      // Agrupa por telefone canônico
+      // Agrupa por telefone canÃ´nico
       const groupsByPhone = new Map<string, Client[]>();
       for (const client of toRebill) {
         const canon = getCanonicalPhone(client.phone);
@@ -614,7 +614,7 @@ export default function RenewalAutomationPage() {
       const skippedCount = todayClients.length - toRebill.length;
       toast({
         title: 'Disparo Manual Iniciado!',
-        description: `${items.length} cliente(s) na fila.${skippedCount > 0 ? ` (${skippedCount} já cobrado(s) hoje foram ignorados pelo bloqueio anti-duplicidade).` : ''} Acompanhe a barra de progresso no painel flutuante.`,
+        description: `${items.length} cliente(s) na fila.${skippedCount > 0 ? ` (${skippedCount} jÃ¡ cobrado(s) hoje foram ignorados pelo bloqueio anti-duplicidade).` : ''} Acompanhe a barra de progresso no painel flutuante.`,
       });
     } catch (err: any) {
       toast({
@@ -627,12 +627,12 @@ export default function RenewalAutomationPage() {
     }
   };
 
-  // Simulação / Demonstração da Barra
+  // SimulaÃ§Ã£o / DemonstraÃ§Ã£o da Barra
   const handleStartDemoSimulation = () => {
     const mockItems = [
       {
         clientIds: ['mock-1', 'mock-1b'],
-        name: 'João Silva (2 assinaturas)',
+        name: 'JoÃ£o Silva (2 assinaturas)',
         phone: '5577998413534',
         subNames: 'Netflix 4K + Prime Video',
         status: 'pending' as const,
@@ -683,8 +683,8 @@ export default function RenewalAutomationPage() {
     window.dispatchEvent(new CustomEvent('START_RENEWAL_DISPATCH', { detail: { job: demoJob } }));
 
     toast({
-      title: 'Demonstração Iniciada!',
-      description: 'Veja o painel arrastável no canto inferior esquerdo. Nenhuma mensagem real está sendo enviada.',
+      title: 'DemonstraÃ§Ã£o Iniciada!',
+      description: 'Veja o painel arrastÃ¡vel no canto inferior esquerdo. Nenhuma mensagem real estÃ¡ sendo enviada.',
     });
   };
 
@@ -708,7 +708,7 @@ export default function RenewalAutomationPage() {
     navigator.clipboard.writeText(webhookUrl);
     setCopiedWebhook(true);
     setTimeout(() => setCopiedWebhook(false), 3000);
-    toast({ title: 'URL Copiada!', description: 'URL do Webhook copiada para a área de transferência.' });
+    toast({ title: 'URL Copiada!', description: 'URL do Webhook copiada para a Ã¡rea de transferÃªncia.' });
   };
 
   if (isLoading) {
@@ -724,12 +724,12 @@ export default function RenewalAutomationPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Renovação Automática PIX"
-        description="Gere links de pagamento oficiais via PJ Pay Gateway ou LinkinPay e renove as assinaturas do cliente imediatamente após o pagamento."
+        title="RenovaÃ§Ã£o AutomÃ¡tica PIX"
+        description="Gere links de pagamento oficiais via PJ Pay Gateway ou LinkinPay e renove as assinaturas do cliente imediatamente apÃ³s o pagamento."
       />
 
       <main className="flex-1 overflow-auto p-4 md:p-6 space-y-6 max-w-5xl">
-        {/* BANNER PARA TESTE RÁPIDO */}
+        {/* BANNER PARA TESTE RÃPIDO */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-500/30 gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-amber-500 text-white shadow-sm">
@@ -737,10 +737,10 @@ export default function RenewalAutomationPage() {
             </div>
             <div>
               <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                Quer testar a Renovação PIX agora?
+                Quer testar a RenovaÃ§Ã£o PIX agora?
               </h4>
               <p className="text-xs text-muted-foreground">
-                Digite um número de WhatsApp e selecione um produto para testar o link, as perguntas e a renovação instantânea.
+                Digite um nÃºmero de WhatsApp e selecione um produto para testar o link, as perguntas e a renovaÃ§Ã£o instantÃ¢nea.
               </p>
             </div>
           </div>
@@ -751,21 +751,21 @@ export default function RenewalAutomationPage() {
             className="bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 shadow-sm"
           >
             <a href="/automations/test-renewal">
-              🧪 Ir para Teste de Renovação
+              ðŸ§ª Ir para Teste de RenovaÃ§Ã£o
             </a>
           </Button>
         </div>
 
-        {/* SEÇÃO: ENVIO DE COBRANÇAS (AUTOMÁTICA & MANUAL) */}
+        {/* SEÃ‡ÃƒO: ENVIO DE COBRANÃ‡AS (AUTOMÃTICA & MANUAL) */}
         <Card className="border-2 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <CardHeader className="bg-slate-50/70 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <Send className="h-5 w-5 text-emerald-600" />
                 <div>
-                  <CardTitle className="text-lg">Envio de Cobranças</CardTitle>
+                  <CardTitle className="text-lg">Envio de CobranÃ§as</CardTitle>
                   <CardDescription>
-                    Configure o disparo automático diário com horário agendado ou realize disparos manuais acompanhando o progresso em tempo real.
+                    Configure o disparo automÃ¡tico diÃ¡rio com horÃ¡rio agendado ou realize disparos manuais acompanhando o progresso em tempo real.
                   </CardDescription>
                 </div>
               </div>
@@ -773,23 +773,23 @@ export default function RenewalAutomationPage() {
                 variant={isActive ? "default" : "secondary"}
                 className={isActive ? "bg-emerald-600 text-white font-bold" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold"}
               >
-                {isActive ? `Automático Ativo às ${renewalSendTime || '14:30'}` : "Automático Desativado"}
+                {isActive ? `AutomÃ¡tico Ativo Ã s ${renewalSendTime || '14:30'}` : "AutomÃ¡tico Desativado"}
               </Badge>
             </div>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
-            {/* OPÇÃO 1: DISPARO AUTOMÁTICO */}
+            {/* OPÃ‡ÃƒO 1: DISPARO AUTOMÃTICO */}
             <div className="p-4 rounded-2xl border bg-slate-50/40 dark:bg-slate-900/30 space-y-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     <Clock className={cn("h-4 w-4", isActive ? "text-emerald-600" : "text-slate-400")} />
                     <Label className="text-sm font-bold text-zinc-900 dark:text-white cursor-pointer" htmlFor="auto-renewal-toggle">
-                      Disparo Automático Diário
+                      Disparo AutomÃ¡tico DiÃ¡rio
                     </Label>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Envia as mensagens de renovação automaticamente no horário configurado para todos os clientes que vencem no dia.
+                    Envia as mensagens de renovaÃ§Ã£o automaticamente no horÃ¡rio configurado para todos os clientes que vencem no dia.
                   </p>
                 </div>
                 <Switch
@@ -804,7 +804,7 @@ export default function RenewalAutomationPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-emerald-600" /> Horário de Disparo (Brasília)
+                        <Clock className="w-3.5 h-3.5 text-emerald-600" /> HorÃ¡rio de Disparo (BrasÃ­lia)
                       </Label>
                       <Input
                         type="time"
@@ -813,7 +813,7 @@ export default function RenewalAutomationPage() {
                         className="font-mono font-bold text-base bg-white dark:bg-zinc-900"
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        Exemplo: <strong>14:30</strong>. Todo dia nesse horário o sistema enviará a renovação.
+                        Exemplo: <strong>14:30</strong>. Todo dia nesse horÃ¡rio o sistema enviarÃ¡ a renovaÃ§Ã£o.
                       </p>
                     </div>
 
@@ -830,28 +830,28 @@ export default function RenewalAutomationPage() {
                         className="font-mono font-bold text-base bg-white dark:bg-zinc-900"
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        Padrão recomendado: <strong>15 segundos</strong> entre cada mensagem para proteger o WhatsApp.
+                        PadrÃ£o recomendado: <strong>15 segundos</strong> entre cada mensagem para proteger o WhatsApp.
                       </p>
                     </div>
                   </div>
 
-                  {/* REGRAS E PROTEÇÕES EXPLICADAS */}
+                  {/* REGRAS E PROTEÃ‡Ã•ES EXPLICADAS */}
                   <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 space-y-2 text-xs text-amber-800 dark:text-amber-200">
                     <div className="font-bold flex items-center gap-1.5 text-amber-900 dark:text-amber-100">
-                      <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" /> Regras de Segurança do Disparo Automático:
+                      <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" /> Regras de SeguranÃ§a do Disparo AutomÃ¡tico:
                     </div>
                     <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-900/90 dark:text-amber-200/90">
                       <li>
-                        <strong>Proteção Anti-Disparo Retroativo:</strong> Se você definir o horário para as <strong>{renewalSendTime || '14:00'}</strong> e já tiver passado desse horário hoje, o sistema <strong>NÃO dispara para os clientes de hoje</strong>, disparando amanhã pontualmente no horário agendado.
+                        <strong>ProteÃ§Ã£o Anti-Disparo Retroativo:</strong> Se vocÃª definir o horÃ¡rio para as <strong>{renewalSendTime || '14:00'}</strong> e jÃ¡ tiver passado desse horÃ¡rio hoje, o sistema <strong>NÃƒO dispara para os clientes de hoje</strong>, disparando amanhÃ£ pontualmente no horÃ¡rio agendado.
                       </li>
                       <li>
-                        <strong>Agrupamento Inteligente:</strong> Se um cliente possuir 2, 3 ou mais assinaturas vencendo no dia, ele receberá <strong>somente 1 mensagem</strong> listando todas as assinaturas e um único botão para renovação total.
+                        <strong>Agrupamento Inteligente:</strong> Se um cliente possuir 2, 3 ou mais assinaturas vencendo no dia, ele receberÃ¡ <strong>somente 1 mensagem</strong> listando todas as assinaturas e um Ãºnico botÃ£o para renovaÃ§Ã£o total.
                       </li>
                       <li>
-                        <strong>Intervalo Anti-Banimento:</strong> O delay de {renewalDelaySeconds}s entre os envios é respeitado rigorosamente para manter a segurança do número.
+                        <strong>Intervalo Anti-Banimento:</strong> O delay de {renewalDelaySeconds}s entre os envios Ã© respeitado rigorosamente para manter a seguranÃ§a do nÃºmero.
                       </li>
                       <li>
-                        <strong>Bloqueio Anti-Duplicidade:</strong> Clientes já cobrados hoje (manual ou automaticamente) ficam protegidos contra novas cobranças no mesmo dia. O sistema só cobra novamente os clientes do próximo dia.
+                        <strong>Bloqueio Anti-Duplicidade:</strong> Clientes jÃ¡ cobrados hoje (manual ou automaticamente) ficam protegidos contra novas cobranÃ§as no mesmo dia. O sistema sÃ³ cobra novamente os clientes do prÃ³ximo dia.
                       </li>
                     </ul>
                   </div>
@@ -859,22 +859,22 @@ export default function RenewalAutomationPage() {
               )}
             </div>
 
-            {/* OPÇÃO 2: DISPARO MANUAL & DEMONSTRAÇÃO */}
+            {/* OPÃ‡ÃƒO 2: DISPARO MANUAL & DEMONSTRAÃ‡ÃƒO */}
             <div className="p-4 rounded-2xl border bg-slate-50/40 dark:bg-slate-900/30 space-y-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Play className="h-4 w-4 text-blue-600" />
                   <Label className="text-sm font-bold text-zinc-900 dark:text-white">
-                    Disparo Manual & Demonstração da Barra
+                    Disparo Manual & DemonstraÃ§Ã£o da Barra
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Não quer esperar o horário automático? Você pode disparar manualmente agora para os clientes que vencem hoje e ainda não foram cobrados. Clientes já cobrados hoje são ignorados automaticamente para evitar duplicatas.
+                  NÃ£o quer esperar o horÃ¡rio automÃ¡tico? VocÃª pode disparar manualmente agora para os clientes que vencem hoje e ainda nÃ£o foram cobrados. Clientes jÃ¡ cobrados hoje sÃ£o ignorados automaticamente para evitar duplicatas.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
-                {/* BOTÃO DISPARO MANUAL REAL */}
+                {/* BOTÃƒO DISPARO MANUAL REAL */}
                 <Button
                   type="button"
                   onClick={handleStartManualDispatch}
@@ -889,32 +889,32 @@ export default function RenewalAutomationPage() {
                   ) : (
                     <>
                       <Play className="w-4 h-4 fill-white" />
-                      <span>Disparar Cobrança Manual Agora</span>
+                      <span>Disparar CobranÃ§a Manual Agora</span>
                     </>
                   )}
                 </Button>
 
-                {/* BOTÃO DEMONSTRAÇÃO (SEM ENVIAR NADA) */}
+                {/* BOTÃƒO DEMONSTRAÃ‡ÃƒO (SEM ENVIAR NADA) */}
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleStartDemoSimulation}
                   className="border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30 font-bold text-xs gap-2 rounded-xl h-10 px-4 cursor-pointer"
-                  title="Testa a experiência da barra de progresso sem disparar mensagem para ninguém"
+                  title="Testa a experiÃªncia da barra de progresso sem disparar mensagem para ninguÃ©m"
                 >
                   <Sparkles className="w-4 h-4 text-purple-600" />
-                  <span>Ver Demonstração do Painel (Sem Enviar)</span>
+                  <span>Ver DemonstraÃ§Ã£o do Painel (Sem Enviar)</span>
                 </Button>
               </div>
 
               <p className="text-[11px] text-muted-foreground pt-1 flex items-center gap-1.5">
-                <span className="text-emerald-600 font-bold">●</span> O painel de progresso é flutuante no canto inferior esquerdo, pode ser arrastado pela tela, persiste se você recarregar a página e não duplica disparos se você tiver várias abas abertas.
+                <span className="text-emerald-600 font-bold">â—</span> O painel de progresso Ã© flutuante no canto inferior esquerdo, pode ser arrastado pela tela, persiste se vocÃª recarregar a pÃ¡gina e nÃ£o duplica disparos se vocÃª tiver vÃ¡rias abas abertas.
               </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* SEÇÃO: FUNIL DE REMARKETING PÓS-COBRANÇA (CASO O CLIENTE NÃO RENOVE) */}
+        {/* SEÃ‡ÃƒO: FUNIL DE REMARKETING PÃ“S-COBRANÃ‡A (CASO O CLIENTE NÃƒO RENOVE) */}
         <Card className="border-2 border-purple-300/80 dark:border-purple-900/60 shadow-md overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-purple-500/10 via-fuchsia-500/10 to-amber-500/10 border-b border-purple-200/60 dark:border-purple-900/40">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -925,14 +925,14 @@ export default function RenewalAutomationPage() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <CardTitle className="text-lg">
-                      Funil de Remarketing Pós-Cobrança (Se o Cliente Não Renovar)
+                      Funil de Remarketing PÃ³s-CobranÃ§a (Se o Cliente NÃ£o Renovar)
                     </CardTitle>
                     <Badge className="bg-purple-600 text-white text-[10px] font-bold">
-                      INTELIGENTE • AUTO-STOP NO PIX
+                      INTELIGENTE â€¢ AUTO-STOP NO PIX
                     </Badge>
                   </div>
                   <CardDescription>
-                    Disparou a cobrança (manual ou automática) e passou <strong>X tempo</strong> sem o cliente pagar? O sistema identifica quem ainda não renovou e envia mensagens de recuperação com o botão oficial de renovar!
+                    Disparou a cobranÃ§a (manual ou automÃ¡tica) e passou <strong>X tempo</strong> sem o cliente pagar? O sistema identifica quem ainda nÃ£o renovou e envia mensagens de recuperaÃ§Ã£o com o botÃ£o oficial de renovar!
                   </CardDescription>
                 </div>
               </div>
@@ -955,7 +955,7 @@ export default function RenewalAutomationPage() {
             <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 via-purple-50/40 to-emerald-50/40 dark:from-slate-900/60 dark:via-purple-950/20 dark:to-emerald-950/20 border border-purple-200/60 dark:border-purple-900/40 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-purple-800 dark:text-purple-300 flex items-center gap-1.5">
-                  <Timer className="h-4 w-4 text-purple-600" /> Como funciona a jornada automática após o disparo da cobrança:
+                  <Timer className="h-4 w-4 text-purple-600" /> Como funciona a jornada automÃ¡tica apÃ³s o disparo da cobranÃ§a:
                 </span>
                 <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Se o cliente pagar em qualquer momento, o funil para na hora!
@@ -963,17 +963,17 @@ export default function RenewalAutomationPage() {
               </div>
 
               <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-1">
-                {/* PASSO 0: COBRANÇA ENVIADA */}
+                {/* PASSO 0: COBRANÃ‡A ENVIADA */}
                 <div className="shrink-0 p-3 rounded-xl bg-white dark:bg-zinc-900 border-2 border-emerald-500/60 shadow-sm min-w-[175px]">
                   <div className="flex items-center justify-between text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">
                     <span>Marco Zero (0 min)</span>
                     <Send className="h-3 w-3" />
                   </div>
                   <p className="font-bold text-xs mt-1 text-slate-800 dark:text-slate-100">
-                    1. Cobrança Disparada
+                    1. CobranÃ§a Disparada
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Manual ou Automática
+                    Manual ou AutomÃ¡tica
                   </p>
                 </div>
 
@@ -984,7 +984,7 @@ export default function RenewalAutomationPage() {
                         +{formatDelayLabel(step.delayValue, step.delayUnit)}
                       </span>
                       <ArrowRight className="h-4 w-4 mt-0.5" />
-                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">não pagou?</span>
+                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">nÃ£o pagou?</span>
                     </div>
 
                     <div
@@ -1006,11 +1006,11 @@ export default function RenewalAutomationPage() {
                             step.isActive ? 'bg-purple-600 text-white' : ''
                           )}
                         >
-                          Etapa {idx + 1} {step.isActive ? '• Ativa' : '• Pausada'}
+                          Etapa {idx + 1} {step.isActive ? 'â€¢ Ativa' : 'â€¢ Pausada'}
                         </Badge>
                         {step.includeRenewalButton && (
                           <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                            <MousePointerClick className="h-3 w-3" /> +Botão
+                            <MousePointerClick className="h-3 w-3" /> +BotÃ£o
                           </span>
                         )}
                       </div>
@@ -1018,7 +1018,7 @@ export default function RenewalAutomationPage() {
                         {step.name || `Etapa ${idx + 1}`}
                       </p>
                       <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                        Após {formatDelayLabel(step.delayValue, step.delayUnit)} sem renovar
+                        {idx === 0 ? 'ApÃ³s' : 'ApÃ³s a Etapa ' + idx + ' +'} {formatDelayLabel(step.delayValue, step.delayUnit)}{idx === 0 ? ' da cobranÃ§a' : ''} sem renovar
                       </p>
                     </div>
                   </div>
@@ -1037,7 +1037,7 @@ export default function RenewalAutomationPage() {
               </div>
             </div>
 
-            {/* SELETOR DE ABAS DAS ETAPAS + BOTÃO ADICIONAR */}
+            {/* SELETOR DE ABAS DAS ETAPAS + BOTÃƒO ADICIONAR */}
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1082,23 +1082,23 @@ export default function RenewalAutomationPage() {
               {followUpSteps.map((step, index) => {
                 if (step.id !== activeStepTab) return null;
                 const previewBtnText = (step.customButtonText || buttonText || 'SIM, RENOVAR AGORA').trim();
-                const previewFooter = (step.customFooterText || footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️').trim();
+                const previewFooter = (step.customFooterText || footerText || 'Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸').trim();
 
                 return (
                   <div
                     key={step.id}
                     className="p-5 rounded-2xl border-2 border-purple-200/80 dark:border-purple-900/50 bg-slate-50/40 dark:bg-slate-900/30 space-y-5"
                   >
-                    {/* CABEÇALHO DA ETAPA */}
+                    {/* CABEÃ‡ALHO DA ETAPA */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
                       <div className="flex-1 space-y-1.5">
                         <Label className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">
-                          Nome de Identificação da Etapa {index + 1}
+                          Nome de IdentificaÃ§Ã£o da Etapa {index + 1}
                         </Label>
                         <Input
                           value={step.name}
                           onChange={e => handleUpdateFollowUpStep(step.id, { name: e.target.value })}
-                          placeholder="Ex: 1º Lembrete - Esqueceu de Renovar?"
+                          placeholder="Ex: 1Âº Lembrete - Esqueceu de Renovar?"
                           className="font-bold text-sm bg-white dark:bg-zinc-900"
                         />
                       </div>
@@ -1128,20 +1128,20 @@ export default function RenewalAutomationPage() {
                       </div>
                     </div>
 
-                    {/* CONFIGURAÇÃO DE TEMPO (PASSOU X TEMPO SEM RENOVAR) */}
+                    {/* CONFIGURAÃ‡ÃƒO DE TEMPO (PASSOU X TEMPO SEM RENOVAR) */}
                     <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-slate-800 space-y-3">
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                         <div className="space-y-0.5">
                           <Label className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
-                            <Clock className="h-4 w-4 text-purple-600" /> Quando enviar esta mensagem? (Tempo após o disparo da cobrança)
+                            <Clock className="h-4 w-4 text-purple-600" /> Quando enviar esta mensagem? ({index === 0 ? 'Tempo apÃ³s o disparo da cobranÃ§a' : 'Tempo apÃ³s o envio da Etapa ' + index})
                           </Label>
                           <p className="text-xs text-muted-foreground">
-                            Se passar esse tempo desde o envio da cobrança e o cliente <strong>continuar sem renovar</strong>, o sistema dispara esta etapa automaticamente.
+                            Se passar esse tempo desde {index === 0 ? 'o envio da cobranÃ§a' : 'o envio da Etapa anterior'} e o cliente <strong>continuar sem renovar</strong>, o sistema dispara esta etapa automaticamente (uma etapa por vez, na ordem do funil).
                           </p>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-bold text-muted-foreground">Após:</span>
+                          <span className="text-xs font-bold text-muted-foreground">ApÃ³s:</span>
                           <Input
                             type="number"
                             min={1}
@@ -1176,7 +1176,7 @@ export default function RenewalAutomationPage() {
                           Atalhos de tempo:
                         </span>
                         {[
-                          { label: '5 min (Teste Rápido)', val: 5, unit: 'minutes' as const },
+                          { label: '5 min (Teste RÃ¡pido)', val: 5, unit: 'minutes' as const },
                           { label: '15 min', val: 15, unit: 'minutes' as const },
                           { label: '30 min', val: 30, unit: 'minutes' as const },
                           { label: '1 hora', val: 1, unit: 'hours' as const },
@@ -1211,7 +1211,7 @@ export default function RenewalAutomationPage() {
                       </div>
                     </div>
 
-                    {/* OPÇÃO DO BOTÃO INTERATIVO DE RENOVAÇÃO */}
+                    {/* OPÃ‡ÃƒO DO BOTÃƒO INTERATIVO DE RENOVAÃ‡ÃƒO */}
                     <div className="p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border-2 border-emerald-500/30 space-y-4">
                       <div className="flex items-center justify-between gap-4">
                         <div className="space-y-0.5">
@@ -1221,11 +1221,11 @@ export default function RenewalAutomationPage() {
                               htmlFor={`step-btn-${step.id}`}
                               className="text-sm font-bold text-slate-900 dark:text-white cursor-pointer"
                             >
-                              Enviar Junto o Mesmo Botão Interativo para Renovar (Link PIX Oficial)
+                              Enviar Junto o Mesmo BotÃ£o Interativo para Renovar (Link PIX Oficial)
                             </Label>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Quando ativado, a mensagem de remarketing vai com o botão clicável do WhatsApp que abre o checkout PIX automático do cliente.
+                            Quando ativado, a mensagem de remarketing vai com o botÃ£o clicÃ¡vel do WhatsApp que abre o checkout PIX automÃ¡tico do cliente.
                           </p>
                         </div>
                         <Switch
@@ -1242,7 +1242,7 @@ export default function RenewalAutomationPage() {
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
                               <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                                Texto do Botão nesta Etapa
+                                Texto do BotÃ£o nesta Etapa
                               </Label>
                               <button
                                 type="button"
@@ -1253,7 +1253,7 @@ export default function RenewalAutomationPage() {
                                 }
                                 className="text-[10px] text-emerald-700 dark:text-emerald-400 underline font-semibold cursor-pointer"
                               >
-                                Usar igual ao padrão
+                                Usar igual ao padrÃ£o
                               </button>
                             </div>
                             <Input
@@ -1269,18 +1269,18 @@ export default function RenewalAutomationPage() {
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
                               <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                                Rodapé Acima do Botão
+                                RodapÃ© Acima do BotÃ£o
                               </Label>
                               <button
                                 type="button"
                                 onClick={() =>
                                   handleUpdateFollowUpStep(step.id, {
-                                    customFooterText: footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️',
+                                    customFooterText: footerText || 'Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸',
                                   })
                                 }
                                 className="text-[10px] text-emerald-700 dark:text-emerald-400 underline font-semibold cursor-pointer"
                               >
-                                Usar igual ao padrão
+                                Usar igual ao padrÃ£o
                               </button>
                             </div>
                             <Input
@@ -1288,14 +1288,14 @@ export default function RenewalAutomationPage() {
                               onChange={e =>
                                 handleUpdateFollowUpStep(step.id, { customFooterText: e.target.value })
                               }
-                              placeholder={footerText || 'Entrega Automática • ⬇️Clique No Botão⬇️'}
+                              placeholder={footerText || 'Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸'}
                               className="bg-white dark:bg-zinc-900 text-xs"
                             />
                           </div>
                         </div>
                       )}
 
-                      {/* OPÇÃO DO BOTÃO "NÃO QUERO RENOVAR" (REMOVE ASSINATURA DO CRM) */}
+                      {/* OPÃ‡ÃƒO DO BOTÃƒO "NÃƒO QUERO RENOVAR" (REMOVE ASSINATURA DO CRM) */}
                       {step.includeRenewalButton && (
                         <div className="p-3.5 rounded-xl bg-red-50/70 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 space-y-3 mt-2">
                           <div className="flex items-center justify-between gap-4">
@@ -1305,10 +1305,10 @@ export default function RenewalAutomationPage() {
                                 className="text-xs font-bold text-red-700 dark:text-red-400 cursor-pointer flex items-center gap-1.5"
                               >
                                 <XCircle className="h-4 w-4 text-red-600" />
-                                Incluir 2º Botão: "Não quero renovar" (Remove a assinatura do CRM se o cliente clicar)
+                                Incluir 2Âº BotÃ£o: "NÃ£o quero renovar" (Remove a assinatura do CRM se o cliente clicar)
                               </Label>
                               <p className="text-[11px] text-muted-foreground">
-                                Recomendado na <strong>Etapa 3 (Última Etapa)</strong>: caso o cliente clique em "Não quero renovar", a assinatura dele é excluída automaticamente do CRM.
+                                Recomendado na <strong>Etapa 3 (Ãšltima Etapa)</strong>: caso o cliente clique em "NÃ£o quero renovar", a assinatura dele Ã© excluÃ­da automaticamente do CRM.
                               </p>
                             </div>
                             <Switch
@@ -1317,7 +1317,7 @@ export default function RenewalAutomationPage() {
                               onCheckedChange={checked =>
                                 handleUpdateFollowUpStep(step.id, {
                                   includeCancelButton: checked,
-                                  cancelButtonText: step.cancelButtonText || 'Não quero renovar',
+                                  cancelButtonText: step.cancelButtonText || 'NÃ£o quero renovar',
                                 })
                               }
                             />
@@ -1326,14 +1326,14 @@ export default function RenewalAutomationPage() {
                           {(step.includeCancelButton ?? (step.id === 'step_3' || index === 2)) && (
                             <div className="pt-2 border-t border-red-200/60 dark:border-red-900/40">
                               <Label className="text-[11px] font-bold uppercase tracking-wider text-red-700 dark:text-red-400">
-                                Texto do Botão de Cancelamento
+                                Texto do BotÃ£o de Cancelamento
                               </Label>
                               <Input
-                                value={step.cancelButtonText || 'Não quero renovar'}
+                                value={step.cancelButtonText || 'NÃ£o quero renovar'}
                                 onChange={e =>
                                   handleUpdateFollowUpStep(step.id, { cancelButtonText: e.target.value })
                                 }
-                                placeholder="Não quero renovar"
+                                placeholder="NÃ£o quero renovar"
                                 className="mt-1 bg-white dark:bg-zinc-900 font-bold text-xs text-red-600 dark:text-red-400 max-w-sm"
                               />
                             </div>
@@ -1367,7 +1367,7 @@ export default function RenewalAutomationPage() {
                           ))}
                         </div>
 
-                        {/* TAGS DINÂMICAS */}
+                        {/* TAGS DINÃ‚MICAS */}
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-xs font-bold text-muted-foreground mr-1">Tags:</span>
                           {[
@@ -1396,26 +1396,26 @@ export default function RenewalAutomationPage() {
                           rows={7}
                           value={step.message}
                           onChange={e => handleUpdateFollowUpStep(step.id, { message: e.target.value })}
-                          placeholder="Digite a mensagem de remarketing caso o cliente não renove..."
+                          placeholder="Digite a mensagem de remarketing caso o cliente nÃ£o renove..."
                           className="font-mono text-sm leading-relaxed bg-white dark:bg-zinc-900"
                         />
                       </div>
 
-                      {/* PRÉVIA EM TEMPO REAL DO WHATSAPP DA ETAPA */}
+                      {/* PRÃ‰VIA EM TEMPO REAL DO WHATSAPP DA ETAPA */}
                       <div className="lg:col-span-5 p-4 rounded-2xl bg-slate-100 dark:bg-slate-900/90 border space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Prévia no WhatsApp ({formatDelayLabel(step.delayValue, step.delayUnit)} depois):
+                            PrÃ©via no WhatsApp ({formatDelayLabel(step.delayValue, step.delayUnit)} depois):
                           </span>
                           <Badge variant="outline" className="text-[10px] border-emerald-400 text-emerald-700 dark:text-emerald-400">
-                            {step.includeRenewalButton ? 'Com Botão PIX' : 'Somente Texto'}
+                            {step.includeRenewalButton ? 'Com BotÃ£o PIX' : 'Somente Texto'}
                           </Badge>
                         </div>
 
                         <div className="bg-[#d9fdd3] dark:bg-[#005c4b] text-zinc-900 dark:text-zinc-100 rounded-2xl rounded-tr-none p-3.5 shadow-sm space-y-2 text-xs leading-relaxed">
                           <div className="whitespace-pre-wrap font-sans">
                             {step.message
-                              .replace(/{cliente}/g, 'João Silva')
+                              .replace(/{cliente}/g, 'JoÃ£o Silva')
                               .replace(/{assinaturas}/g, 'Netflix 4K Ultra HD')
                               .replace(/{assinatura}/g, 'Netflix 4K Ultra HD')
                               .replace(/{vencimento}/g, `${format(new Date(), 'dd/MM')} *Hoje*`)
@@ -1440,7 +1440,7 @@ export default function RenewalAutomationPage() {
                                 {(step.includeCancelButton ?? (step.id === 'step_3' || index === 2)) && (
                                   <div className="w-full py-2.5 px-3 rounded-xl bg-white dark:bg-zinc-800 text-red-600 dark:text-red-400 font-bold text-center border border-red-200 dark:border-red-900/60 shadow-sm flex items-center justify-center gap-1.5 text-xs">
                                     <XCircle className="h-3.5 w-3.5 text-red-500" />
-                                    <span>{step.cancelButtonText || 'Não quero renovar'}</span>
+                                    <span>{step.cancelButtonText || 'NÃ£o quero renovar'}</span>
                                   </div>
                                 )}
                               </div>
@@ -1463,23 +1463,23 @@ export default function RenewalAutomationPage() {
                   </div>
                   <div>
                     <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                      Rastreamento em Tempo Real • Clientes Cobrados Recentemente
+                      Rastreamento em Tempo Real â€¢ Clientes Cobrados Recentemente
                       <Badge variant="outline" className="text-[10px] font-mono">
                         Auto-Refresh
                       </Badge>
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      Veja quem recebeu cobrança, quem já renovou (funil encerrado) e quem está aguardando pagamento para receber o remarketing. Você também pode disparar uma etapa manualmente agora se desejar.
+                      Veja quem recebeu cobranÃ§a, quem jÃ¡ renovou (funil encerrado) e quem estÃ¡ aguardando pagamento para receber o remarketing. VocÃª tambÃ©m pode disparar uma etapa manualmente agora se desejar.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-400/40 font-bold text-xs">
-                    ⏳ Pendentes: {billedGroupsMonitor.filter(g => !g.isPaid).length}
+                    â³ Pendentes: {billedGroupsMonitor.filter(g => !g.isPaid).length}
                   </Badge>
                   <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/40 font-bold text-xs">
-                    ✅ Renovados: {billedGroupsMonitor.filter(g => g.isPaid).length}
+                    âœ… Renovados: {billedGroupsMonitor.filter(g => g.isPaid).length}
                   </Badge>
                 </div>
               </div>
@@ -1488,10 +1488,10 @@ export default function RenewalAutomationPage() {
                 <div className="py-8 text-center space-y-2 text-muted-foreground">
                   <Users className="h-8 w-8 mx-auto opacity-40" />
                   <p className="text-xs font-semibold">
-                    Nenhum cliente com cobrança registrada recentemente.
+                    Nenhum cliente com cobranÃ§a registrada recentemente.
                   </p>
                   <p className="text-[11px]">
-                    Assim que você clicar em &quot;Disparar Cobrança Manual Agora&quot; ou o disparo automático rodar, os clientes aparecerão aqui em tempo real!
+                    Assim que vocÃª clicar em &quot;Disparar CobranÃ§a Manual Agora&quot; ou o disparo automÃ¡tico rodar, os clientes aparecerÃ£o aqui em tempo real!
                   </p>
                 </div>
               ) : (
@@ -1523,25 +1523,25 @@ export default function RenewalAutomationPage() {
                             </span>
                             {group.isPaid ? (
                               <Badge className="bg-emerald-600 text-white text-[10px] font-bold gap-1">
-                                <CheckCheck className="h-3 w-3" /> Renovado • Remarketing Cancelado
+                                <CheckCheck className="h-3 w-3" /> Renovado â€¢ Remarketing Cancelado
                               </Badge>
                             ) : (
                               <Badge className="bg-amber-500 text-white text-[10px] font-bold gap-1">
-                                <Clock className="h-3 w-3" /> Não Renovou Ainda (Cobrado {formatElapsedTime(group.elapsedMs)})
+                                <Clock className="h-3 w-3" /> NÃ£o Renovou Ainda (Cobrado {formatElapsedTime(group.elapsedMs)})
                               </Badge>
                             )}
                           </div>
 
                           <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span>
-                              📦 <strong>{group.subscriptions}</strong>
+                              ðŸ“¦ <strong>{group.subscriptions}</strong>
                             </span>
                             <span>
-                              💰 <strong>R$ {group.totalAmount.toFixed(2).replace('.', ',')}</strong>
+                              ðŸ’° <strong>R$ {group.totalAmount.toFixed(2).replace('.', ',')}</strong>
                             </span>
                             {!group.isPaid && nextPendingStep && (
                               <span className="text-purple-700 dark:text-purple-300 font-semibold">
-                                🔔 Próxima etapa: <strong>{nextPendingStep.name}</strong>{' '}
+                                ðŸ”” PrÃ³xima etapa: <strong>{nextPendingStep.name}</strong>{' '}
                                 {remainingMs > 0
                                   ? `(em ${Math.ceil(remainingMs / 60000)} min)`
                                   : '(pronta para envio)'}
@@ -1550,7 +1550,7 @@ export default function RenewalAutomationPage() {
                           </div>
                         </div>
 
-                        {/* BOTÕES DE ETAPA / DISPARO IMEDIATO */}
+                        {/* BOTÃ•ES DE ETAPA / DISPARO IMEDIATO */}
                         <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                           {followUpSteps.map((step, idx) => {
                             const alreadySent = group.sentStepIds.includes(step.id);
@@ -1569,9 +1569,9 @@ export default function RenewalAutomationPage() {
                                 }
                                 title={
                                   group.isPaid
-                                    ? 'Cliente já renovou!'
+                                    ? 'Cliente jÃ¡ renovou!'
                                     : alreadySent
-                                    ? 'Já enviada automaticamente (clique se quiser reenviar agora)'
+                                    ? 'JÃ¡ enviada automaticamente (clique se quiser reenviar agora)'
                                     : `Enviar Etapa ${idx + 1} agora no WhatsApp`
                                 }
                                 className={cn(
@@ -1604,16 +1604,16 @@ export default function RenewalAutomationPage() {
           </CardContent>
         </Card>
 
-        {/* ESCOLHA DA INSTÂNCIA DO WHATSAPP (ZAP DE DISPARO) */}
+        {/* ESCOLHA DA INSTÃ‚NCIA DO WHATSAPP (ZAP DE DISPARO) */}
         <Card className="border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Smartphone className="h-5 w-5 text-emerald-600" />
                 <div>
-                  <CardTitle className="text-lg">Instância do WhatsApp para Renovação</CardTitle>
+                  <CardTitle className="text-lg">InstÃ¢ncia do WhatsApp para RenovaÃ§Ã£o</CardTitle>
                   <CardDescription>
-                    Selecione qual número do WhatsApp enviará as mensagens de cobrança e confirmação PIX.
+                    Selecione qual nÃºmero do WhatsApp enviarÃ¡ as mensagens de cobranÃ§a e confirmaÃ§Ã£o PIX.
                   </CardDescription>
                 </div>
               </div>
@@ -1648,7 +1648,7 @@ export default function RenewalAutomationPage() {
                     <div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">Hub Principal</h4>
                       <p className="text-[11px] text-muted-foreground font-mono">
-                        {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'Instância Principal'}
+                        {typeof settings?.webhookToken === 'string' && settings.webhookToken.length > 0 ? `Token: ${settings.webhookToken.slice(0, 8)}...` : 'InstÃ¢ncia Principal'}
                       </p>
                     </div>
                   </div>
@@ -1684,7 +1684,7 @@ export default function RenewalAutomationPage() {
                 </div>
               </div>
 
-              {/* ZAP COBRANÇA */}
+              {/* ZAP COBRANÃ‡A */}
               <div
                 onClick={() => setRenewalZapInstance('billing')}
                 className={cn(
@@ -1698,9 +1698,9 @@ export default function RenewalAutomationPage() {
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-5 w-5 text-orange-600" />
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">ZAP Cobrança</h4>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">ZAP CobranÃ§a</h4>
                       <p className="text-[11px] text-muted-foreground font-mono">
-                        {typeof settings?.billingWebhookToken === 'string' && settings.billingWebhookToken.length > 0 ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'Instância de Cobrança'}
+                        {typeof settings?.billingWebhookToken === 'string' && settings.billingWebhookToken.length > 0 ? `Token: ${settings.billingWebhookToken.slice(0, 8)}...` : 'InstÃ¢ncia de CobranÃ§a'}
                       </p>
                     </div>
                   </div>
@@ -1736,7 +1736,7 @@ export default function RenewalAutomationPage() {
                 </div>
               </div>
 
-              {/* AUTOMÁTICO COM FALLBACK */}
+              {/* AUTOMÃTICO COM FALLBACK */}
               <div
                 onClick={() => setRenewalZapInstance('auto')}
                 className={cn(
@@ -1750,7 +1750,7 @@ export default function RenewalAutomationPage() {
                   <div className="flex items-center gap-2">
                     <Zap className="h-5 w-5 text-amber-500" />
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">Automático Inteligente</h4>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">AutomÃ¡tico Inteligente</h4>
                       <p className="text-[11px] text-muted-foreground">Com Fallback Anti-Falhas</p>
                     </div>
                   </div>
@@ -1763,7 +1763,7 @@ export default function RenewalAutomationPage() {
 
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
                   <p className="text-[11px] text-muted-foreground leading-tight">
-                    Dispara pelo ZAP Cobrança e, se este estiver desconectado ou der erro, usa o Hub Principal automaticamente.
+                    Dispara pelo ZAP CobranÃ§a e, se este estiver desconectado ou der erro, usa o Hub Principal automaticamente.
                   </p>
                 </div>
               </div>
@@ -1780,7 +1780,7 @@ export default function RenewalAutomationPage() {
                 <div>
                   <CardTitle className="text-lg">Gateway de Pagamento PIX</CardTitle>
                   <CardDescription>
-                    Selecione qual gateway emitirá os códigos PIX de renovação e gerenciará as baixas automáticas.
+                    Selecione qual gateway emitirÃ¡ os cÃ³digos PIX de renovaÃ§Ã£o e gerenciarÃ¡ as baixas automÃ¡ticas.
                   </CardDescription>
                 </div>
               </div>
@@ -1790,7 +1790,7 @@ export default function RenewalAutomationPage() {
             </div>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
-            {/* SELEÇÃO DE GATEWAY */}
+            {/* SELEÃ‡ÃƒO DE GATEWAY */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* CARD PJ PAY GATEWAY */}
               <div
@@ -1851,7 +1851,7 @@ export default function RenewalAutomationPage() {
                         LinkinPay
                       </h4>
                       <p className="text-[11px] text-muted-foreground">
-                        Gateway LinkinPay padrão
+                        Gateway LinkinPay padrÃ£o
                       </p>
                     </div>
                   </div>
@@ -1868,7 +1868,7 @@ export default function RenewalAutomationPage() {
               </div>
             </div>
 
-            {/* CAMPOS ESPECÍFICOS DO GATEWAY SELECIONADO */}
+            {/* CAMPOS ESPECÃFICOS DO GATEWAY SELECIONADO */}
             {renewalPixGateway === 'pjpay' ? (
               <div className="p-4 rounded-xl border bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
                 <div className="space-y-2">
@@ -1888,13 +1888,13 @@ export default function RenewalAutomationPage() {
                     className="font-mono text-sm"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Chave de API da sua conta PJ Pay Gateway com permissão para criar e consultar pagamentos PIX.
+                    Chave de API da sua conta PJ Pay Gateway com permissÃ£o para criar e consultar pagamentos PIX.
                   </p>
                 </div>
 
                 <div className="space-y-2 pt-3 border-t">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    URL do Webhook (Recebimento Automático)
+                    URL do Webhook (Recebimento AutomÃ¡tico)
                   </Label>
                   <div className="flex items-center gap-2">
                     <Input readOnly value={webhookUrl} className="font-mono text-xs bg-muted/50" />
@@ -1904,7 +1904,7 @@ export default function RenewalAutomationPage() {
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Cadastre essa URL no painel da PJ Pay Gateway como webhook_url para notificações do evento <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">payment.paid</code>.
+                    Cadastre essa URL no painel da PJ Pay Gateway como webhook_url para notificaÃ§Ãµes do evento <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">payment.paid</code>.
                   </p>
                 </div>
               </div>
@@ -1927,7 +1927,7 @@ export default function RenewalAutomationPage() {
                     className="font-mono text-sm"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Token fornecido no painel da LinkinPay em <b>Tokens · API Key</b>.
+                    Token fornecido no painel da LinkinPay em <b>Tokens Â· API Key</b>.
                   </p>
                 </div>
 
@@ -1943,7 +1943,7 @@ export default function RenewalAutomationPage() {
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Cadastre essa URL no painel da LinkinPay para notificações instantâneas em tempo real.
+                    Cadastre essa URL no painel da LinkinPay para notificaÃ§Ãµes instantÃ¢neas em tempo real.
                   </p>
                 </div>
               </div>
@@ -1951,21 +1951,21 @@ export default function RenewalAutomationPage() {
           </CardContent>
         </Card>
 
-        {/* MENSAGEM DE SUCESSO / CONFIRMAÇÃO DO WHATSAPP */}
+        {/* MENSAGEM DE SUCESSO / CONFIRMAÃ‡ÃƒO DO WHATSAPP */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-emerald-600" />
-                  <CardTitle className="text-lg">Mensagem de Confirmação (WhatsApp)</CardTitle>
+                  <CardTitle className="text-lg">Mensagem de ConfirmaÃ§Ã£o (WhatsApp)</CardTitle>
                 </div>
                 <CardDescription>
                   Enviada automaticamente no WhatsApp do cliente assim que o PIX for aprovado.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300">
-                Pós-Pagamento
+                PÃ³s-Pagamento
               </Badge>
             </div>
           </CardHeader>
@@ -2001,21 +2001,21 @@ export default function RenewalAutomationPage() {
           </CardContent>
         </Card>
 
-        {/* MENSAGEM DE COBRANÇA COM BOTÃO INTERATIVO */}
+        {/* MENSAGEM DE COBRANÃ‡A COM BOTÃƒO INTERATIVO */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-blue-600" />
-                  <CardTitle className="text-lg">Mensagem de Cobrança com Botão Interativo</CardTitle>
+                  <CardTitle className="text-lg">Mensagem de CobranÃ§a com BotÃ£o Interativo</CardTitle>
                 </div>
                 <CardDescription>
-                  Enviada com o botão oficial nativo do WhatsApp [SIM, RENOVAR AGORA]. O link não fica visível no texto, abrindo direto no clique do botão.
+                  Enviada com o botÃ£o oficial nativo do WhatsApp [SIM, RENOVAR AGORA]. O link nÃ£o fica visÃ­vel no texto, abrindo direto no clique do botÃ£o.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-bold">
-                Botão WhatsApp Nativo
+                BotÃ£o WhatsApp Nativo
               </Badge>
             </div>
           </CardHeader>
@@ -2023,7 +2023,7 @@ export default function RenewalAutomationPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Texto do Botão (Abre o link de renovação)
+                  Texto do BotÃ£o (Abre o link de renovaÃ§Ã£o)
                 </Label>
                 <Input
                   value={buttonText}
@@ -2035,12 +2035,12 @@ export default function RenewalAutomationPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Texto de Rodapé (Aparece acima do botão)
+                  Texto de RodapÃ© (Aparece acima do botÃ£o)
                 </Label>
                 <Input
                   value={footerText}
                   onChange={(e) => setFooterText(e.target.value)}
-                  placeholder="Entrega Automática • ⬇️Clique No Botão⬇️"
+                  placeholder="Entrega AutomÃ¡tica â€¢ â¬‡ï¸Clique No BotÃ£oâ¬‡ï¸"
                   className="text-sm"
                 />
               </div>
@@ -2072,25 +2072,25 @@ export default function RenewalAutomationPage() {
               rows={6}
               value={billingMessage}
               onChange={(e) => setBillingMessage(e.target.value)}
-              placeholder="Digite o modelo de cobrança..."
+              placeholder="Digite o modelo de cobranÃ§a..."
               className="font-mono text-sm leading-relaxed"
             />
 
-            {/* PREVIEW DO WHATSAPP COM BOTÃO */}
+            {/* PREVIEW DO WHATSAPP COM BOTÃƒO */}
             <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/80 border space-y-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                Prévia da mensagem no WhatsApp do cliente:
+                PrÃ©via da mensagem no WhatsApp do cliente:
               </span>
               <div className="max-w-[360px] bg-[#d9fdd3] dark:bg-[#005c4b] text-zinc-900 dark:text-zinc-100 rounded-2xl rounded-tr-none p-3.5 shadow-sm space-y-2 text-xs leading-relaxed">
                 <div className="whitespace-pre-wrap font-sans">
                   {billingMessage
-                    .replace(/{cliente}/g, 'João Silva')
+                    .replace(/{cliente}/g, 'JoÃ£o Silva')
                     .replace(/{assinaturas}/g, 'Netflix 4K Ultra HD')
                     .replace(/{vencimento}\s*\*?Hoje\*?/gi, `${format(new Date(), 'dd/MM')} *Hoje*`)
                     .replace(/{vencimento}/g, `${format(new Date(), 'dd/MM')} *Hoje*`)
                     .replace(/{valor}/g, '35,00')
-                    .replace(/🔗?\s*{link_renovacao}/gi, '')
-                    .replace(/🔗?\s*{link}/gi, '')
+                    .replace(/ðŸ”—?\s*{link_renovacao}/gi, '')
+                    .replace(/ðŸ”—?\s*{link}/gi, '')
                     .trim()}
                 </div>
                 <div className="text-[10px] text-zinc-600 dark:text-zinc-300 pt-1 border-t border-black/5 dark:border-white/10 font-medium">
@@ -2107,7 +2107,7 @@ export default function RenewalAutomationPage() {
           </CardContent>
         </Card>
 
-        {/* MENSAGEM DE SUPORTE AUTOMÁTICO NA RENOVAÇÃO */}
+        {/* MENSAGEM DE SUPORTE AUTOMÃTICO NA RENOVAÃ‡ÃƒO */}
         <Card className="border-red-200 dark:border-red-950/50">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -2117,11 +2117,11 @@ export default function RenewalAutomationPage() {
                   <CardTitle className="text-lg">Mensagem de Suporte Aberto (Quando o Cliente Relata Problema)</CardTitle>
                 </div>
                 <CardDescription>
-                  Disparada no WhatsApp quando o cliente marca &quot;Não está funcionando&quot; ao renovar. O CRM marca suporte automaticamente e envia esta mensagem.
+                  Disparada no WhatsApp quando o cliente marca &quot;NÃ£o estÃ¡ funcionando&quot; ao renovar. O CRM marca suporte automaticamente e envia esta mensagem.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
-                Suporte Automático
+                Suporte AutomÃ¡tico
               </Badge>
             </div>
           </CardHeader>
@@ -2160,7 +2160,7 @@ export default function RenewalAutomationPage() {
         {/* SALVAR */}
         <div className="flex justify-end pt-2 pb-8">
           <Button onClick={handleSave} disabled={isSaving} size="lg" className="px-8 font-bold gap-2">
-            {isSaving ? 'Salvando...' : 'Salvar Configurações'}
+            {isSaving ? 'Salvando...' : 'Salvar ConfiguraÃ§Ãµes'}
           </Button>
         </div>
       </main>
