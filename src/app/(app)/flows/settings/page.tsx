@@ -123,15 +123,53 @@ export default function FlowSettingsPage() {
             flowId: newFlowId,
         };
 
-        setKeywords((prev) => [...prev, item]);
+        const updatedKeywords = [...keywords, item];
+        setKeywords(updatedKeywords);
         setNewKeyword('');
         setNewFlowId('');
-        toast({ title: 'Palavra-chave adicionada!', description: `"${kw}" configurada.` });
+
+        if (effectiveUserId && configDocRef) {
+            setDoc(
+                configDocRef,
+                {
+                    triggerMode: 'keywords',
+                    keywords: updatedKeywords,
+                    updatedAt: new Date().toISOString(),
+                },
+                { merge: true }
+            )
+                .then(() => {
+                    toast({
+                        title: 'Palavra-chave salva e ativada!',
+                        description: `"${kw}" configurada para disparar o fluxo.`,
+                    });
+                })
+                .catch((err) => {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Erro ao salvar palavra-chave',
+                        description: err.message,
+                    });
+                });
+        } else {
+            toast({ title: 'Palavra-chave adicionada!', description: `"${kw}" configurada.` });
+        }
     };
 
     // Remover palavra-chave
     const handleRemoveKeyword = (id: string) => {
-        setKeywords((prev) => prev.filter((k) => k.id !== id));
+        const updatedKeywords = keywords.filter((k) => k.id !== id);
+        setKeywords(updatedKeywords);
+        if (effectiveUserId && configDocRef) {
+            setDoc(
+                configDocRef,
+                {
+                    keywords: updatedKeywords,
+                    updatedAt: new Date().toISOString(),
+                },
+                { merge: true }
+            ).catch(() => {});
+        }
     };
 
     // Salvar configurações no Firestore
@@ -205,7 +243,16 @@ export default function FlowSettingsPage() {
                     <CardContent className="space-y-6">
                         <RadioGroup
                             value={triggerMode}
-                            onValueChange={(val: any) => setTriggerMode(val)}
+                            onValueChange={(val: 'all_messages' | 'keywords') => {
+                                setTriggerMode(val);
+                                if (effectiveUserId && configDocRef) {
+                                    setDoc(
+                                        configDocRef,
+                                        { triggerMode: val, updatedAt: new Date().toISOString() },
+                                        { merge: true }
+                                    ).catch(() => {});
+                                }
+                            }}
                             className="grid grid-cols-1 md:grid-cols-2 gap-4"
                         >
                             {/* OPÇÃO 1: QUALQUER MENSAGEM */}
@@ -399,6 +446,16 @@ export default function FlowSettingsPage() {
                             </div>
                         )}
                     </CardContent>
+                    <CardFooter className="border-t pt-4 flex justify-end">
+                        <Button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+                        >
+                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            Salvar Gatilhos
+                        </Button>
+                    </CardFooter>
                 </Card>
 
                 {/* CARD REGRAS ADICIONAIS */}

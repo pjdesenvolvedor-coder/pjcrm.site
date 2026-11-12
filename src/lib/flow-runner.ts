@@ -1051,9 +1051,45 @@ export async function executeFlowNode(
     const nodeData = currentNode.data as FlowNodeData;
     const sessionDocRef = doc(ctx.db, 'users', ctx.userId, 'flow_sessions', ctx.phoneNumber);
 
-    // 0. CARREGA OU RECUPERA VARIÁVEIS DO CLIENTE
+    // 0. START (Ponto de Partida / Início do Fluxo) — avança imediatamente sem fazer consultas desnecessárias
+    if (nodeData.nodeType === 'start') {
+        const nextEdge = edges.find((e: any) => e.source === nodeId);
+        if (nextEdge && nextEdge.target) {
+            await executeFlowNode(ctx, flow, nextEdge.target);
+        } else {
+            console.log(`[FlowRunner] Nó de início ${nodeId} não possui saída conectada.`);
+            await setDoc(sessionDocRef, {
+                status: 'completed',
+                executingUntilMs: 0,
+                lastInteractionAt: new Date().toISOString(),
+            }, { merge: true });
+        }
+        return;
+    }
+
+    // 0.1 CARREGA OU RECUPERA VARIÁVEIS DO CLIENTE (apenas se o bloco atual usar variáveis de CRM ou se já estiverem em sessão)
+    const nodeTexts = [
+        nodeData.text,
+        nodeData.menuQuestionText,
+        nodeData.menuFooterText,
+        nodeData.menuButtonTitle,
+        nodeData.pixProductName,
+        nodeData.pixMessageText,
+        nodeData.pixDescription,
+        nodeData.contactCardName,
+        nodeData.contactCardPhone,
+        nodeData.contactCardOrganization,
+        ...(Array.isArray(nodeData.menuOptions)
+            ? nodeData.menuOptions.map((o: any) => (typeof o === 'string' ? o : `${o?.label || ''} ${o?.description || ''} ${o?.url || ''}`))
+            : []),
+    ]
+        .filter(Boolean)
+        .join(' ');
+
+    const hasCrmPlaceholders = /\{(?!nome\b|cliente\b|primeiro_nome\b|telefone\b|numero\b)[a-zA-Z0-9_-]+\}/i.test(nodeTexts);
+
     let clientVars: Record<string, string> | null = ctx.clientVariables || null;
-    if (!clientVars) {
+    if (!clientVars && hasCrmPlaceholders) {
         try {
             const sessionSnap = await getDoc(sessionDocRef);
             if (sessionSnap.exists()) {
@@ -1074,7 +1110,7 @@ export async function executeFlowNode(
                     }
                 } catch {}
                 let renewalLink = '';
-                if (client) {
+                if (client && /\{link_(renovacao|de_renovacao|renovar|pagamento|cobranca)\}/i.test(nodeTexts)) {
                     renewalLink = await resolveRenewalLinkForClient(ctx.userId, client);
                 }
                 clientVars = formatClientVariables(client, ctx.contactName, ctx.phoneNumber, varCfg, renewalLink);
@@ -1101,22 +1137,6 @@ export async function executeFlowNode(
             .replace(/\{telefone\}/gi, ctx.phoneNumber)
             .replace(/\{numero\}/gi, ctx.phoneNumber);
     };
-
-    // 0. START (Ponto de Partida / Início do Fluxo)
-    if (nodeData.nodeType === 'start') {
-        const nextEdge = edges.find((e: any) => e.source === nodeId);
-        if (nextEdge && nextEdge.target) {
-            await executeFlowNode(ctx, flow, nextEdge.target);
-        } else {
-            console.log(`[FlowRunner] Nó de início ${nodeId} não possui saída conectada.`);
-            await setDoc(sessionDocRef, {
-                status: 'completed',
-                executingUntilMs: 0,
-                lastInteractionAt: new Date().toISOString(),
-            }, { merge: true });
-        }
-        return;
-    }
 
     // 1. CONTEÚDO
     if (nodeData.nodeType === 'content') {
@@ -1684,7 +1704,7 @@ export async function handleUserMenuResponse(
         targetEdge = nodeEdges.find((e: any) => e.sourceHandle === String(matchedOption!.index + 1));
     }
 
-    const sessionDocRef = doc(ctx.db, 'users', ctx.userId, 'flow_sessions', session.phoneNumber);
+    const sessionDocRef = doc(ctx.db, 'users', ctx.userId, 'flow_sessions', session.phoneNumber || ctx.phoneNumber);
 
     if (targetEdge && targetEdge.target) {
         console.log(`[FlowRunner] Opção "${matchedOption.label}" selecionada com sucesso. Avançando para o bloco: ${targetEdge.target}`);
