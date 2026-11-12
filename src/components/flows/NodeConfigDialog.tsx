@@ -43,7 +43,15 @@ import {
     Link2,
     ExternalLink,
     PauseCircle,
+    QrCode,
+    Package,
+    DollarSign,
 } from 'lucide-react';
+import Link from 'next/link';
+import { Switch } from '@/components/ui/switch';
+import { collection } from 'firebase/firestore';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { DEFAULT_FLOW_PIX_BILLING_MESSAGE } from '@/lib/flow-product-delivery';
 import { WhatsAppMenuPreviewDialog } from '@/components/flows/WhatsAppMenuPreviewDialog';
 import type { FlowNodeData, FlowDefinition } from '@/lib/types';
 
@@ -185,6 +193,49 @@ export function NodeConfigDialog({
         nodeType: 'content',
     });
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const { firestore, effectiveUserId } = useFirebase();
+
+    const stockQuery = useMemoFirebase(() => {
+        if (!effectiveUserId) return null;
+        return collection(firestore, 'users', effectiveUserId, 'flow_product_stock');
+    }, [firestore, effectiveUserId]);
+    const { data: stockItems } = useCollection<any>(stockQuery);
+
+    const subsQuery = useMemoFirebase(() => {
+        if (!effectiveUserId) return null;
+        return collection(firestore, 'users', effectiveUserId, 'subscriptions');
+    }, [firestore, effectiveUserId]);
+    const { data: subscriptionsList } = useCollection<any>(subsQuery);
+
+    const availableProductsSummary = React.useMemo(() => {
+        const map = new Map<string, { name: string; availableCount: number; defaultPrice?: number }>();
+        (subscriptionsList || []).forEach((sub: any) => {
+            const name = String(sub?.name || '').trim();
+            if (!name) return;
+            const key = name.toLowerCase();
+            if (!map.has(key)) {
+                map.set(key, {
+                    name,
+                    availableCount: 0,
+                    defaultPrice: sub?.value ? Number(String(sub.value).replace(',', '.')) : undefined,
+                });
+            }
+        });
+        (stockItems || []).forEach((item: any) => {
+            const name = String(item?.productName || '').trim();
+            if (!name) return;
+            const key = name.toLowerCase();
+            const existing = map.get(key) || { name, availableCount: 0, defaultPrice: item?.defaultPrice };
+            if (item?.status === 'available') {
+                existing.availableCount += 1;
+            }
+            if (!existing.defaultPrice && item?.defaultPrice) {
+                existing.defaultPrice = Number(item.defaultPrice);
+            }
+            map.set(key, existing);
+        });
+        return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }, [stockItems, subscriptionsList]);
 
     // Arrastar e soltar para mudar a ordem das respostas do menu
     const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
@@ -334,6 +385,7 @@ export function NodeConfigDialog({
                         {formData.nodeType === 'action' && <Zap className="h-5 w-5 text-amber-500" />}
                         {formData.nodeType === 'flow_connect' && <Rocket className="h-5 w-5 text-emerald-500" />}
                         {formData.nodeType === 'condition' && <UserCheck className="h-5 w-5 text-sky-500" />}
+                        {formData.nodeType === 'pix_payment' && <QrCode className="h-5 w-5 text-emerald-600" />}
                         <span>
                             {formData.nodeType === 'start' && 'Início do Fluxo'}
                             {formData.nodeType === 'menu' && 'Menu'}
@@ -343,6 +395,7 @@ export function NodeConfigDialog({
                             {formData.nodeType === 'action' && 'Ação'}
                             {formData.nodeType === 'flow_connect' && 'Conexão de Fluxo'}
                             {formData.nodeType === 'condition' && 'Verificar Cliente no CRM'}
+                            {formData.nodeType === 'pix_payment' && 'Cobrança PIX + Entrega Automática de Produto'}
                         </span>
                     </DialogTitle>
                 </DialogHeader>
@@ -1361,6 +1414,225 @@ export function NodeConfigDialog({
                                 <p>• O cliente recebe a mensagem final (se preenchida).</p>
                                 <p>• Novas mensagens enviadas por este número <strong>serão ignoradas</strong> pelo fluxo até o tempo de pausa terminar.</p>
                                 <p>• Quando o período passar, se o cliente voltar a mandar mensagem, o fluxo atenderá normalmente do início.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ---------------- 8. CONFIGURAÇÃO DE COBRANÇA PIX + ENTREGA AUTOMÁTICA DE PRODUTO ---------------- */}
+                    {formData.nodeType === 'pix_payment' && (
+                        <div className="space-y-4">
+                            <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-1.5 rounded-md bg-emerald-600 text-white">
+                                            <QrCode className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                                                Gerar PIX e Entregar Login Automaticamente
+                                            </h4>
+                                            <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80">
+                                                Quando o cliente chegar neste bloco, o bot gera o PIX e, assim que pago, envia 1 login (e-mail e senha) do estoque!
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button asChild variant="outline" size="sm" className="h-7 text-[11px] shrink-0 border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300">
+                                        <Link href="/flows/product-delivery" target="_blank">
+                                            <Package className="h-3 w-3 mr-1" />
+                                            Gerenciar Estoque
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* SELEÇÃO DO PRODUTO QUE SERÁ ENTREGUE */}
+                            <div className="space-y-2 p-3.5 rounded-xl border bg-card">
+                                <Label className="text-xs font-bold flex items-center gap-1.5">
+                                    <Package className="h-3.5 w-3.5 text-emerald-600" />
+                                    Qual Produto será entregue após o pagamento?
+                                </Label>
+
+                                {availableProductsSummary.length > 0 && (
+                                    <Select
+                                        value={
+                                            availableProductsSummary.some(
+                                                (p) => p.name.toLowerCase() === (formData.pixProductName || '').trim().toLowerCase()
+                                            )
+                                                ? availableProductsSummary.find(
+                                                      (p) => p.name.toLowerCase() === (formData.pixProductName || '').trim().toLowerCase()
+                                                  )?.name
+                                                : undefined
+                                        }
+                                        onValueChange={(val) => {
+                                            const found = availableProductsSummary.find((p) => p.name === val);
+                                            const nextAmount =
+                                                found?.defaultPrice && (!formData.pixAmount || formData.pixAmount === '19,90')
+                                                    ? found.defaultPrice.toFixed(2).replace('.', ',')
+                                                    : formData.pixAmount || '19,90';
+                                            setFormData({
+                                                ...formData,
+                                                pixProductName: val,
+                                                pixAmount: nextAmount,
+                                                label: `PIX: ${val}`,
+                                            });
+                                        }}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecionar produto cadastrado no estoque..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableProductsSummary.map((prod) => (
+                                                <SelectItem key={prod.name} value={prod.name}>
+                                                    📦 {prod.name} ({prod.availableCount} login{prod.availableCount === 1 ? '' : 's'} disponível)
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+
+                                <div className="space-y-1 pt-1">
+                                    <Label className="text-[11px] text-muted-foreground">
+                                        Nome do Produto (você pode escolher acima ou digitar exatamente o nome do produto do estoque):
+                                    </Label>
+                                    <Input
+                                        placeholder="Ex: Netflix, Disney+, HBO Max, Canva Pro..."
+                                        value={formData.pixProductName || ''}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                pixProductName: e.target.value,
+                                                label: e.target.value ? `PIX: ${e.target.value}` : 'PIX + Entrega Produto',
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            {/* VALOR DO PIX */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-bold flex items-center gap-1">
+                                        <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                                        Valor da Cobrança PIX (R$)
+                                    </Label>
+                                    <Input
+                                        placeholder="Ex: 19,90"
+                                        value={formData.pixAmount !== undefined ? String(formData.pixAmount) : '19,90'}
+                                        onChange={(e) => setFormData({ ...formData, pixAmount: e.target.value })}
+                                    />
+                                    <p className="text-[10.5px] text-muted-foreground">
+                                        Valor que será gerado no PIX para o cliente pagar.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Descrição no PIX (Opcional)</Label>
+                                    <Input
+                                        placeholder="Ex: Acesso Mensal"
+                                        value={formData.pixDescription || ''}
+                                        onChange={(e) => setFormData({ ...formData, pixDescription: e.target.value })}
+                                    />
+                                    <p className="text-[10.5px] text-muted-foreground">
+                                        Identificação da cobrança no gateway.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* MENSAGEM ENVIADA JUNTO COM O PIX */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-bold">
+                                        Mensagem Enviada ao Gerar o PIX (Opcional)
+                                    </Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 text-[11px] text-emerald-700"
+                                        onClick={() =>
+                                            setFormData({
+                                                ...formData,
+                                                pixMessageText: DEFAULT_FLOW_PIX_BILLING_MESSAGE,
+                                            })
+                                        }
+                                    >
+                                        Restaurar Modelo Padrão
+                                    </Button>
+                                </div>
+                                <Textarea
+                                    rows={5}
+                                    placeholder={DEFAULT_FLOW_PIX_BILLING_MESSAGE}
+                                    value={formData.pixMessageText ?? DEFAULT_FLOW_PIX_BILLING_MESSAGE}
+                                    onChange={(e) => setFormData({ ...formData, pixMessageText: e.target.value })}
+                                />
+                                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                    {[
+                                        { key: '{primeiro_nome}', label: '+{primeiro_nome}' },
+                                        { key: '{cliente}', label: '+{cliente}' },
+                                        { key: '{produto}', label: '+{produto}' },
+                                        { key: '{valor}', label: '+{valor}' },
+                                        { key: '{pix_copia_e_cola}', label: '+{pix_copia_e_cola}' },
+                                    ].map((v) => (
+                                        <Badge
+                                            key={v.key}
+                                            variant="outline"
+                                            className="cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-[10.5px] font-mono"
+                                            onClick={() =>
+                                                setFormData({
+                                                    ...formData,
+                                                    pixMessageText:
+                                                        (formData.pixMessageText ?? DEFAULT_FLOW_PIX_BILLING_MESSAGE) + ` ${v.key}`,
+                                                })
+                                            }
+                                        >
+                                            {v.label}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* OPÇÕES DE ENVIO DO PIX */}
+                            <div className="space-y-2.5 p-3 rounded-xl border bg-muted/20">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5 pr-3">
+                                        <Label className="text-xs font-semibold">
+                                            Enviar Código PIX Copia e Cola separado
+                                        </Label>
+                                        <p className="text-[10.5px] text-muted-foreground">
+                                            Envia o código PIX sozinho em uma mensagem logo abaixo para o cliente copiar com 1 toque.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={formData.pixSendCopyPasteSeparate !== false}
+                                        onCheckedChange={(val) =>
+                                            setFormData({ ...formData, pixSendCopyPasteSeparate: val })
+                                        }
+                                    />
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                                    <div className="space-y-0.5 pr-3">
+                                        <Label className="text-xs font-semibold">
+                                            Enviar também Imagem do QR Code
+                                        </Label>
+                                        <p className="text-[10.5px] text-muted-foreground">
+                                            Envia a imagem do QR Code caso o cliente esteja conversando pelo computador.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={Boolean(formData.pixSendQrImage)}
+                                        onCheckedChange={(val) =>
+                                            setFormData({ ...formData, pixSendQrImage: val })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 space-y-1">
+                                <p className="font-bold">💡 Onde personalizar a mensagem de entrega do login (E-mail e Senha)?</p>
+                                <p>
+                                    No menu lateral <strong>Fluxo &rarr; Entrega de Produtos (Automática)</strong> você adiciona os logins no estoque e personaliza a mensagem de entrega <strong>Geral</strong> ou <strong>Individual por Produto</strong>!
+                                </p>
                             </div>
                         </div>
                     )}

@@ -769,8 +769,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows' || (pathname.startsWith('/flows/') && pathname !== '/flows/connection' && pathname !== '/flows/settings' && pathname !== '/flows/kanban' && pathname !== '/flows/variables')}>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows' || (pathname.startsWith('/flows/') && pathname !== '/flows/connection' && pathname !== '/flows/settings' && pathname !== '/flows/kanban' && pathname !== '/flows/variables' && pathname !== '/flows/product-delivery')}>
                                         <Link href="/flows">Canva (Criador)</Link>
+                                    </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                                <SidebarMenuSubItem>
+                                    <SidebarMenuSubButton className="text-xs" asChild isActive={pathname === '/flows/product-delivery'}>
+                                        <Link href="/flows/product-delivery" className="text-emerald-600 dark:text-emerald-400 font-bold">Entrega de Produtos (Automática)</Link>
                                     </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                                 <SidebarMenuSubItem>

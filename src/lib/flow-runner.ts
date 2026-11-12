@@ -1475,6 +1475,54 @@ export async function executeFlowNode(
         return;
     }
 
+    // 8. PAGAMENTO PIX + ENTREGA AUTOMÁTICA DE PRODUTO
+    if (nodeData.nodeType === 'pix_payment') {
+        const productName = replaceVars(nodeData.pixProductName || 'Produto Digital').trim();
+        const messageText = nodeData.pixMessageText ? replaceVars(nodeData.pixMessageText) : undefined;
+        const description = nodeData.pixDescription ? replaceVars(nodeData.pixDescription) : undefined;
+
+        console.log(`[FlowRunner] Gerando cobrança PIX para ${ctx.phoneNumber} - Produto: ${productName} (Valor: ${nodeData.pixAmount || 'Padrão'})`);
+
+        try {
+            const { createAndSendFlowPixOrder } = await import('./flow-product-delivery');
+            await createAndSendFlowPixOrder({
+                userId: ctx.userId,
+                flowId: flow.id,
+                flowName: flow.name,
+                nodeId,
+                phoneNumber: ctx.phoneNumber,
+                recipientJid: ctx.recipientJid,
+                contactName: ctx.contactName || clientVars?.nome || 'Cliente',
+                serverUrl: ctx.serverUrl,
+                instanceToken: ctx.instanceToken,
+                productName,
+                amountRaw: nodeData.pixAmount,
+                description,
+                messageText,
+                sendCopyPasteSeparate: nodeData.pixSendCopyPasteSeparate !== false,
+                sendQrImage: Boolean(nodeData.pixSendQrImage),
+            });
+        } catch (pixErr) {
+            console.error('[FlowRunner] Erro ao gerar PIX de entrega automática:', pixErr);
+        }
+
+        const nextEdge = edges.find((e: any) => e.source === nodeId);
+        if (nextEdge && nextEdge.target) {
+            await executeFlowNode(ctx, flow, nextEdge.target);
+        } else {
+            await setDoc(sessionDocRef, {
+                userId: ctx.userId,
+                flowId: flow.id,
+                currentNodeId: nodeId,
+                currentNodeLabel: nodeData.label || `PIX: ${productName}`,
+                status: 'completed',
+                executingUntilMs: 0,
+                lastInteractionAt: new Date().toISOString(),
+            }, { merge: true }).catch(() => {});
+        }
+        return;
+    }
+
     // Fallback: avança para a próxima aresta se existir
     const defaultNextEdge = edges.find((e: any) => e.source === nodeId);
     if (defaultNextEdge && defaultNextEdge.target) {

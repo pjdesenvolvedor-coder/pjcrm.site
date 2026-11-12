@@ -130,12 +130,18 @@ export async function GET(request: Request) {
             if (!specificConfig.exists()) continue;
             const settings = specificConfig.data() as Settings;
 
-            /* --- 0. VERIFICAR AUTOMATICAMENTE SESSÕES PIX DE RENOVAÇÃO PENDENTES --- */
+            /* --- 0. VERIFICAR AUTOMATICAMENTE SESSÕES PIX DE RENOVAÇÃO E PEDIDOS DO FLUXO PENDENTES --- */
             try {
                 const { verifyPendingRenewalSessions } = await import('@/lib/renewal-service');
                 await verifyPendingRenewalSessions(userId, settings);
             } catch (verifyErr) {
                 console.warn('[cron:verify-renewals] Erro ao verificar sessões PIX:', verifyErr);
+            }
+            try {
+                const { verifyPendingFlowOrders } = await import('@/lib/flow-product-delivery');
+                await verifyPendingFlowOrders(userId);
+            } catch (verifyFlowErr) {
+                console.warn('[cron:verify-flow-orders] Erro ao verificar pedidos PIX do fluxo:', verifyFlowErr);
             }
 
             const hubToken = settings.webhookToken || '';

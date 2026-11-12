@@ -26,6 +26,8 @@ import {
     ExternalLink,
     PauseCircle,
     TimerOff,
+    QrCode,
+    Package,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -120,6 +122,15 @@ const nodeTypeConfigs: Record<
         bgClass: 'bg-sky-50/40 dark:bg-sky-950/20',
         badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
         iconClass: 'text-sky-600 dark:text-sky-400',
+    },
+    pix_payment: {
+        title: 'PIX + Entrega',
+        icon: QrCode,
+        color: '#059669',
+        borderClass: 'border-emerald-400 dark:border-emerald-700 ring-1 ring-emerald-400/20',
+        bgClass: 'bg-emerald-50/50 dark:bg-emerald-950/30',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold',
+        iconClass: 'text-emerald-600 dark:text-emerald-400',
     },
 };
 
@@ -528,6 +539,26 @@ export const FlowCustomNode = memo(({ id, data, selected }: NodeProps) => {
 
                         <div className="text-[10px] text-purple-800 dark:text-purple-300/90 bg-purple-100/50 dark:bg-purple-950/50 p-1.5 rounded text-center font-medium border border-purple-200/50 dark:border-purple-900/30">
                             Novas mensagens serão ignoradas até o tempo passar.
+                        </div>
+                    </div>
+                )}
+
+                {/* 8. NÓ DE COBRANÇA PIX + ENTREGA AUTOMÁTICA DE PRODUTO */}
+                {nodeData?.nodeType === 'pix_payment' && (
+                    <div className="p-2.5 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800/70 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-900 dark:text-emerald-200 truncate">
+                                <Package className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span className="truncate">
+                                    {nodeData.pixProductName || 'Selecionar Produto'}
+                                </span>
+                            </div>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] shrink-0">
+                                R$ {nodeData.pixAmount || '19,90'}
+                            </span>
+                        </div>
+                        <div className="text-[10px] text-emerald-800 dark:text-emerald-300 bg-white/80 dark:bg-slate-900/60 p-1.5 rounded border border-emerald-200/60 dark:border-emerald-900/50 font-medium">
+                            ⚡ Gera o PIX automático e entrega 1 login do estoque assim que o pagamento é aprovado.
                         </div>
                     </div>
                 )}

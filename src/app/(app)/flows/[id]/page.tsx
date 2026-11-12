@@ -69,6 +69,7 @@ import {
     GripVertical,
     PlayCircle,
     PauseCircle,
+    QrCode,
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -716,6 +717,16 @@ function FlowCanvasEditorContent() {
                         pauseDurationValue: 1,
                         pauseDurationUnit: 'hours',
                         text: '',
+                    };
+                    break;
+                case 'pix_payment':
+                    initialData = {
+                        nodeType: 'pix_payment',
+                        label: 'PIX + Entrega Produto',
+                        pixProductName: '',
+                        pixAmount: '19,90',
+                        pixSendCopyPasteSeparate: true,
+                        pixSendQrImage: false,
                     };
                     break;
                 default:
@@ -1573,6 +1584,23 @@ function FlowCanvasEditorContent() {
                             </div>
                             <span className="flex-1 truncate">Pausar automação</span>
                             <GripVertical className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-60 shrink-0" />
+                        </button>
+
+                        {/* 7. GERAR PIX + ENTREGA AUTOMÁTICA DE PRODUTO */}
+                        <button
+                            type="button"
+                            draggable
+                            onDragStart={(e) => onDragStart(e, 'pix_payment')}
+                            onDragEnd={onDragEnd}
+                            onClick={() => handleAddBlock('pix_payment')}
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11.5px] font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200/80 dark:border-emerald-800/80 transition-all text-left group cursor-grab active:cursor-grabbing active:scale-[0.98]"
+                            title="Gerar PIX para pagamento e entregar login do estoque automaticamente"
+                        >
+                            <div className="p-1 rounded-md bg-emerald-600 text-white group-hover:scale-110 transition-transform shrink-0">
+                                <QrCode className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="flex-1 truncate">Gerar PIX (Produto)</span>
+                            <GripVertical className="h-3.5 w-3.5 text-emerald-500 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 opacity-70 shrink-0" />
                         </button>
                     </div>
                 )}

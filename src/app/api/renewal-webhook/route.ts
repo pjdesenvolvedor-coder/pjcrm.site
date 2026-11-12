@@ -111,6 +111,25 @@ export async function POST(req: NextRequest) {
     }
 
     if (!targetSessionId) {
+      // Verifica se a transação pertence a um pedido automático do Fluxo (flow_orders)
+      if (txId) {
+        try {
+          const txStr = String(txId).trim();
+          const fSnap = await getDocs(
+            query(collection(db, 'flow_orders'), where('pixTransactionId', '==', txStr))
+          );
+          if (!fSnap.empty) {
+            const { executeFlowOrderDelivery } = await import('@/lib/flow-product-delivery');
+            const flowRes = await executeFlowOrderDelivery({
+              orderId: fSnap.docs[0].id,
+              pixTransactionId: txStr,
+            });
+            return NextResponse.json({ received: true, flowOrder: true, ...flowRes }, { status: 200 });
+          }
+        } catch (fErr) {
+          console.error('[renewal-webhook] Erro ao verificar flow_orders:', fErr);
+        }
+      }
       console.warn('[renewal-webhook] Nenhuma sessão encontrada para a transação:', txId);
       return NextResponse.json({ received: true, error: 'Sessão não identificada' }, { status: 200 });
     }

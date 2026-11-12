@@ -431,7 +431,7 @@ export type FlowTriggerSettings = {
 
 export type FlowNodeData = {
   label?: string;
-  nodeType: 'start' | 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'pause_automation' | 'randomizer';
+  nodeType: 'start' | 'content' | 'menu' | 'delay' | 'action' | 'condition' | 'flow_connect' | 'pause_automation' | 'randomizer' | 'pix_payment';
   // Conteúdo
   contentType?: 'text' | 'image' | 'audio' | 'video' | 'document';
   text?: string;
@@ -473,6 +473,13 @@ export type FlowNodeData = {
   targetFlowId?: string;
   // Randomizador
   randomAWeight?: number;
+  // Pagamento PIX + Entrega Automática de Produto
+  pixProductName?: string;
+  pixAmount?: number | string;
+  pixDescription?: string;
+  pixMessageText?: string;
+  pixSendCopyPasteSeparate?: boolean;
+  pixSendQrImage?: boolean;
 };
 
 export type FlowDefinition = {
@@ -526,6 +533,66 @@ export type FlowVariablesConfig = {
   // Modelo da linha para todas as assinaturas
   allSubsTemplate?: string;
   allSubsEmptyMessage?: string;
+};
+
+export type FlowProductStockItem = {
+  id: string;
+  userId: string;
+  productName: string;
+  email: string;
+  password: string;
+  screen?: string;
+  pinScreen?: string;
+  accessLink?: string;
+  defaultPrice?: number;
+  maxSlots?: number;
+  usedSlots?: number;
+  status: 'available' | 'delivered';
+  deliveredToPhone?: string;
+  deliveredToName?: string;
+  deliveredAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type FlowProductDeliveryConfig = {
+  isEnabled?: boolean;
+  generalDeliveryMessage?: string;
+  productMessages?: Record<string, string>;
+  outOfStockMessage?: string;
+  pixGateway?: 'pjpay' | 'linkinpay' | 'custom';
+  pixApiToken?: string;
+  customPixEndpoint?: string;
+  defaultPixBillingMessage?: string;
+  registerClientInCrm?: boolean;
+  updatedAt?: string;
+};
+
+export type FlowOrder = {
+  id: string;
+  userId: string;
+  flowId: string;
+  flowName?: string;
+  nodeId: string;
+  phoneNumber: string;
+  recipientJid?: string;
+  contactName?: string;
+  productName: string;
+  amountInCents: number;
+  pixTransactionId: string;
+  pixCopyPaste: string;
+  pixQrCodeBase64?: string;
+  gateway: string;
+  serverUrl: string;
+  instanceToken: string;
+  status: 'pending' | 'paid' | 'delivered' | 'out_of_stock' | 'expired';
+  deliveredStockId?: string;
+  deliveredEmail?: string;
+  deliveredPassword?: string;
+  deliveredAt?: string;
+  paidAt?: string;
+  createdAt: string;
+
 };
 
 
