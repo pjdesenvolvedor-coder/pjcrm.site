@@ -9,9 +9,9 @@ import {
     setDoc,
     updateDoc,
     deleteDoc,
-    runTransaction,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
+import { claimOnce } from '@/lib/firestore-claim';
 import type {
     FlowDefinition,
     FlowTriggerSettings,
@@ -755,6 +755,43 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ignored: 'duplicate_message_in_session' }, { status: 200 });
         }
 
+        // Helper para identificar se a mensagem corresponde a alguma palavra-chave de fluxo configurada
+        const findMatchedKeywordFlowId = (): string | null => {
+            const triggers = flowConfig.keywords || [];
+            if (!userText || triggers.length === 0) return null;
+            const cleanUserText = normalizeTextForMatch(userText);
+
+            for (const trig of triggers) {
+                if (!trig.keyword) continue;
+                const variants = trig.keyword.split(/[,;\n|]+/);
+                for (const rawVar of variants) {
+                    const varTrim = rawVar.trim();
+                    if (!varTrim) continue;
+                    const cleanVar = normalizeTextForMatch(varTrim);
+                    const lowerVar = varTrim.toLowerCase();
+
+                    if (trig.matchType === 'exact') {
+                        if ((cleanVar && cleanUserText === cleanVar) || normalizedText === lowerVar) {
+                            return trig.flowId;
+                        }
+                    } else {
+                        if ((cleanVar && cleanUserText.includes(cleanVar)) || normalizedText.includes(lowerVar)) {
+                            return trig.flowId;
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        const matchedKeywordFlowId = findMatchedKeywordFlowId();
+
+        // 4.9 VERIFICAÇÃO AUTOMÁTICA DE PEDIDO PIX PENDENTE DO FLUXO (em background sem atrasar a resposta)
+        try {
+            const { verifyPendingFlowOrders } = await import('@/lib/flow-product-delivery');
+            verifyPendingFlowOrders(targetUserId).catch(() => {});
+        } catch {}
+
         // 5. PALAVRA DE RESET DO CHAT (comando reset personalizável)
         if (isReset) {
             console.log(`[Flow Webhook] Palavra de reset "${resetWord}" recebida de ${phoneNumber}. Resetando sessão do chat...`);
@@ -763,7 +800,11 @@ export async function POST(req: NextRequest) {
             await deleteDoc(sessionDocRef).catch(() => {});
             await sendUazapiText({ ...runnerCtx, bypassDedup: true }, '🔄 *Chat resetado com sucesso!*\nIniciando fluxo...').catch(() => {});
 
-            const flow = await resolveFlowToExecute(targetUserId, flowConfig.defaultFlowId || null);
+            const resetFlowId =
+                flowConfig.defaultFlowId ||
+                (Array.isArray(flowConfig.keywords) && flowConfig.keywords[0]?.flowId) ||
+                null;
+            const flow = await resolveFlowToExecute(targetUserId, resetFlowId);
             if (flow) {
                 const nodes = flow.nodes || [];
                 const edges = flow.edges || [];
@@ -812,7 +853,14 @@ export async function POST(req: NextRequest) {
         if (currentSession && (currentSession.status === 'paused' || currentSession.pausedUntilMs || currentSession.pausedUntil)) {
             const untilMs = currentSession.pausedUntilMs || (currentSession.pausedUntil ? Date.parse(currentSession.pausedUntil) : 0);
             const nowMs = Date.now();
-            if (untilMs && nowMs < untilMs) {
+            if (matchedKeywordFlowId) {
+                console.log(`[Flow Webhook] Contato ${phoneNumber} enviou palavra-chave ("${userText}") durante pausa. Despausando e iniciando fluxo correspondente.`);
+                clearOutboundDedupForContact(targetUserId, phoneNumber);
+                currentSession.status = 'completed';
+                currentSession.pausedUntil = undefined;
+                currentSession.pausedUntilMs = undefined;
+                currentSession.lastFlowStartedAtMs = 0;
+            } else if (untilMs && nowMs < untilMs) {
                 const remainingMinutes = Math.ceil((untilMs - nowMs) / (60 * 1000));
                 console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ignorada: automação pausada até ${currentSession.pausedUntil} (${remainingMinutes} min restantes).`);
                 return NextResponse.json({
@@ -902,69 +950,77 @@ export async function POST(req: NextRequest) {
             const humanResp = await tryDispatchHumanSupport();
             if (humanResp) return humanResp;
 
+            // Se NÃO bateu com nenhuma opção do menu, mas bateu com uma palavra-chave configurada (ex: "cap"),
+            // permite iniciar o fluxo da palavra-chave!
             const nowMs = Date.now();
             const lastInterMs = getTimestampMs(currentSession.lastInteractionAt);
             const menuSentAtMs = currentSession.menuSentAtMs || 0;
             const lastFlowStartedAtMs = currentSession.lastFlowStartedAtMs || 0;
 
-            // Se o menu acabou de ser enviado há menos de 4.5 segundos (cliente ainda estava digitando a 2ª/3ª frase inicial como "Me ajuda meu brother" / "O código qual é"),
-            // ignora silenciosamente essa frase extra para não poluir o chat nem reiniciar o fluxo!
-            if (
-                (menuSentAtMs && (nowMs - menuSentAtMs) < 4500) ||
-                (lastFlowStartedAtMs && (nowMs - lastFlowStartedAtMs) < 8000)
-            ) {
-                console.log(`[Flow Webhook] Ignorando mensagem complementar enviada logo após o menu inicial por ${phoneNumber}: "${userText}"`);
-                return NextResponse.json({ ignored: 'trailing_burst_after_menu' }, { status: 200 });
-            }
-
-            // Se o nó de menu não existe mais no fluxo (ex: fluxo foi editado),
-            // OU se a sessão de menu é antiga (mais de 30 minutos de inatividade) e o cliente mandou uma nova mensagem,
-            // OU se o usuário desativou "ignoreIfActiveFlow":
-            // Reinicia o fluxo do começo em vez de prender o cliente em um menu antigo!
-            const isStaleMenuSession = lastInterMs > 0 && (nowMs - lastInterMs) > 30 * 60 * 1000;
-            if (diag.invalidMenuNode || isStaleMenuSession || flowConfig.ignoreIfActiveFlow === false) {
-                console.log(
-                    `[Flow Webhook] Reiniciando fluxo para ${phoneNumber} (invalidMenuNode=${!!diag.invalidMenuNode}, isStale=${isStaleMenuSession}, ignoreIfActiveFlow=${flowConfig.ignoreIfActiveFlow}).`
-                );
+            if (matchedKeywordFlowId) {
+                console.log(`[Flow Webhook] Palavra-chave detectada ("${userText}") enquanto em menu para ${phoneNumber}. Disparando fluxo correspondente: ${matchedKeywordFlowId}`);
+                clearOutboundDedupForContact(targetUserId, phoneNumber);
+                currentSession.lastFlowStartedAtMs = 0;
             } else {
-                // O menu é recente e válido, e o cliente digitou algo fora das opções:
-                // Evita mandar aviso repetido se já avisou nos últimos 4 segundos
-                if (currentSession.lastInvalidWarnAtMs && (nowMs - currentSession.lastInvalidWarnAtMs) < 4000) {
-                    return NextResponse.json({ ignored: 'invalid_option_warn_cooldown' }, { status: 200 });
+                // Se o menu acabou de ser enviado há menos de 4.5 segundos (cliente ainda estava digitando a 2ª/3ª frase inicial como "Me ajuda meu brother" / "O código qual é"),
+                // ignora silenciosamente essa frase extra para não poluir o chat nem reiniciar o fluxo!
+                if (
+                    (menuSentAtMs && (nowMs - menuSentAtMs) < 4500) ||
+                    (lastFlowStartedAtMs && (nowMs - lastFlowStartedAtMs) < 8000)
+                ) {
+                    console.log(`[Flow Webhook] Ignorando mensagem complementar enviada logo após o menu inicial por ${phoneNumber}: "${userText}"`);
+                    return NextResponse.json({ ignored: 'trailing_burst_after_menu' }, { status: 200 });
                 }
 
-                let invalidMsg = flowConfig.invalidOptionMessage;
-                try {
-                    const currentFlowRef = doc(db, 'users', targetUserId, 'flows', currentSession.flowId);
-                    const currentFlowSnap = await getDoc(currentFlowRef);
-                    if (currentFlowSnap.exists()) {
-                        const currentFlowData = currentFlowSnap.data() as FlowDefinition;
-                        const menuNode = (currentFlowData.nodes || []).find((n: any) => n.id === currentSession.currentNodeId);
-                        if (menuNode?.data?.invalidOptionMessage) {
-                            invalidMsg = menuNode.data.invalidOptionMessage;
-                        }
+                // Se o nó de menu não existe mais no fluxo (ex: fluxo foi editado),
+                // OU se a sessão de menu é antiga (mais de 30 minutos de inatividade) e o cliente mandou uma nova mensagem,
+                // OU se o usuário desativou "ignoreIfActiveFlow":
+                // Reinicia o fluxo do começo em vez de prender o cliente em um menu antigo!
+                const isStaleMenuSession = lastInterMs > 0 && (nowMs - lastInterMs) > 30 * 60 * 1000;
+                if (diag.invalidMenuNode || isStaleMenuSession || flowConfig.ignoreIfActiveFlow === false) {
+                    console.log(
+                        `[Flow Webhook] Reiniciando fluxo para ${phoneNumber} (invalidMenuNode=${!!diag.invalidMenuNode}, isStale=${isStaleMenuSession}, ignoreIfActiveFlow=${flowConfig.ignoreIfActiveFlow}).`
+                    );
+                } else {
+                    // O menu é recente e válido, e o cliente digitou algo fora das opções:
+                    // Evita mandar aviso repetido se já avisou nos últimos 4 segundos
+                    if (currentSession.lastInvalidWarnAtMs && (nowMs - currentSession.lastInvalidWarnAtMs) < 4000) {
+                        return NextResponse.json({ ignored: 'invalid_option_warn_cooldown' }, { status: 200 });
                     }
-                } catch {}
 
-                if (!invalidMsg || !invalidMsg.trim()) {
-                    invalidMsg = 'Selecione a opção acima';
+                    let invalidMsg = flowConfig.invalidOptionMessage;
+                    try {
+                        const currentFlowRef = doc(db, 'users', targetUserId, 'flows', currentSession.flowId);
+                        const currentFlowSnap = await getDoc(currentFlowRef);
+                        if (currentFlowSnap.exists()) {
+                            const currentFlowData = currentFlowSnap.data() as FlowDefinition;
+                            const menuNode = (currentFlowData.nodes || []).find((n: any) => n.id === currentSession.currentNodeId);
+                            if (menuNode?.data?.invalidOptionMessage) {
+                                invalidMsg = menuNode.data.invalidOptionMessage;
+                            }
+                        }
+                    } catch {}
+
+                    if (!invalidMsg || !invalidMsg.trim()) {
+                        invalidMsg = 'Selecione a opção acima';
+                    }
+
+                    console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ("${userText}") não corresponde a nenhuma opção do menu. Enviando aviso: "${invalidMsg}"`);
+                    await sendUazapiText(runnerCtx, invalidMsg).catch(() => {});
+
+                    const updatedMsgIds = msgId
+                        ? Array.from(new Set([...(currentSession.recentMsgIds || []).slice(-14), msgId]))
+                        : currentSession.recentMsgIds || [];
+
+                    await updateDoc(sessionDocRef, {
+                        lastMessageText: userText || '',
+                        lastInvalidWarnAtMs: nowMs,
+                        recentMsgIds: updatedMsgIds,
+                        lastInteractionAt: new Date().toISOString(),
+                    }).catch(() => {});
+
+                    return NextResponse.json({ handled: 'invalid_menu_option_warned', message: invalidMsg }, { status: 200 });
                 }
-
-                console.log(`[Flow Webhook] Mensagem de ${phoneNumber} ("${userText}") não corresponde a nenhuma opção do menu. Enviando aviso: "${invalidMsg}"`);
-                await sendUazapiText(runnerCtx, invalidMsg).catch(() => {});
-
-                const updatedMsgIds = msgId
-                    ? Array.from(new Set([...(currentSession.recentMsgIds || []).slice(-14), msgId]))
-                    : currentSession.recentMsgIds || [];
-
-                await updateDoc(sessionDocRef, {
-                    lastMessageText: userText || '',
-                    lastInvalidWarnAtMs: nowMs,
-                    recentMsgIds: updatedMsgIds,
-                    lastInteractionAt: new Date().toISOString(),
-                }).catch(() => {});
-
-                return NextResponse.json({ handled: 'invalid_menu_option_warned', message: invalidMsg }, { status: 200 });
             }
         }
 
@@ -978,44 +1034,9 @@ export async function POST(req: NextRequest) {
         const hasConfiguredKeywords = Array.isArray(flowConfig.keywords) && flowConfig.keywords.length > 0;
 
         if (triggerMode === 'all_messages' || !hasConfiguredKeywords) {
-            preferredFlowId = flowConfig.defaultFlowId || null;
+            preferredFlowId = matchedKeywordFlowId || flowConfig.defaultFlowId || null;
         } else {
-            // Modo palavras-chave
-            const triggers = flowConfig.keywords || [];
-            const cleanUserText = normalizeTextForMatch(userText);
-
-            for (const trig of triggers) {
-                if (!trig.keyword) continue;
-
-                const variants = trig.keyword.split(/[,;\n|]+/);
-                for (const rawVar of variants) {
-                    const varTrim = rawVar.trim();
-                    if (!varTrim) continue;
-
-                    const cleanVar = normalizeTextForMatch(varTrim);
-                    const lowerVar = varTrim.toLowerCase();
-
-                    if (trig.matchType === 'exact') {
-                        if (
-                            (cleanVar && cleanUserText === cleanVar) ||
-                            normalizedText === lowerVar
-                        ) {
-                            preferredFlowId = trig.flowId;
-                            break;
-                        }
-                    } else {
-                        if (
-                            (cleanVar && cleanUserText.includes(cleanVar)) ||
-                            normalizedText.includes(lowerVar)
-                        ) {
-                            preferredFlowId = trig.flowId;
-                            break;
-                        }
-                    }
-                }
-
-                if (preferredFlowId) break;
-            }
+            preferredFlowId = matchedKeywordFlowId;
 
             if (!preferredFlowId) {
                 console.log(`[Flow Webhook] Nenhuma correspondência de palavra-chave para: "${userText}"`);
@@ -1040,65 +1061,63 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ignored: 'flow_has_no_root_node' }, { status: 200 });
         }
 
-        // 10. Trava Transacional Atômica no Firestore antes de iniciar o fluxo:
-        // Garante 100% que mesmo em múltiplas instâncias serverless na Vercel,
-        // duas mensagens enviadas juntas NUNCA iniciarão o fluxo duas vezes!
-        const lockResult = await runTransaction(db, async (transaction) => {
-            const snap = await transaction.get(sessionDocRef);
-            const nowMs = Date.now();
-            let prevMsgIds: string[] = [];
+        // 10. Trava Atômica Resiliente (sem runTransaction para nunca travar por RESOURCE_EXHAUSTED do Firestore):
+        // Garante que mesmo em múltiplas instâncias serverless na Vercel,
+        // duas mensagens enviadas juntas nunca iniciarão o fluxo duas vezes!
+        const nowMs = Date.now();
+        let prevMsgIds: string[] = [];
 
-            if (snap.exists()) {
-                const sData = snap.data() as FlowContactSession;
-                prevMsgIds = Array.isArray(sData.recentMsgIds) ? sData.recentMsgIds : [];
+        if (currentSession) {
+            prevMsgIds = Array.isArray(currentSession.recentMsgIds) ? currentSession.recentMsgIds : [];
 
-                if (msgId && prevMsgIds.includes(msgId)) {
-                    return { allowed: false, reason: 'duplicate_msg_id' };
-                }
-
-                if (!isRestart) {
-                    // Se já está executando um nó/delay neste exato momento
-                    if (sData.status === 'active' && sData.executingUntilMs && nowMs < sData.executingUntilMs) {
-                        return { allowed: false, reason: 'already_executing' };
-                    }
-                    // Cooldown de 12 segundos entre inícios de fluxo para o mesmo contato (evita disparo duplo em rajada de mensagens)
-                    if (sData.lastFlowStartedAtMs && (nowMs - sData.lastFlowStartedAtMs) < 12000) {
-                        return { allowed: false, reason: 'start_cooldown' };
-                    }
-                }
+            if (msgId && prevMsgIds.includes(msgId)) {
+                console.log(`[Flow Webhook] Disparo de fluxo bloqueado para ${phoneNumber} (duplicate_msg_id).`);
+                return NextResponse.json({ ignored: 'duplicate_msg_id' }, { status: 200 });
             }
 
-            const updatedMsgIds = msgId
-                ? Array.from(new Set([...prevMsgIds.slice(-14), msgId]))
-                : prevMsgIds;
-
-            transaction.set(
-                sessionDocRef,
-                {
-                    userId: targetUserId,
-                    flowId: flow.id,
-                    flowName: flow.name,
-                    phoneNumber,
-                    contactName: contactName || 'Cliente WhatsApp',
-                    currentNodeId: rootNode.id,
-                    currentNodeLabel: rootNode.data?.label || 'Início',
-                    lastMessageText: userText || (isMediaMessage ? '[Mídia]' : ''),
-                    status: 'active',
-                    executingUntilMs: nowMs + 35000,
-                    lastFlowStartedAtMs: nowMs,
-                    recentMsgIds: updatedMsgIds,
-                    lastInteractionAt: new Date().toISOString(),
-                },
-                { merge: true }
-            );
-
-            return { allowed: true, reason: 'ok' };
-        });
-
-        if (!lockResult.allowed) {
-            console.log(`[Flow Webhook] Disparo de fluxo bloqueado pela trava atômica para ${phoneNumber} (${lockResult.reason}).`);
-            return NextResponse.json({ ignored: lockResult.reason }, { status: 200 });
+            if (!isRestart) {
+                if (currentSession.status === 'active' && currentSession.executingUntilMs && nowMs < currentSession.executingUntilMs) {
+                    console.log(`[Flow Webhook] Disparo de fluxo bloqueado para ${phoneNumber} (already_executing).`);
+                    return NextResponse.json({ ignored: 'already_executing' }, { status: 200 });
+                }
+                if (currentSession.lastFlowStartedAtMs && (nowMs - currentSession.lastFlowStartedAtMs) < 8000) {
+                    console.log(`[Flow Webhook] Disparo de fluxo bloqueado para ${phoneNumber} (start_cooldown).`);
+                    return NextResponse.json({ ignored: 'start_cooldown' }, { status: 200 });
+                }
+            }
         }
+
+        if (msgId) {
+            const wonClaim = await claimOnce(`flow_msg_${targetUserId}_${msgId}`, true);
+            if (!wonClaim) {
+                console.log(`[Flow Webhook] Mensagem ${msgId} já reivindicada por outra instância para ${phoneNumber}.`);
+                return NextResponse.json({ ignored: 'duplicate_msg_claimed' }, { status: 200 });
+            }
+        }
+
+        const updatedMsgIds = msgId
+            ? Array.from(new Set([...prevMsgIds.slice(-14), msgId]))
+            : prevMsgIds;
+
+        await setDoc(
+            sessionDocRef,
+            {
+                userId: targetUserId,
+                flowId: flow.id,
+                flowName: flow.name,
+                phoneNumber,
+                contactName: contactName || 'Cliente WhatsApp',
+                currentNodeId: rootNode.id,
+                currentNodeLabel: rootNode.data?.label || 'Início',
+                lastMessageText: userText || (isMediaMessage ? '[Mídia]' : ''),
+                status: 'active',
+                executingUntilMs: nowMs + 35000,
+                lastFlowStartedAtMs: nowMs,
+                recentMsgIds: updatedMsgIds,
+                lastInteractionAt: new Date().toISOString(),
+            },
+            { merge: true }
+        );
 
         console.log(`[Flow Webhook] Disparando fluxo "${flow.name}" (nó raiz: ${rootNode.id}) para ${phoneNumber}`);
 

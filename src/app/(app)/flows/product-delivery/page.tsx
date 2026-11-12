@@ -81,6 +81,7 @@ import {
   DEFAULT_FLOW_PIX_BILLING_MESSAGE,
   formatCentsToBrl,
 } from '@/lib/flow-product-delivery';
+import { DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
 
 const DELIVERY_VARIABLES = [
   { token: '{produto}', desc: 'Nome do produto comprado' },
@@ -167,7 +168,7 @@ export default function FlowProductDeliveryPage() {
 
   // Estados de Configuração do Gateway PIX
   const [pixGateway, setPixGateway] = useState<'pjpay' | 'linkinpay' | 'custom'>('pjpay');
-  const [pixApiToken, setPixApiToken] = useState('');
+  const [pixApiToken, setPixApiToken] = useState(DEFAULT_PJPAY_TOKEN);
   const [registerClientInCrm, setRegisterClientInCrm] = useState(true);
   const [defaultPixBillingMessage, setDefaultPixBillingMessage] = useState(
     DEFAULT_FLOW_PIX_BILLING_MESSAGE
@@ -175,6 +176,19 @@ export default function FlowProductDeliveryPage() {
   const [isSavingGateway, setIsSavingGateway] = useState(false);
   const [isVerifyingOrders, setIsVerifyingOrders] = useState(false);
   const [deliveringOrderId, setDeliveringOrderId] = useState<string | null>(null);
+
+  // Estados de Teste da API PJ Pay Gateway na tela
+  const [testAmountReais, setTestAmountReais] = useState('10,00');
+  const [testPayerName, setTestPayerName] = useState('Cliente Teste');
+  const [isGeneratingTestPix, setIsGeneratingTestPix] = useState(false);
+  const [testPixResult, setTestPixResult] = useState<{
+    id: string;
+    qr_code: string;
+    qr_code_base64: string;
+    value: number;
+    status: string;
+  } | null>(null);
+  const [isCheckingTestStatus, setIsCheckingTestStatus] = useState(false);
 
   // Sincronizar estados quando deliveryConfig carregar
   useEffect(() => {
@@ -184,13 +198,33 @@ export default function FlowProductDeliveryPage() {
       );
       setOutOfStockMessage(deliveryConfig.outOfStockMessage || '');
       setPixGateway(deliveryConfig.pixGateway || 'pjpay');
-      setPixApiToken(deliveryConfig.pixApiToken || '');
+      setPixApiToken(deliveryConfig.pixApiToken || DEFAULT_PJPAY_TOKEN);
       setRegisterClientInCrm(deliveryConfig.registerClientInCrm !== false);
       setDefaultPixBillingMessage(
         deliveryConfig.defaultPixBillingMessage || DEFAULT_FLOW_PIX_BILLING_MESSAGE
       );
     }
   }, [deliveryConfig]);
+
+  // Verificação automática a cada 10s enquanto houver pedidos PIX pendentes na tela
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    const hasPending = (flowOrders || []).some((o) => o.status === 'pending');
+    if (!hasPending) return;
+
+    const timer = setInterval(() => {
+      fetch('/api/flows/payment-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify_all',
+          userId: effectiveUserId,
+        }),
+      }).catch(() => {});
+    }, 10000);
+
+    return () => clearInterval(timer);
+  }, [effectiveUserId, flowOrders]);
 
   // Lista consolidada de nomes de produtos (estoque + assinaturas + mensagens personalizadas)
   const allProductNames = useMemo(() => {
@@ -1422,16 +1456,17 @@ export default function FlowProductDeliveryPage() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold">
-                      Token da API de Pagamento (Opcional se já configurado no sistema)
+                      Token Bearer da PJ Pay Gateway
                     </Label>
                     <Input
-                      type="password"
-                      placeholder="Deixe em branco para usar o token padrão da sua conta..."
+                      type="text"
+                      placeholder="pj_live_W9IMRIG1GFW48ND7YIUEX5sELQB4tDLD"
                       value={pixApiToken}
                       onChange={(e) => setPixApiToken(e.target.value)}
+                      className="font-mono text-xs"
                     />
-                    <p className="text-[11px] text-muted-foreground">
-                      Se você tiver uma chave de API específica para as vendas do Fluxo, cole aqui.
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      ✅ Integrado com POST https://www.pjgateway.com/api/v1/payments e GET /api/v1/payments/&#123;id&#125;
                     </p>
                   </div>
                 </div>
@@ -1491,6 +1526,193 @@ export default function FlowProductDeliveryPage() {
                     Salvar Configurações de Pagamento
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* CARD DE TESTE RÁPIDO DA API PJ PAY GATEWAY */}
+            <Card className="border-emerald-200 dark:border-emerald-900/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <QrCode className="h-5 w-5 text-emerald-600" />
+                  Testar Geração de PIX na PJ Pay Gateway
+                </CardTitle>
+                <CardDescription>
+                  Gere uma cobrança PIX de teste em tempo real via <code className="font-mono">POST https://www.pjgateway.com/api/v1/payments</code> e consulte o status em <code className="font-mono">GET /api/v1/payments/&#123;id&#125;</code>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">Nome do Pagador (payer.name)</Label>
+                    <Input
+                      value={testPayerName}
+                      onChange={(e) => setTestPayerName(e.target.value)}
+                      placeholder="Nome do Cliente"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">Valor em R$</Label>
+                    <Input
+                      value={testAmountReais}
+                      onChange={(e) => setTestAmountReais(e.target.value)}
+                      placeholder="10,00"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={isGeneratingTestPix}
+                    onClick={async () => {
+                      setIsGeneratingTestPix(true);
+                      try {
+                        const rawVal = parseFloat(testAmountReais.replace(',', '.')) || 10;
+                        const amountInCents = Math.max(100, Math.round(rawVal * 100));
+                        const res = await fetch('/api/flows/payment-webhook', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            action: 'test_create_pix',
+                            amountInCents,
+                            payerName: testPayerName,
+                            apiToken: pixApiToken,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (data.success && data.payment) {
+                          setTestPixResult(data.payment);
+                          toast({
+                            title: 'PIX Gerado com Sucesso!',
+                            description: `ID: ${data.payment.id}`,
+                          });
+                        } else {
+                          toast({
+                            variant: 'destructive',
+                            title: 'Erro ao gerar PIX',
+                            description: data.error || 'Falha na requisição',
+                          });
+                        }
+                      } catch (err: any) {
+                        toast({
+                          variant: 'destructive',
+                          title: 'Erro',
+                          description: err.message,
+                        });
+                      } finally {
+                        setIsGeneratingTestPix(false);
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                  >
+                    {isGeneratingTestPix ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <QrCode className="h-4 w-4" />
+                    )}
+                    Gerar PIX de Teste
+                  </Button>
+                </div>
+
+                {testPixResult && (
+                  <div className="p-4 rounded-xl border bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                          ID do Pagamento: <code className="font-mono">{testPixResult.id}</code>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={
+                              testPixResult.status === 'paid'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-amber-500 text-white'
+                            }
+                          >
+                            Status: {testPixResult.status.toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isCheckingTestStatus}
+                        onClick={async () => {
+                          setIsCheckingTestStatus(true);
+                          try {
+                            const res = await fetch('/api/flows/payment-webhook', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                action: 'check_pix_status',
+                                paymentId: testPixResult.id,
+                                apiToken: pixApiToken,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setTestPixResult((prev) =>
+                                prev ? { ...prev, status: data.status } : prev
+                              );
+                              toast({
+                                title: data.paid
+                                  ? '✅ Pagamento Confirmado (status: paid)!'
+                                  : `Status atual: ${data.status}`,
+                              });
+                            }
+                          } finally {
+                            setIsCheckingTestStatus(false);
+                          }
+                        }}
+                        className="gap-1.5 text-xs"
+                      >
+                        {isCheckingTestStatus ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCcw className="h-3.5 w-3.5" />
+                        )}
+                        Consultar Status (GET /payments/{testPixResult.id.slice(0, 8)}...)
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4 items-center">
+                      {testPixResult.qr_code_base64 && (
+                        <img
+                          src={
+                            testPixResult.qr_code_base64.startsWith('data:')
+                              ? testPixResult.qr_code_base64
+                              : `data:image/png;base64,${testPixResult.qr_code_base64}`
+                          }
+                          alt="QR Code PIX"
+                          className="w-36 h-36 rounded-lg border bg-white p-1.5 shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 w-full space-y-1.5">
+                        <Label className="text-xs font-bold">
+                          Código PIX Copia e Cola (pix.qr_code):
+                        </Label>
+                        <Textarea
+                          readOnly
+                          rows={3}
+                          value={testPixResult.qr_code}
+                          className="font-mono text-[11px] bg-background"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(testPixResult.qr_code);
+                            toast({ title: 'PIX Copia e Cola copiado!' });
+                          }}
+                          className="gap-1.5 text-xs"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copiar Código PIX
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

@@ -357,12 +357,7 @@ export async function executeFlowOrderDelivery(params: {
     }
 
     // Trava atômica anti-duplicidade
-    const claimed = await claimOnce(`flow_order_delivery_${orderId}`, {
-      orderId,
-      userId: order.userId,
-      productName: order.productName,
-      pixTransactionId: pixTransactionId || order.pixTransactionId,
-    });
+    const claimed = await claimOnce(`flow_order_delivery_${orderId}`, true);
 
     if (!claimed) {
       console.log(`[FlowProductDelivery] Pedido ${orderId} já reivindicado por outra execução.`);
@@ -606,14 +601,15 @@ export async function verifyPendingFlowOrders(targetUserId?: string): Promise<{
         const txId = ord.pixTransactionId;
         let isPaid = false;
 
-        if (batchMap.has(txId)) {
-          isPaid = batchMap.get(txId)!.paid;
+        if (batchMap.has(txId) && batchMap.get(txId)!.paid) {
+          isPaid = true;
         } else {
           try {
             if (ord.gateway === 'linkinpay') {
               const res = await checkLinkinPayTransaction(txId, lkToken);
               isPaid = res.paid;
             } else {
+              // Endpoint oficial: GET https://www.pjgateway.com/api/v1/payments/{id}
               const res = await checkPjPayTransaction(txId, pjToken);
               isPaid = res.paid;
             }

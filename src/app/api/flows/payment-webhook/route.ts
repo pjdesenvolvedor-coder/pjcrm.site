@@ -3,7 +3,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { executeFlowOrderDelivery, verifyPendingFlowOrders } from '@/lib/flow-product-delivery';
-import { checkPjPayTransaction, DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
+import { createPjPayPix, checkPjPayTransaction, DEFAULT_PJPAY_TOKEN } from '@/lib/pjpay';
 import { checkLinkinPayTransaction, DEFAULT_LINKINPAY_TOKEN } from '@/lib/linkinpay';
 import type { FlowOrder, FlowProductDeliveryConfig, Settings } from '@/lib/types';
 
@@ -29,6 +29,37 @@ export async function POST(req: NextRequest) {
     if (body.action === 'force_deliver' && body.orderId) {
       const res = await executeFlowOrderDelivery({ orderId: String(body.orderId) });
       return NextResponse.json(res, { status: 200 });
+    }
+
+    // Teste direto de geração de cobrança PIX na PJ Pay Gateway
+    if (body.action === 'test_create_pix') {
+      const amountInCents = Math.max(100, Number(body.amountInCents) || 5000);
+      const payerName = String(body.payerName || 'Cliente Teste').trim();
+      const description = String(body.description || 'Teste PJ Pay Gateway').trim();
+      const apiToken = String(body.apiToken || '').trim() || DEFAULT_PJPAY_TOKEN;
+
+      const pix = await createPjPayPix({
+        amountInCents,
+        payerName,
+        description,
+        webhookUrl: 'https://www.pjcrm.site/api/flows/payment-webhook',
+        apiToken,
+      });
+
+      return NextResponse.json({
+        success: true,
+        payment: pix,
+      });
+    }
+
+    // Consulta direta de status de pagamento na PJ Pay Gateway: GET /api/v1/payments/{id}
+    if (body.action === 'check_pix_status' && body.paymentId) {
+      const apiToken = String(body.apiToken || '').trim() || DEFAULT_PJPAY_TOKEN;
+      const statusRes = await checkPjPayTransaction(String(body.paymentId), apiToken);
+      return NextResponse.json({
+        success: true,
+        ...statusRes,
+      });
     }
 
     const txId =
