@@ -85,6 +85,31 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Bloqueia o cursor piscando (caret) e seleção acidental em elementos que não são de digitação */
+  *:not(input):not(textarea):not([contenteditable="true"]) {
+    caret-color: transparent !important;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Libera o cursor piscando e a seleção de texto apenas em campos reais de digitação */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  textarea,
+  [contenteditable="true"] {
+    caret-color: auto !important;
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+
+  /* Permite copiar textos monoespaçados/códigos sem exibir cursor piscando de digitação */
+  code,
+  pre,
+  .select-text {
+    -webkit-user-select: text;
+    user-select: text;
+    caret-color: transparent !important;
+  }
 }
 
 /* ========================================================
