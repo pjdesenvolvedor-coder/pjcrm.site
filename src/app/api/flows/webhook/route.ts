@@ -921,6 +921,29 @@ export async function POST(req: NextRequest) {
             currentSession.status = 'completed';
         }
 
+        // 6.9 INTERCEPTAÇÃO DIRETA DE BOTÕES INTERATIVOS DO CHECKOUT PIX (pix_choose_qrcode, pix_choose_copypaste, pix_send_*, pix_check_paid)
+        if (selectedButtonId && selectedButtonId.startsWith('pix_')) {
+            try {
+                const { handlePixInteractiveAction } = await import('@/lib/flow-product-delivery');
+                const handledPixBtn = await handlePixInteractiveAction({
+                    userId: targetUserId,
+                    phoneNumber,
+                    recipientJid,
+                    serverUrl,
+                    instanceToken,
+                    session: currentSession,
+                    userText,
+                    selectedButtonId,
+                    selectedIndex,
+                });
+                if (handledPixBtn) {
+                    return NextResponse.json({ handled: 'pix_interactive_button', button: selectedButtonId }, { status: 200 });
+                }
+            } catch (pixBtnErr) {
+                console.error('[Flow Webhook] Erro ao tratar botão PIX:', pixBtnErr);
+            }
+        }
+
         // 7. Se está em sessão aguardando resposta de um menu:
         if (currentSession && currentSession.status === 'waiting_user_input' && !isRestart) {
             const diag: MenuResponseDiag = {};

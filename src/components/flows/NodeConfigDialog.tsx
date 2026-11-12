@@ -1538,11 +1538,11 @@ export function NodeConfigDialog({
                                 </div>
                             </div>
 
-                            {/* MENSAGEM ENVIADA JUNTO COM O PIX */}
+                            {/* MENSAGEM DO MENU DE ESCOLHA DE PAGAMENTO */}
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-xs font-bold">
-                                        Mensagem Enviada ao Gerar o PIX (Opcional)
+                                        Mensagem do Menu: &quot;Qual forma de pagamento você gostaria?&quot;
                                     </Label>
                                     <Button
                                         type="button"
@@ -1560,9 +1560,14 @@ export function NodeConfigDialog({
                                     </Button>
                                 </div>
                                 <Textarea
-                                    rows={5}
+                                    rows={6}
                                     placeholder={DEFAULT_FLOW_PIX_BILLING_MESSAGE}
-                                    value={formData.pixMessageText ?? DEFAULT_FLOW_PIX_BILLING_MESSAGE}
+                                    value={
+                                        formData.pixMessageText &&
+                                        !formData.pixMessageText.includes('realize o pagamento utilizando o código')
+                                            ? formData.pixMessageText
+                                            : DEFAULT_FLOW_PIX_BILLING_MESSAGE
+                                    }
                                     onChange={(e) => setFormData({ ...formData, pixMessageText: e.target.value })}
                                 />
                                 <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -1571,7 +1576,6 @@ export function NodeConfigDialog({
                                         { key: '{cliente}', label: '+{cliente}' },
                                         { key: '{produto}', label: '+{produto}' },
                                         { key: '{valor}', label: '+{valor}' },
-                                        { key: '{pix_copia_e_cola}', label: '+{pix_copia_e_cola}' },
                                     ].map((v) => (
                                         <Badge
                                             key={v.key}
@@ -1581,7 +1585,10 @@ export function NodeConfigDialog({
                                                 setFormData({
                                                     ...formData,
                                                     pixMessageText:
-                                                        (formData.pixMessageText ?? DEFAULT_FLOW_PIX_BILLING_MESSAGE) + ` ${v.key}`,
+                                                        (formData.pixMessageText &&
+                                                        !formData.pixMessageText.includes('realize o pagamento utilizando o código')
+                                                            ? formData.pixMessageText
+                                                            : DEFAULT_FLOW_PIX_BILLING_MESSAGE) + ` ${v.key}`,
                                                 })
                                             }
                                         >
@@ -1591,38 +1598,45 @@ export function NodeConfigDialog({
                                 </div>
                             </div>
 
-                            {/* OPÇÕES DE ENVIO DO PIX */}
-                            <div className="space-y-2.5 p-3 rounded-xl border bg-muted/20">
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5 pr-3">
-                                        <Label className="text-xs font-semibold">
-                                            Enviar Código PIX Copia e Cola separado
-                                        </Label>
-                                        <p className="text-[10.5px] text-muted-foreground">
-                                            Envia o código PIX sozinho em uma mensagem logo abaixo para o cliente copiar com 1 toque.
-                                        </p>
-                                    </div>
-                                    <Switch
-                                        checked={formData.pixSendCopyPasteSeparate !== false}
-                                        onCheckedChange={(val) =>
-                                            setFormData({ ...formData, pixSendCopyPasteSeparate: val })
-                                        }
-                                    />
+                            {/* PREVIEW E TEMPO DO FLUXO INTERATIVO PADRÃO */}
+                            <div className="space-y-3 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                                        ✨ Fluxo Interativo Padrão (Automático)
+                                    </p>
+                                    <ul className="text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1 list-disc pl-4">
+                                        <li>
+                                            <strong>1º Passo:</strong> Envia a pergunta com 2 botões: <code>📋 Pix Copia e Cola</code> ou <code>📷 QR Code</code>.
+                                        </li>
+                                        <li>
+                                            <strong>2º Passo:</strong> Se o cliente clicar em <strong>QR Code</strong>, envia <em>apenas o QR Code</em>. Se clicar em <strong>Pix Copia e Cola</strong>, envia <em>apenas a chave Copia e Cola</em>.
+                                        </li>
+                                        <li>
+                                            <strong>3º Passo (Acompanhamento):</strong> Após alguns segundos sem pagamento confirmado, envia os botões <code>✅ Já Paguei</code> e a opção de receber o outro formato (<code>📋 Enviar Copia e Cola</code> ou <code>📷 Enviar QR Code</code>).
+                                        </li>
+                                    </ul>
                                 </div>
 
-                                <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                                    <div className="space-y-0.5 pr-3">
+                                <div className="flex items-center justify-between pt-2 border-t border-emerald-200/70 dark:border-emerald-800/70 gap-3">
+                                    <div className="space-y-0.5">
                                         <Label className="text-xs font-semibold">
-                                            Enviar também Imagem do QR Code
+                                            Tempo para perguntar se quer a outra opção (Segundos)
                                         </Label>
                                         <p className="text-[10.5px] text-muted-foreground">
-                                            Envia a imagem do QR Code caso o cliente esteja conversando pelo computador.
+                                            Se não pagar nesse tempo após receber o QR Code ou Copia e Cola, envia o botão oferecendo o outro formato (Padrão: 8s).
                                         </p>
                                     </div>
-                                    <Switch
-                                        checked={Boolean(formData.pixSendQrImage)}
-                                        onCheckedChange={(val) =>
-                                            setFormData({ ...formData, pixSendQrImage: val })
+                                    <Input
+                                        type="number"
+                                        min={3}
+                                        max={60}
+                                        className="w-20 h-8 text-center font-bold"
+                                        value={formData.pixFollowUpSeconds ?? 8}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                pixFollowUpSeconds: Math.max(3, Math.min(60, Number(e.target.value) || 8)),
+                                            })
                                         }
                                     />
                                 </div>

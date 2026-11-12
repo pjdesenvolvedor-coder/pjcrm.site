@@ -1503,9 +1503,10 @@ export async function executeFlowNode(
 
         console.log(`[FlowRunner] Gerando cobrança PIX para ${ctx.phoneNumber} - Produto: ${productName} (Valor: ${nodeData.pixAmount || 'Padrão'})`);
 
+        let createdOrderId = '';
         try {
             const { createAndSendFlowPixOrder } = await import('./flow-product-delivery');
-            await createAndSendFlowPixOrder({
+            const pixRes = await createAndSendFlowPixOrder({
                 userId: ctx.userId,
                 flowId: flow.id,
                 flowName: flow.name,
@@ -1521,25 +1522,27 @@ export async function executeFlowNode(
                 messageText,
                 sendCopyPasteSeparate: nodeData.pixSendCopyPasteSeparate !== false,
                 sendQrImage: Boolean(nodeData.pixSendQrImage),
+                followUpSeconds: nodeData.pixFollowUpSeconds,
             });
+            if (pixRes?.orderId) {
+                createdOrderId = pixRes.orderId;
+            }
         } catch (pixErr) {
             console.error('[FlowRunner] Erro ao gerar PIX de entrega automática:', pixErr);
         }
 
-        const nextEdge = edges.find((e: any) => e.source === nodeId);
-        if (nextEdge && nextEdge.target) {
-            await executeFlowNode(ctx, flow, nextEdge.target);
-        } else {
-            await setDoc(sessionDocRef, {
-                userId: ctx.userId,
-                flowId: flow.id,
-                currentNodeId: nodeId,
-                currentNodeLabel: nodeData.label || `PIX: ${productName}`,
-                status: 'completed',
-                executingUntilMs: 0,
-                lastInteractionAt: new Date().toISOString(),
-            }, { merge: true }).catch(() => {});
-        }
+        // Mantém a sessão aguardando a escolha do cliente no menu do PIX (Pix Copia e Cola ou QR Code)
+        await setDoc(sessionDocRef, {
+            userId: ctx.userId,
+            flowId: flow.id,
+            currentNodeId: nodeId,
+            currentNodeLabel: nodeData.label || `PIX: ${productName}`,
+            status: 'waiting_user_input',
+            pendingPixOrderId: createdOrderId,
+            executingUntilMs: 0,
+            menuSentAtMs: Date.now(),
+            lastInteractionAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
         return;
     }
 
@@ -1594,6 +1597,34 @@ export async function handleUserMenuResponse(
 
     const flow = flowSnap.data() as FlowDefinition;
     const currentNode = (flow.nodes || []).find((n: any) => n.id === session.currentNodeId);
+
+    // Se o cliente está interagindo com o menu do Checkout PIX (Copia e Cola / QR Code / Já Paguei)
+    if (
+        (selectedButtonId && selectedButtonId.startsWith('pix_')) ||
+        currentNode?.data?.nodeType === 'pix_payment' ||
+        Boolean(session.pendingPixOrderId)
+    ) {
+        try {
+            const { handlePixInteractiveAction } = await import('./flow-product-delivery');
+            const handledPix = await handlePixInteractiveAction({
+                userId: ctx.userId,
+                phoneNumber: ctx.phoneNumber,
+                recipientJid: ctx.recipientJid,
+                serverUrl: ctx.serverUrl,
+                instanceToken: ctx.instanceToken,
+                session,
+                userText,
+                selectedButtonId,
+                selectedIndex,
+            });
+            if (handledPix) {
+                return true;
+            }
+        } catch (err) {
+            console.error('[FlowRunner] Erro ao processar interação do PIX:', err);
+        }
+    }
+
     if (!currentNode || currentNode.data?.nodeType !== 'menu') {
         if (diag) diag.invalidMenuNode = true;
         return false;

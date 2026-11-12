@@ -480,6 +480,7 @@ export type FlowNodeData = {
   pixMessageText?: string;
   pixSendCopyPasteSeparate?: boolean;
   pixSendQrImage?: boolean;
+  pixFollowUpSeconds?: number;
 };
 
 export type FlowDefinition = {
@@ -515,6 +516,7 @@ export type FlowContactSession = {
   lastFlowStartedAtMs?: number;
   menuSentAtMs?: number;
   lastInvalidWarnAtMs?: number;
+  pendingPixOrderId?: string;
   recentMsgIds?: string[];
   variables?: Record<string, any>;
   lastInteractionAt?: any;
@@ -591,6 +593,8 @@ export type FlowOrder = {
   deliveredPassword?: string;
   deliveredAt?: string;
   paidAt?: string;
+  lastActionAtMs?: number;
+  followUpSeconds?: number;
   createdAt: string;
 
 };
