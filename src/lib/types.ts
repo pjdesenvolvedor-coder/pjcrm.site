@@ -579,6 +579,7 @@ export type FlowProductDeliveryConfig = {
   defaultPixBillingMessage?: string;
   registerClientInCrm?: boolean;
   pixSendCopyButton?: boolean;
+  deliverySendCopyButtons?: boolean;
   updatedAt?: string;
 };
 

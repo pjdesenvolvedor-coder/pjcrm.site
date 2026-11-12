@@ -172,6 +172,7 @@ export default function FlowProductDeliveryPage() {
   // Estados de Mensagens (Geral + Individual por Produto)
   const [generalMessage, setGeneralMessage] = useState(DEFAULT_GENERAL_PRODUCT_DELIVERY_MESSAGE);
   const [outOfStockMessage, setOutOfStockMessage] = useState('');
+  const [deliverySendCopyButtons, setDeliverySendCopyButtons] = useState(true);
   const [isSavingGeneralMsg, setIsSavingGeneralMsg] = useState(false);
 
   const [selectedProductForMsg, setSelectedProductForMsg] = useState('');
@@ -210,6 +211,7 @@ export default function FlowProductDeliveryPage() {
         deliveryConfig.generalDeliveryMessage || DEFAULT_GENERAL_PRODUCT_DELIVERY_MESSAGE
       );
       setOutOfStockMessage(deliveryConfig.outOfStockMessage || '');
+      setDeliverySendCopyButtons(deliveryConfig.deliverySendCopyButtons !== false);
       setPixGateway(deliveryConfig.pixGateway || 'pjpay');
       setPixApiToken(deliveryConfig.pixApiToken || DEFAULT_PJPAY_TOKEN);
       setRegisterClientInCrm(deliveryConfig.registerClientInCrm !== false);
@@ -775,6 +777,7 @@ export default function FlowProductDeliveryPage() {
         {
           generalDeliveryMessage: generalMessage,
           outOfStockMessage,
+          deliverySendCopyButtons,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -1685,6 +1688,23 @@ export default function FlowProductDeliveryPage() {
                       </Badge>
                     ))}
                   </div>
+                </div>
+
+                {/* Opção de Enviar Mensagem com Botões de Cópia */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl border bg-slate-50 dark:bg-slate-900">
+                  <div className="space-y-0.5 pr-4">
+                    <Label className="text-sm font-semibold flex items-center gap-2">
+                      <Copy className="h-4 w-4 text-indigo-600" />
+                      Enviar com botões Copiar E-mail e Copiar Senha
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Anexa os botões interativos nativos no WhatsApp para o cliente copiar o e-mail e a senha do produto entregue com 1 clique (sem descrições extras nos botões).
+                    </p>
+                  </div>
+                  <Switch
+                    checked={deliverySendCopyButtons}
+                    onCheckedChange={setDeliverySendCopyButtons}
+                  />
                 </div>
 
                 <div className="pt-2 flex justify-end">

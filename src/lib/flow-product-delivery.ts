@@ -278,6 +278,90 @@ export async function sendWhatsAppPixCopyButtonDirect({
   }
 }
 
+export async function sendWhatsAppDeliveryCredentialsButtonsDirect({
+  serverUrl,
+  instanceToken,
+  recipient,
+  text,
+  email,
+  password,
+}: {
+  serverUrl: string;
+  instanceToken: string;
+  recipient: string;
+  text: string;
+  email?: string;
+  password?: string;
+}): Promise<boolean> {
+  if (!instanceToken || !recipient || !text.trim()) return false;
+
+  const cleanEmail = email?.trim() || '';
+  const cleanPass = password?.trim() || '';
+
+  // Se não houver nem e-mail nem senha cadastrados, envia como mensagem de texto normal
+  if (!cleanEmail && !cleanPass) {
+    return await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, text);
+  }
+
+  try {
+    const base = cleanServerUrl(serverUrl);
+    const phone = formatPhoneWith55(recipient);
+
+    const choices: string[] = [];
+    const buttons: Array<{ type: string; text: string; id: string }> = [];
+
+    if (cleanEmail) {
+      choices.push(`Copiar E-mail|copy:${cleanEmail}`);
+      buttons.push({
+        type: 'COPY',
+        text: 'Copiar E-mail',
+        id: cleanEmail,
+      });
+    }
+
+    if (cleanPass) {
+      choices.push(`Copiar Senha|copy:${cleanPass}`);
+      buttons.push({
+        type: 'COPY',
+        text: 'Copiar Senha',
+        id: cleanPass,
+      });
+    }
+
+    // Sem footer/descrição extra: apenas a mensagem de entrega e os botões de cópia solicitados
+    const menuPayload: any = {
+      number: phone,
+      type: 'button',
+      text: text.trim(),
+      choices,
+      buttons,
+    };
+
+    const res = await fetch(`${base}/send/menu`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        token: instanceToken,
+        apikey: instanceToken,
+      },
+      body: JSON.stringify(menuPayload),
+    });
+
+    if (res.ok) {
+      return true;
+    }
+
+    const errTxt = await res.text().catch(() => '');
+    console.warn(
+      `[sendWhatsAppDeliveryCredentialsButtons] /send/menu retornou ${res.status}: ${errTxt}. Enviando fallback de texto normal.`
+    );
+    return await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, text);
+  } catch (err) {
+    console.error('[sendWhatsAppDeliveryCredentialsButtons] Erro ao enviar botões de entrega:', err);
+    return await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, text);
+  }
+}
+
 async function resolveTokensForUser(userId: string): Promise<{
   pjToken: string;
   lkToken: string;
@@ -976,13 +1060,31 @@ export async function executeFlowOrderDelivery(params: {
       .replace(/\{telefone\}/gi, order.phoneNumber || '')
       .replace(/\{status\}/gi, 'Ativo');
 
-    // 6. Enviar a mensagem de entrega no WhatsApp
-    const messageSent = await sendWhatsAppTextDirect(
-      serverUrl,
-      instanceToken,
-      recipient,
-      finalMessage
+    // 6. Enviar a mensagem de entrega no WhatsApp (com botões de Copiar E-mail e Copiar Senha se habilitado)
+    const wantsCopyButtons = deliveryCfg.deliverySendCopyButtons !== false;
+    const hasCredentials = Boolean(
+      (chosenStock.email && chosenStock.email.trim()) ||
+      (chosenStock.password && chosenStock.password.trim())
     );
+
+    let messageSent = false;
+    if (wantsCopyButtons && hasCredentials) {
+      messageSent = await sendWhatsAppDeliveryCredentialsButtonsDirect({
+        serverUrl,
+        instanceToken,
+        recipient,
+        text: finalMessage,
+        email: chosenStock.email,
+        password: chosenStock.password,
+      });
+    } else {
+      messageSent = await sendWhatsAppTextDirect(
+        serverUrl,
+        instanceToken,
+        recipient,
+        finalMessage
+      );
+    }
 
     // 7. Cadastrar / Atualizar o cliente automaticamente no CRM (se habilitado, padrão true)
     if (deliveryCfg.registerClientInCrm !== false) {
