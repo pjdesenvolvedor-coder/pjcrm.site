@@ -1021,7 +1021,7 @@ export function NodeConfigDialog({
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold">Tipo de Ação</Label>
                                 <Select
-                                    value={formData.actionType || 'open_support'}
+                                    value={formData.actionType || 'send_contact'}
                                     onValueChange={(val: any) => setFormData({ ...formData, actionType: val })}
                                 >
                                     <SelectTrigger>
@@ -1030,15 +1030,6 @@ export function NodeConfigDialog({
                                     <SelectContent>
                                         <SelectItem value="send_contact">
                                             👤 Enviar Card de Contato (WhatsApp vCard)
-                                        </SelectItem>
-                                        <SelectItem value="open_support">
-                                            🎧 Transferir para Atendimento Humano / Suporte
-                                        </SelectItem>
-                                        <SelectItem value="add_tag">
-                                            🏷️ Adicionar Tag / Etiqueta
-                                        </SelectItem>
-                                        <SelectItem value="notify_attendant">
-                                            🔔 Notificar Atendente Responsável
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
