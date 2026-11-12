@@ -215,7 +215,7 @@ export async function sendWhatsAppPixCopyButtonDirect({
   text,
   pixCode,
   buttonLabel = 'Copiar Código Pix',
-  footerText = 'Clique no botão para copiar o Pix ⚡',
+  footerText,
 }: {
   serverUrl: string;
   instanceToken: string;
@@ -734,8 +734,7 @@ export async function handlePixInteractiveAction(params: {
         recipient,
         text: order.pixCopyPaste,
         pixCode: order.pixCopyPaste,
-        buttonLabel: '📋 Copiar Código Pix',
-        footerText: `${order.productName} • ${formattedValue} ⚡`,
+        buttonLabel: 'Copiar Código Pix',
       });
     } else {
       await sendWhatsAppTextDirect(
