@@ -479,6 +479,7 @@ export type FlowNodeData = {
   pixDescription?: string;
   pixMessageText?: string;
   pixSendCopyPasteSeparate?: boolean;
+  pixSendCopyButton?: boolean;
   pixSendQrImage?: boolean;
   pixFollowUpSeconds?: number;
 };
@@ -577,6 +578,7 @@ export type FlowProductDeliveryConfig = {
   customPixEndpoint?: string;
   defaultPixBillingMessage?: string;
   registerClientInCrm?: boolean;
+  pixSendCopyButton?: boolean;
   updatedAt?: string;
 };
 
@@ -597,6 +599,7 @@ export type FlowOrder = {
   gateway: string;
   serverUrl: string;
   instanceToken: string;
+  sendCopyButton?: boolean;
   status: 'pending' | 'paid' | 'delivered' | 'out_of_stock' | 'expired';
   deliveredStockId?: string;
   deliveredEmail?: string;

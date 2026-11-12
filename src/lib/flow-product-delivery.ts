@@ -208,6 +208,76 @@ async function sendWhatsAppButtonsDirect(
   }
 }
 
+export async function sendWhatsAppPixCopyButtonDirect({
+  serverUrl,
+  instanceToken,
+  recipient,
+  text,
+  pixCode,
+  buttonLabel = 'Copiar Código Pix',
+  footerText = 'Clique no botão para copiar o Pix ⚡',
+}: {
+  serverUrl: string;
+  instanceToken: string;
+  recipient: string;
+  text: string;
+  pixCode: string;
+  buttonLabel?: string;
+  footerText?: string;
+}): Promise<boolean> {
+  if (!instanceToken || !recipient || !pixCode) return false;
+  try {
+    const base = cleanServerUrl(serverUrl);
+    const phone = formatPhoneWith55(recipient);
+    const cleanLabel = (buttonLabel || 'Copiar Código Pix').trim();
+    const cleanPix = pixCode.trim();
+
+    // Na Uazapi, botões de cópia (estilo grupo/CTA) são enviados via /send/menu.
+    // Enviamos tanto o formato de choices com 'copy:' quanto a lista 'buttons' [{ type: 'COPY' }]
+    // para garantir 100% de compatibilidade em qualquer versão da API.
+    const menuPayload: any = {
+      number: phone,
+      type: 'button',
+      text: text.trim(),
+      choices: [`${cleanLabel}|copy:${cleanPix}`],
+      buttons: [
+        {
+          type: 'COPY',
+          text: cleanLabel,
+          id: cleanPix,
+        },
+      ],
+    };
+
+    if (footerText && footerText.trim()) {
+      menuPayload.footerText = footerText.trim();
+    }
+
+    const res = await fetch(`${base}/send/menu`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        token: instanceToken,
+        apikey: instanceToken,
+      },
+      body: JSON.stringify(menuPayload),
+    });
+
+    if (res.ok) {
+      return true;
+    }
+
+    const errTxt = await res.text().catch(() => '');
+    console.warn(
+      `[sendWhatsAppPixCopyButton] /send/menu retornou ${res.status}: ${errTxt}. Enviando fallback de texto simples.`
+    );
+    return await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, cleanPix);
+  } catch (err) {
+    console.error('[sendWhatsAppPixCopyButton] Erro ao enviar botão de cópia Pix:', err);
+    return await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, pixCode);
+  }
+}
+
 async function resolveTokensForUser(userId: string): Promise<{
   pjToken: string;
   lkToken: string;
@@ -257,6 +327,7 @@ export async function createAndSendFlowPixOrder(params: {
   description?: string;
   messageText?: string;
   sendCopyPasteSeparate?: boolean;
+  sendCopyButton?: boolean;
   sendQrImage?: boolean;
   followUpSeconds?: number;
 }): Promise<{ success: boolean; orderId?: string; error?: string }> {
@@ -342,6 +413,7 @@ export async function createAndSendFlowPixOrder(params: {
       gateway,
       serverUrl: params.serverUrl,
       instanceToken: params.instanceToken,
+      sendCopyButton: params.sendCopyButton !== false,
       status: 'pending',
       followUpSeconds: followUpSecs,
       lastActionAtMs: Date.now(),
@@ -642,16 +714,40 @@ export async function handlePixInteractiveAction(params: {
       { merge: true }
     ).catch(() => {});
 
-    // 1. Envia SOMENTE o Pix Copia e Cola (NÃO envia o QR Code agora!)
-    await sendWhatsAppTextDirect(
-      serverUrl,
-      instanceToken,
-      recipient,
-      `📋 *PIX COPIA E COLA — ${order.productName} (${formattedValue})*\n\nCopie a chave PIX abaixo e cole na opção *"Pix Copia e Cola"* do aplicativo do seu banco 👇`
-    );
+    // 1. Envia a mensagem do Copia e Cola com o BOTÃO NATIVO DE CÓPIA (estilo mensagem do grupo)
+    const { deliveryCfg } = await resolveTokensForUser(order.userId);
+    const orderWithCfg = order as any;
+    const shouldSendCopyButton =
+      orderWithCfg.sendCopyButton !== false && deliveryCfg.pixSendCopyButton !== false;
 
-    if (order.pixCopyPaste) {
-      await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, order.pixCopyPaste);
+    if (shouldSendCopyButton && order.pixCopyPaste) {
+      await sendWhatsAppTextDirect(
+        serverUrl,
+        instanceToken,
+        recipient,
+        `📋 *PIX COPIA E COLA — ${order.productName} (${formattedValue})*\n\nClique no botão abaixo para copiar a chave Pix ou cole no aplicativo do seu banco 👇`
+      );
+
+      await sendWhatsAppPixCopyButtonDirect({
+        serverUrl,
+        instanceToken,
+        recipient,
+        text: order.pixCopyPaste,
+        pixCode: order.pixCopyPaste,
+        buttonLabel: '📋 Copiar Código Pix',
+        footerText: `${order.productName} • ${formattedValue} ⚡`,
+      });
+    } else {
+      await sendWhatsAppTextDirect(
+        serverUrl,
+        instanceToken,
+        recipient,
+        `📋 *PIX COPIA E COLA — ${order.productName} (${formattedValue})*\n\nCopie a chave PIX abaixo e cole na opção *"Pix Copia e Cola"* do aplicativo do seu banco 👇`
+      );
+
+      if (order.pixCopyPaste) {
+        await sendWhatsAppTextDirect(serverUrl, instanceToken, recipient, order.pixCopyPaste);
+      }
     }
 
     // 2. Aguarda de 5 a 10 segundos (padrão 8 segundos) para ver se a pessoa já pagou
@@ -752,12 +848,7 @@ export async function executeFlowOrderDelivery(params: {
     }
 
     // Trava atômica anti-duplicidade
-    const claimed = await claimOnce(`flow_order_delivery_${orderId}`, {
-      orderId,
-      userId: order.userId,
-      productName: order.productName,
-      pixTransactionId: pixTransactionId || order.pixTransactionId,
-    });
+    const claimed = await claimOnce(`flow_order_delivery_${orderId}`);
 
     if (!claimed) {
       console.log(`[FlowProductDelivery] Pedido ${orderId} já reivindicado por outra execução.`);

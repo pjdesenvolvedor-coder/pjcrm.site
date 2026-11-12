@@ -1521,6 +1521,7 @@ export async function executeFlowNode(
                 description,
                 messageText,
                 sendCopyPasteSeparate: nodeData.pixSendCopyPasteSeparate !== false,
+                sendCopyButton: nodeData.pixSendCopyButton !== false,
                 sendQrImage: Boolean(nodeData.pixSendQrImage),
                 followUpSeconds: nodeData.pixFollowUpSeconds,
             });

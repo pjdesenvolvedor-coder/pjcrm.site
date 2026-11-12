@@ -46,6 +46,7 @@ import {
     PauseCircle,
     QrCode,
     Package,
+    Copy,
     DollarSign,
     MessageSquareText,
     SlidersHorizontal,
@@ -1526,6 +1527,24 @@ export function NodeConfigDialog({
                                                     checked={formData.pixSendCopyPasteSeparate !== false}
                                                     onCheckedChange={(val) =>
                                                         setFormData({ ...formData, pixSendCopyPasteSeparate: val })
+                                                    }
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/50">
+                                                <div className="space-y-0.5">
+                                                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-emerald-900 dark:text-emerald-200">
+                                                        <Copy className="h-3.5 w-3.5 text-emerald-600" />
+                                                        Botão de Copiar Código PIX (Estilo Grupo)
+                                                    </Label>
+                                                    <p className="text-[10.5px] text-muted-foreground">
+                                                        Adiciona o botão nativo no WhatsApp que copia o código Pix com 1 toque no celular.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={formData.pixSendCopyButton !== false}
+                                                    onCheckedChange={(val) =>
+                                                        setFormData({ ...formData, pixSendCopyButton: val })
                                                     }
                                                 />
                                             </div>

@@ -182,6 +182,7 @@ export default function FlowProductDeliveryPage() {
   const [pixGateway, setPixGateway] = useState<'pjpay' | 'linkinpay' | 'custom'>('pjpay');
   const [pixApiToken, setPixApiToken] = useState(DEFAULT_PJPAY_TOKEN);
   const [registerClientInCrm, setRegisterClientInCrm] = useState(true);
+  const [pixSendCopyButton, setPixSendCopyButton] = useState(true);
   const [defaultPixBillingMessage, setDefaultPixBillingMessage] = useState(
     DEFAULT_FLOW_PIX_BILLING_MESSAGE
   );
@@ -212,6 +213,7 @@ export default function FlowProductDeliveryPage() {
       setPixGateway(deliveryConfig.pixGateway || 'pjpay');
       setPixApiToken(deliveryConfig.pixApiToken || DEFAULT_PJPAY_TOKEN);
       setRegisterClientInCrm(deliveryConfig.registerClientInCrm !== false);
+      setPixSendCopyButton(deliveryConfig.pixSendCopyButton !== false);
       setDefaultPixBillingMessage(
         deliveryConfig.defaultPixBillingMessage || DEFAULT_FLOW_PIX_BILLING_MESSAGE
       );
@@ -870,6 +872,7 @@ export default function FlowProductDeliveryPage() {
           pixGateway,
           pixApiToken: pixApiToken.trim(),
           registerClientInCrm,
+          pixSendCopyButton,
           defaultPixBillingMessage,
           updatedAt: new Date().toISOString(),
         },
@@ -1927,6 +1930,22 @@ export default function FlowProductDeliveryPage() {
                   <Switch
                     checked={registerClientInCrm}
                     onCheckedChange={setRegisterClientInCrm}
+                  />
+                </div>
+
+                <div className="p-3.5 rounded-xl border bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-900/50 flex items-center justify-between">
+                  <div className="space-y-0.5 pr-4">
+                    <Label className="text-xs font-bold flex items-center gap-1.5 text-emerald-950 dark:text-emerald-200">
+                      <Copy className="h-3.5 w-3.5 text-emerald-600" />
+                      Botão de Copiar Chave PIX (Interativo no WhatsApp)
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Anexa o botão oficial &quot;Copiar Código Pix&quot; (estilo grupos) na mensagem do Copia e Cola para o cliente copiar a chave com 1 toque no celular.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={pixSendCopyButton}
+                    onCheckedChange={setPixSendCopyButton}
                   />
                 </div>
 
