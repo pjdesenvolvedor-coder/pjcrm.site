@@ -449,7 +449,11 @@ export async function createAndSendFlowPixOrder(params: {
       .replace(/\{produto\}/gi, productName)
       .replace(/\{assinatura\}/gi, productName)
       .replace(/\{plano\}/gi, productName)
+      .replace(/R\$\s*\{valor\}/gi, formattedValue)
       .replace(/\{valor\}/gi, formattedValue)
+      .replace(/\{pix_copia_e_cola\}/gi, pixCopyPaste)
+      .replace(/\{copia_e_cola\}/gi, pixCopyPaste)
+      .replace(/\{pix\}/gi, pixCopyPaste)
       .replace(/\{telefone\}/gi, params.phoneNumber);
 
     // Envia sempre por padrão o Menu Interativo perguntando como a pessoa gostaria de pagar:

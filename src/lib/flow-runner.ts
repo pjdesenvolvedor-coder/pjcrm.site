@@ -1497,9 +1497,39 @@ export async function executeFlowNode(
 
     // 8. PAGAMENTO PIX + ENTREGA AUTOMÁTICA DE PRODUTO
     if (nodeData.nodeType === 'pix_payment') {
-        const productName = replaceVars(nodeData.pixProductName || 'Produto Digital').trim();
-        const messageText = nodeData.pixMessageText ? replaceVars(nodeData.pixMessageText) : undefined;
+        const productName = (nodeData.pixProductName || 'Produto Digital').trim();
         const description = nodeData.pixDescription ? replaceVars(nodeData.pixDescription) : undefined;
+
+        // IMPORTANTE: No bloco de PIX, as variáveis {valor}, {produto}, {plano}, {assinatura}, {pix_copia_e_cola}
+        // pertencem exclusivamente à cobrança deste bloco e NUNCA ao histórico do cliente no CRM!
+        let messageText = nodeData.pixMessageText;
+        if (messageText) {
+            // Removemos as variáveis conflitantes de clientVars para não sobrescrever {valor} e {produto} com o plano antigo do CRM
+            const safeClientVars = clientVars ? { ...clientVars } : {};
+            delete (safeClientVars as any).valor;
+            delete (safeClientVars as any).valor_pago;
+            delete (safeClientVars as any).mensalidade;
+            delete (safeClientVars as any).amount_paid;
+            delete (safeClientVars as any).produto;
+            delete (safeClientVars as any).plano;
+            delete (safeClientVars as any).assinatura;
+            delete (safeClientVars as any).nome_assinatura;
+            delete (safeClientVars as any).subscription;
+
+            let resolvedMsg = messageText;
+            for (const [key, val] of Object.entries(safeClientVars)) {
+                const escapedKey = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(`\\{${escapedKey}\\}`, 'gi');
+                resolvedMsg = resolvedMsg.replace(regex, val || '');
+            }
+            resolvedMsg = resolvedMsg
+                .replace(/\{nome\}/gi, ctx.contactName || 'Amigo(a)')
+                .replace(/\{cliente\}/gi, ctx.contactName || 'Amigo(a)')
+                .replace(/\{primeiro_nome\}/gi, (ctx.contactName || 'Amigo(a)').split(' ')[0])
+                .replace(/\{telefone\}/gi, ctx.phoneNumber)
+                .replace(/\{numero\}/gi, ctx.phoneNumber);
+            messageText = resolvedMsg;
+        }
 
         console.log(`[FlowRunner] Gerando cobrança PIX para ${ctx.phoneNumber} - Produto: ${productName} (Valor: ${nodeData.pixAmount || 'Padrão'})`);
 
