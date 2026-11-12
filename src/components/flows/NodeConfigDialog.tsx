@@ -206,23 +206,23 @@ export function NodeConfigDialog({
     }, [firestore, effectiveUserId]);
     const { data: stockItems } = useCollection<any>(stockQuery);
 
-    const subsQuery = useMemoFirebase(() => {
+    const flowProductsQuery = useMemoFirebase(() => {
         if (!effectiveUserId) return null;
-        return collection(firestore, 'users', effectiveUserId, 'subscriptions');
+        return collection(firestore, 'users', effectiveUserId, 'flow_products');
     }, [firestore, effectiveUserId]);
-    const { data: subscriptionsList } = useCollection<any>(subsQuery);
+    const { data: flowProductsList } = useCollection<any>(flowProductsQuery);
 
     const availableProductsSummary = React.useMemo(() => {
         const map = new Map<string, { name: string; availableCount: number; defaultPrice?: number }>();
-        (subscriptionsList || []).forEach((sub: any) => {
-            const name = String(sub?.name || '').trim();
+        (flowProductsList || []).forEach((prod: any) => {
+            const name = String(prod?.name || '').trim();
             if (!name) return;
             const key = name.toLowerCase();
             if (!map.has(key)) {
                 map.set(key, {
                     name,
                     availableCount: 0,
-                    defaultPrice: sub?.value ? Number(String(sub.value).replace(',', '.')) : undefined,
+                    defaultPrice: prod?.defaultPrice ? Number(prod.defaultPrice) : undefined,
                 });
             }
         });
@@ -240,7 +240,7 @@ export function NodeConfigDialog({
             map.set(key, existing);
         });
         return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-    }, [stockItems, subscriptionsList]);
+    }, [stockItems, flowProductsList]);
 
     // Arrastar e soltar para mudar a ordem das respostas do menu
     const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
