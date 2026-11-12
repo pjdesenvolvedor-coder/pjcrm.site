@@ -8,6 +8,12 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,31 +27,29 @@ import {
     Clock,
     Zap,
     Rocket,
-    X,
     Plus,
     Trash2,
     Bold,
     Italic,
     Strikethrough,
-    Code,
     Sparkles,
     GripVertical,
     Eye,
     UserCheck,
     UserX,
     CheckCircle2,
-    Mail,
     KeyRound,
-    Tv,
     CreditCard,
     PlayCircle,
     Layers,
-    Link2,
     ExternalLink,
     PauseCircle,
     QrCode,
     Package,
     DollarSign,
+    MessageSquareText,
+    SlidersHorizontal,
+    Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Switch } from '@/components/ui/switch';
@@ -193,6 +197,7 @@ export function NodeConfigDialog({
         nodeType: 'content',
     });
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [showVariablesPicker, setShowVariablesPicker] = useState(false);
     const { firestore, effectiveUserId } = useFirebase();
 
     const stockQuery = useMemoFirebase(() => {
@@ -247,12 +252,14 @@ export function NodeConfigDialog({
                 ...node.data,
                 menuOptions: normalizeMenuOptions(node.data.menuOptions),
             });
+            setShowVariablesPicker(false);
         }
     }, [node]);
 
     useEffect(() => {
         if (!open) {
             setIsPreviewOpen(false);
+            setShowVariablesPicker(false);
         }
     }, [open]);
 
@@ -374,800 +381,738 @@ export function NodeConfigDialog({
     return (
         <>
             <Dialog open={open && !!node} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader className="border-b pb-3">
-                    <DialogTitle className="flex items-center gap-2 text-lg">
-                        {formData.nodeType === 'start' && <PlayCircle className="h-5 w-5 text-emerald-500" />}
-                        {formData.nodeType === 'menu' && <Grid className="h-5 w-5 text-indigo-600" />}
-                        {formData.nodeType === 'content' && <Star className="h-5 w-5 text-rose-500" />}
-                        {formData.nodeType === 'delay' && <Clock className="h-5 w-5 text-orange-500" />}
-                        {formData.nodeType === 'pause_automation' && <PauseCircle className="h-5 w-5 text-purple-600" />}
-                        {formData.nodeType === 'action' && <Zap className="h-5 w-5 text-amber-500" />}
-                        {formData.nodeType === 'flow_connect' && <Rocket className="h-5 w-5 text-emerald-500" />}
-                        {formData.nodeType === 'condition' && <UserCheck className="h-5 w-5 text-sky-500" />}
-                        {formData.nodeType === 'pix_payment' && <QrCode className="h-5 w-5 text-emerald-600" />}
-                        <span>
-                            {formData.nodeType === 'start' && 'Início do Fluxo'}
-                            {formData.nodeType === 'menu' && 'Menu'}
-                            {formData.nodeType === 'content' && 'Conteúdo'}
-                            {formData.nodeType === 'delay' && 'Atraso Inteligente'}
-                            {formData.nodeType === 'pause_automation' && 'Pausar Automação (Cooldown)'}
-                            {formData.nodeType === 'action' && 'Ação'}
-                            {formData.nodeType === 'flow_connect' && 'Conexão de Fluxo'}
-                            {formData.nodeType === 'condition' && 'Verificar Cliente no CRM'}
-                            {formData.nodeType === 'pix_payment' && 'Cobrança PIX + Entrega Automática de Produto'}
-                        </span>
-                    </DialogTitle>
-                </DialogHeader>
+                <DialogContent className="w-[95vw] max-w-xl max-h-[88vh] overflow-y-auto p-4 sm:p-6">
+                    <DialogHeader className="border-b pb-3 pr-6">
+                        <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+                            {formData.nodeType === 'start' && <PlayCircle className="h-5 w-5 text-emerald-500 shrink-0" />}
+                            {formData.nodeType === 'menu' && <Grid className="h-5 w-5 text-indigo-600 shrink-0" />}
+                            {formData.nodeType === 'content' && <Star className="h-5 w-5 text-rose-500 shrink-0" />}
+                            {formData.nodeType === 'delay' && <Clock className="h-5 w-5 text-orange-500 shrink-0" />}
+                            {formData.nodeType === 'pause_automation' && <PauseCircle className="h-5 w-5 text-purple-600 shrink-0" />}
+                            {formData.nodeType === 'action' && <Zap className="h-5 w-5 text-amber-500 shrink-0" />}
+                            {formData.nodeType === 'flow_connect' && <Rocket className="h-5 w-5 text-emerald-500 shrink-0" />}
+                            {formData.nodeType === 'condition' && <UserCheck className="h-5 w-5 text-sky-500 shrink-0" />}
+                            {formData.nodeType === 'pix_payment' && <QrCode className="h-5 w-5 text-emerald-600 shrink-0" />}
+                            <span className="truncate">
+                                {formData.nodeType === 'start' && 'Início do Fluxo'}
+                                {formData.nodeType === 'menu' && 'Configurar Menu Interativo'}
+                                {formData.nodeType === 'content' && 'Bloco de Conteúdo'}
+                                {formData.nodeType === 'delay' && 'Atraso Inteligente'}
+                                {formData.nodeType === 'pause_automation' && 'Pausar Automação (Cooldown)'}
+                                {formData.nodeType === 'action' && 'Bloco de Ação'}
+                                {formData.nodeType === 'flow_connect' && 'Conexão de Fluxo'}
+                                {formData.nodeType === 'condition' && 'Verificar Cliente no CRM'}
+                                {formData.nodeType === 'pix_payment' && 'Cobrança PIX + Entrega Automática'}
+                            </span>
+                        </DialogTitle>
+                    </DialogHeader>
 
-                <div className="space-y-5 py-3">
-                    {/* NOME / RÓTULO DO BLOCO */}
-                    <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Identificação do Bloco</Label>
-                        <Input
-                            placeholder="Ex: Ponto de Partida, Início..."
-                            value={formData.label || ''}
-                            onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-                        />
-                    </div>
-
-                    {/* ---------------- 0. CONFIGURAÇÃO DE START (INÍCIO DO FLUXO) ---------------- */}
-                    {formData.nodeType === 'start' && (
-                        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 space-y-3">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
-                                    <PlayCircle className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-semibold text-emerald-950 dark:text-emerald-200">Ponto de Entrada do Fluxo</h4>
-                                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                                        Este bloco define exatamente onde a conversa é iniciada quando acionada via WhatsApp, webhook ou teste.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900 space-y-1">
-                                <p className="font-medium text-emerald-800 dark:text-emerald-300">💡 Como conectar:</p>
-                                <p>Conecte o ponto verde à direita deste bloco ao primeiro elemento que deseja executar (por exemplo: <strong>Verificar Cliente CRM</strong>, uma <strong>Mensagem</strong> ou um <strong>Menu</strong>).</p>
-                            </div>
+                    <div className="space-y-3 py-2">
+                        {/* NOME / RÓTULO DO BLOCO COMPACTO */}
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 p-2.5 rounded-xl bg-muted/30 border">
+                            <Label className="text-xs font-semibold text-muted-foreground shrink-0 sm:w-36">
+                                Nome do Bloco:
+                            </Label>
+                            <Input
+                                placeholder="Ex: Ponto de Partida, Menu Inicial..."
+                                value={formData.label || ''}
+                                onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+                                className="h-8 text-xs bg-background"
+                            />
                         </div>
-                    )}
 
-                    {/* ---------------- 1. CONFIGURAÇÃO DE MENU (BOTCONVERSA STYLE) ---------------- */}
-                    {formData.nodeType === 'menu' && (
-                        <div className="space-y-5">
-                            {/* TIPO DE MENU */}
-                            <RadioGroup
-                                value={formData.menuType || 'list'}
-                                onValueChange={(val: any) => setFormData({ ...formData, menuType: val })}
-                                className="flex gap-6"
-                            >
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="list" id="menu-list" />
-                                    <Label htmlFor="menu-list" className="cursor-pointer font-medium text-sm">
-                                        Botão de lista
-                                    </Label>
+                        {/* ---------------- 0. CONFIGURAÇÃO DE START (INÍCIO DO FLUXO) ---------------- */}
+                        {formData.nodeType === 'start' && (
+                            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 space-y-2.5">
+                                <div className="flex items-start gap-2.5">
+                                    <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">
+                                        <PlayCircle className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-emerald-950 dark:text-emerald-200">
+                                            Ponto de Entrada do Fluxo
+                                        </h4>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                                            Conecte o ponto verde deste bloco ao primeiro passo do seu atendimento (ex: Menu, Mensagem ou Verificar Cliente).
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="numeric" id="menu-numeric" />
-                                    <Label htmlFor="menu-numeric" className="cursor-pointer font-medium text-sm">
-                                        Número
-                                    </Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="button" id="menu-button" />
-                                    <Label htmlFor="menu-button" className="cursor-pointer font-medium text-sm">
-                                        Botões Rápidos
-                                    </Label>
-                                </div>
-                            </RadioGroup>
+                            </div>
+                        )}
 
-                            {/* TEXTO DA PERGUNTA */}
-                            <div className="space-y-2">
-                                <Label className="text-xs font-semibold">Texto da pergunta</Label>
-                                <div className="border rounded-xl p-2 bg-background focus-within:ring-2 focus-within:ring-indigo-500">
-                                    <Textarea
-                                        placeholder="Digite aqui o texto que acompanha o menu..."
-                                        rows={4}
-                                        value={formData.menuQuestionText || ''}
-                                        onChange={(e) =>
-                                            setFormData({ ...formData, menuQuestionText: e.target.value })
-                                        }
-                                        className="border-0 focus-visible:ring-0 p-1 resize-none"
-                                    />
-                                    <div className="flex items-center justify-between pt-2 border-t mt-1">
-                                        <div className="flex items-center gap-1">
+                        {/* ---------------- 1. CONFIGURAÇÃO DE MENU ---------------- */}
+                        {formData.nodeType === 'menu' && (
+                            <Accordion type="multiple" defaultValue={['menu-main', 'menu-options']} className="space-y-2.5">
+                                {/* SEÇÃO 1: PERGUNTA E TIPO DE MENU */}
+                                <AccordionItem value="menu-main" className="border rounded-xl bg-card px-3.5 overflow-hidden">
+                                    <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                        <div className="flex items-center gap-2">
+                                            <MessageSquareText className="h-4 w-4 text-indigo-600" />
+                                            <span>1. Pergunta e Tipo de Menu</span>
+                                            <Badge variant="secondary" className="text-[10px] font-normal">
+                                                {formData.menuType === 'numeric'
+                                                    ? 'Numérico'
+                                                    : formData.menuType === 'button'
+                                                    ? 'Botões Rápidos'
+                                                    : 'Lista'}
+                                            </Badge>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-2 pb-3.5 space-y-3 border-t">
+                                        <RadioGroup
+                                            value={formData.menuType || 'list'}
+                                            onValueChange={(val: any) => setFormData({ ...formData, menuType: val })}
+                                            className="grid grid-cols-3 gap-2"
+                                        >
+                                            <label
+                                                htmlFor="menu-list"
+                                                className={`cursor-pointer flex items-center gap-2 p-2 rounded-lg border text-xs font-medium ${
+                                                    (formData.menuType || 'list') === 'list'
+                                                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300'
+                                                        : 'border-border'
+                                                }`}
+                                            >
+                                                <RadioGroupItem value="list" id="menu-list" />
+                                                <span>Lista</span>
+                                            </label>
+                                            <label
+                                                htmlFor="menu-numeric"
+                                                className={`cursor-pointer flex items-center gap-2 p-2 rounded-lg border text-xs font-medium ${
+                                                    formData.menuType === 'numeric'
+                                                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300'
+                                                        : 'border-border'
+                                                }`}
+                                            >
+                                                <RadioGroupItem value="numeric" id="menu-numeric" />
+                                                <span>Número</span>
+                                            </label>
+                                            <label
+                                                htmlFor="menu-button"
+                                                className={`cursor-pointer flex items-center gap-2 p-2 rounded-lg border text-xs font-medium ${
+                                                    formData.menuType === 'button'
+                                                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300'
+                                                        : 'border-border'
+                                                }`}
+                                            >
+                                                <RadioGroupItem value="button" id="menu-button" />
+                                                <span>Botões</span>
+                                            </label>
+                                        </RadioGroup>
+
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs font-semibold">Texto da Pergunta</Label>
+                                            <div className="border rounded-xl p-2 bg-background focus-within:ring-1 focus-within:ring-indigo-500">
+                                                <Textarea
+                                                    placeholder="Digite aqui o texto que acompanha o menu..."
+                                                    rows={3}
+                                                    value={formData.menuQuestionText || ''}
+                                                    onChange={(e) =>
+                                                        setFormData({ ...formData, menuQuestionText: e.target.value })
+                                                    }
+                                                    className="border-0 focus-visible:ring-0 p-1 resize-none text-xs sm:text-sm"
+                                                />
+                                                <div className="flex items-center justify-between pt-1.5 border-t mt-1">
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 w-6 p-0"
+                                                            onClick={() =>
+                                                                setFormData((p) => ({
+                                                                    ...p,
+                                                                    menuQuestionText: (p.menuQuestionText || '') + ' *texto* ',
+                                                                }))
+                                                            }
+                                                            title="Negrito"
+                                                        >
+                                                            <Bold className="h-3 w-3" />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 w-6 p-0"
+                                                            onClick={() =>
+                                                                setFormData((p) => ({
+                                                                    ...p,
+                                                                    menuQuestionText: (p.menuQuestionText || '') + ' _texto_ ',
+                                                                }))
+                                                            }
+                                                            title="Itálico"
+                                                        >
+                                                            <Italic className="h-3 w-3" />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 w-6 p-0"
+                                                            onClick={() =>
+                                                                setFormData((p) => ({
+                                                                    ...p,
+                                                                    menuQuestionText: (p.menuQuestionText || '') + ' ~texto~ ',
+                                                                }))
+                                                            }
+                                                            title="Tachado"
+                                                        >
+                                                            <Strikethrough className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-6 px-2 text-[11px] gap-1"
+                                                        onClick={() => setShowVariablesPicker((v) => !v)}
+                                                    >
+                                                        <Sparkles className="h-3 w-3 text-indigo-500" />
+                                                        {showVariablesPicker ? 'Ocultar Variáveis' : 'Inserir Variável'}
+                                                    </Button>
+                                                </div>
+
+                                                {showVariablesPicker && (
+                                                    <div className="space-y-2 pt-2 border-t mt-2 max-h-36 overflow-y-auto pr-1 animate-in fade-in-50">
+                                                        {FLOW_VARIABLE_GROUPS.map((grp) => (
+                                                            <div key={grp.id} className="space-y-1">
+                                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                                                                    {grp.title}:
+                                                                </span>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {grp.variables.map((v) => (
+                                                                        <button
+                                                                            key={v.key}
+                                                                            type="button"
+                                                                            onClick={() => handleInsertVariable('menuQuestionText', v.key)}
+                                                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-muted-foreground hover:text-indigo-600 transition-colors cursor-pointer font-mono"
+                                                                            title={v.desc}
+                                                                        >
+                                                                            +{v.label}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+
+                                {/* SEÇÃO 2: BOTÕES / OPÇÕES DO MENU */}
+                                <AccordionItem value="menu-options" className="border rounded-xl bg-card px-3.5 overflow-hidden">
+                                    <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                        <div className="flex items-center gap-2">
+                                            <Grid className="h-4 w-4 text-indigo-600" />
+                                            <span>2. Opções / Botões do Menu</span>
+                                            <Badge variant="outline" className="text-[10px]">
+                                                {normalizeMenuOptions(formData.menuOptions).length}
+                                            </Badge>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-2 pb-3.5 space-y-2.5 border-t">
+                                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                            {normalizeMenuOptions(formData.menuOptions).map((opt, idx) => {
+                                                const isDragging = draggedOptionIndex === idx;
+                                                const isDragOver = dragOverIndex === idx && draggedOptionIndex !== idx;
+                                                const isUrlOption = opt.type === 'url';
+
+                                                return (
+                                                    <div
+                                                        key={opt.id || `opt_${idx}`}
+                                                        draggable
+                                                        onDragStart={(e) => handleDragStart(e, idx)}
+                                                        onDragOver={(e) => handleDragOver(e, idx)}
+                                                        onDragLeave={() => handleDragLeave(idx)}
+                                                        onDrop={(e) => handleDrop(e, idx)}
+                                                        onDragEnd={handleDragEnd}
+                                                        className={`p-2.5 rounded-xl border transition-all duration-150 relative ${
+                                                            isDragging
+                                                                ? 'opacity-40 border-dashed border-indigo-400'
+                                                                : isDragOver
+                                                                ? 'border-2 border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40'
+                                                                : isUrlOption
+                                                                ? 'bg-emerald-50/20 dark:bg-emerald-950/15 border-emerald-200/70 dark:border-emerald-900/50'
+                                                                : 'bg-muted/20'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-start gap-2">
+                                                            <div
+                                                                className="cursor-grab active:cursor-grabbing p-0.5 mt-1 text-slate-400 hover:text-indigo-600 shrink-0"
+                                                                title="Arraste para reordenar"
+                                                            >
+                                                                <GripVertical className="h-3.5 w-3.5" />
+                                                            </div>
+
+                                                            <div className="flex-1 min-w-0 space-y-2">
+                                                                <div className="flex items-center justify-between gap-1.5">
+                                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-mono">
+                                                                            #{idx + 1}
+                                                                        </Badge>
+                                                                        <div className="flex items-center bg-muted p-0.5 rounded-md text-[10px]">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleUpdateMenuOption(idx, 'type', 'reply')}
+                                                                                className={`px-1.5 py-0.5 rounded font-medium transition-all ${
+                                                                                    !isUrlOption
+                                                                                        ? 'bg-background text-foreground shadow-2xs'
+                                                                                        : 'text-muted-foreground'
+                                                                                }`}
+                                                                            >
+                                                                                Fluxo
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    handleUpdateMenuOption(idx, 'type', 'url');
+                                                                                    if (!opt.url) {
+                                                                                        handleUpdateMenuOption(idx, 'url', '{link_renovacao}');
+                                                                                    }
+                                                                                }}
+                                                                                className={`px-1.5 py-0.5 rounded font-medium transition-all flex items-center gap-1 ${
+                                                                                    isUrlOption
+                                                                                        ? 'bg-emerald-600 text-white shadow-2xs'
+                                                                                        : 'text-muted-foreground'
+                                                                                }`}
+                                                                            >
+                                                                                <ExternalLink className="h-2.5 w-2.5" />
+                                                                                Link URL
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        onClick={() => handleRemoveMenuOption(idx)}
+                                                                        className="text-destructive h-6 w-6 hover:bg-destructive/10 shrink-0"
+                                                                    >
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </Button>
+                                                                </div>
+
+                                                                <Input
+                                                                    placeholder={isUrlOption ? 'Texto do botão (Ex: RENOVAR AGORA)' : 'Título da opção'}
+                                                                    value={opt.label}
+                                                                    draggable={false}
+                                                                    onDragStart={(e) => e.stopPropagation()}
+                                                                    onChange={(e) => handleUpdateMenuOption(idx, 'label', e.target.value)}
+                                                                    className="bg-background font-medium text-xs h-7"
+                                                                />
+
+                                                                {isUrlOption ? (
+                                                                    <div className="space-y-1">
+                                                                        <Input
+                                                                            placeholder="URL (Ex: {link_renovacao} ou https://...)"
+                                                                            value={opt.url || ''}
+                                                                            draggable={false}
+                                                                            onDragStart={(e) => e.stopPropagation()}
+                                                                            onChange={(e) => handleUpdateMenuOption(idx, 'url', e.target.value)}
+                                                                            className="bg-background font-mono text-[11px] h-7 text-emerald-700 dark:text-emerald-300"
+                                                                        />
+                                                                        <div className="flex items-center gap-1 flex-wrap">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleUpdateMenuOption(idx, 'url', '{link_renovacao}')}
+                                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 font-mono"
+                                                                            >
+                                                                                +{'{link_renovacao}'}
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleUpdateMenuOption(idx, 'url', '{link_de_acesso}')}
+                                                                                className="text-[9.5px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                                                                            >
+                                                                                +{'{link_de_acesso}'}
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <Input
+                                                                        placeholder="Descrição curta (opcional)"
+                                                                        value={opt.description || ''}
+                                                                        draggable={false}
+                                                                        onDragStart={(e) => e.stopPropagation()}
+                                                                        onChange={(e) => handleUpdateMenuOption(idx, 'description', e.target.value)}
+                                                                        className="bg-background text-[11px] h-7 text-muted-foreground"
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2 pt-1">
                                             <Button
                                                 type="button"
-                                                variant="ghost"
+                                                variant="outline"
                                                 size="sm"
-                                                className="h-7 w-7 p-0"
-                                                onClick={() =>
-                                                    setFormData((p) => ({
-                                                        ...p,
-                                                        menuQuestionText: (p.menuQuestionText || '') + ' **texto** ',
-                                                    }))
-                                                }
-                                                title="Negrito"
+                                                onClick={() => handleAddMenuOption('reply')}
+                                                className="border-dashed border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 h-8 text-xs gap-1"
                                             >
-                                                <Bold className="h-3.5 w-3.5" />
+                                                <Plus className="h-3.5 w-3.5" />
+                                                Opção de Fluxo
                                             </Button>
                                             <Button
                                                 type="button"
-                                                variant="ghost"
+                                                variant="outline"
                                                 size="sm"
-                                                className="h-7 w-7 p-0"
-                                                onClick={() =>
-                                                    setFormData((p) => ({
-                                                        ...p,
-                                                        menuQuestionText: (p.menuQuestionText || '') + ' _texto_ ',
-                                                    }))
-                                                }
-                                                title="Itálico"
+                                                onClick={() => handleAddMenuOption('url')}
+                                                className="border-dashed border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 h-8 text-xs gap-1"
                                             >
-                                                <Italic className="h-3.5 w-3.5" />
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 w-7 p-0"
-                                                onClick={() =>
-                                                    setFormData((p) => ({
-                                                        ...p,
-                                                        menuQuestionText: (p.menuQuestionText || '') + ' ~texto~ ',
-                                                    }))
-                                                }
-                                                title="Tachado"
-                                            >
-                                                <Strikethrough className="h-3.5 w-3.5" />
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 px-2 text-xs font-mono"
-                                                onClick={() => handleInsertVariable('menuQuestionText', 'nome')}
-                                                title="Inserir variável {nome}"
-                                            >
-                                                {'{ }'}
+                                                <ExternalLink className="h-3.5 w-3.5" />
+                                                Botão com Link
                                             </Button>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2 pt-2 border-t mt-1.5 max-h-36 overflow-y-auto pr-1">
-                                        {FLOW_VARIABLE_GROUPS.map((grp) => (
-                                            <div key={grp.id} className="space-y-1">
-                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                                                    {grp.title}:
-                                                </span>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {grp.variables.map((v) => (
-                                                        <button
-                                                            key={v.key}
-                                                            type="button"
-                                                            onClick={() => handleInsertVariable('menuQuestionText', v.key)}
-                                                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer font-mono"
-                                                            title={v.desc}
-                                                        >
-                                                            +{v.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                                    </AccordionContent>
+                                </AccordionItem>
 
-                            {/* TÍTULO DO BOTÃO DE LISTA */}
-                            {formData.menuType === 'list' && (
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-semibold">Título do botão de abrir a lista</Label>
-                                    <div className="relative">
-                                        <Input
-                                            placeholder="Ex: VER OPÇÕES"
-                                            value={formData.menuButtonTitle || ''}
-                                            onChange={(e) =>
-                                                setFormData({ ...formData, menuButtonTitle: e.target.value })
-                                            }
+                                {/* SEÇÃO 3: AJUSTES EXTRAS DO MENU (MINIMIZADO) */}
+                                <AccordionItem value="menu-advanced" className="border rounded-xl bg-card px-3.5 overflow-hidden">
+                                    <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                        <div className="flex items-center gap-2">
+                                            <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+                                            <span>3. Rodapé, Botão da Lista e Aviso de Erro</span>
+                                            <Badge variant="outline" className="text-[10px] font-normal">
+                                                Opcional
+                                            </Badge>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-2 pb-3.5 space-y-3 border-t">
+                                        {(formData.menuType || 'list') === 'list' && (
+                                            <div className="space-y-1">
+                                                <Label className="text-xs font-semibold">Título do botão de abrir a lista</Label>
+                                                <Input
+                                                    placeholder="Ex: VER OPÇÕES"
+                                                    value={formData.menuButtonTitle || ''}
+                                                    onChange={(e) =>
+                                                        setFormData({ ...formData, menuButtonTitle: e.target.value })
+                                                    }
+                                                    className="h-8 text-xs"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-1">
+                                            <Label className="text-xs font-semibold">Texto de Rodapé (Opcional)</Label>
+                                            <Input
+                                                placeholder="Ex: Entrega Automática • Clique no botão abaixo"
+                                                value={formData.menuFooterText || ''}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, menuFooterText: e.target.value })
+                                                }
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-xs font-semibold">
+                                                Mensagem se o Cliente Digitar Fora do Menu (Opcional)
+                                            </Label>
+                                            <Input
+                                                placeholder="Ex: Selecione uma das opções acima"
+                                                value={formData.invalidOptionMessage || ''}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, invalidOptionMessage: e.target.value })
+                                                }
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        )}
+
+                        {/* ---------------- 2. CONFIGURAÇÃO DE CONTEÚDO ---------------- */}
+                        {formData.nodeType === 'content' && (
+                            <div className="space-y-3">
+                                <div className="p-3.5 rounded-xl border bg-card space-y-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold">Tipo de Conteúdo</Label>
+                                        <Select
+                                            value={formData.contentType || 'text'}
+                                            onValueChange={(val: any) => setFormData({ ...formData, contentType: val })}
+                                        >
+                                            <SelectTrigger className="h-8 text-xs">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="text">Texto</SelectItem>
+                                                <SelectItem value="image">Imagem</SelectItem>
+                                                <SelectItem value="audio">Áudio</SelectItem>
+                                                <SelectItem value="video">Vídeo</SelectItem>
+                                                <SelectItem value="document">Documento / PDF</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {formData.contentType && formData.contentType !== 'text' && (
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs font-semibold">URL da Mídia</Label>
+                                            <Input
+                                                placeholder="https://exemplo.com/imagem.png"
+                                                value={formData.mediaUrl || ''}
+                                                onChange={(e) => setFormData({ ...formData, mediaUrl: e.target.value })}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold">
+                                            {formData.contentType && formData.contentType !== 'text'
+                                                ? 'Legenda da Mídia (Opcional)'
+                                                : 'Mensagem de Texto'}
+                                        </Label>
+                                        <Textarea
+                                            placeholder="Escreva a mensagem que será enviada pelo WhatsApp..."
+                                            rows={4}
+                                            value={formData.text || ''}
+                                            onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                            className="text-xs sm:text-sm"
                                         />
                                     </div>
                                 </div>
-                            )}
 
-                            {/* RODAPÉ DA MENSAGEM (OPCIONAL) */}
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold flex items-center justify-between">
-                                    <span>Texto de Rodapé (Opcional)</span>
-                                    <span className="text-[11px] font-normal text-muted-foreground">Aparece embaixo do menu no WhatsApp</span>
-                                </Label>
-                                <Input
-                                    placeholder="Ex: Entrega Automática • ⬇️Clique No Botão⬇️"
-                                    value={formData.menuFooterText || ''}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, menuFooterText: e.target.value })
-                                    }
-                                />
-                            </div>
-
-                            {/* MENSAGEM SE O CLIENTE DIGITAR TEXTO FORA DAS OPÇÕES */}
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold flex items-center justify-between">
-                                    <span>Mensagem se o Cliente Digitar Fora do Menu (Opcional)</span>
-                                    <span className="text-[11px] font-normal text-muted-foreground">Se ele digitar algo livre</span>
-                                </Label>
-                                <Input
-                                    placeholder="Ex: Selecione a opção acima"
-                                    value={formData.invalidOptionMessage || ''}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, invalidOptionMessage: e.target.value })
-                                    }
-                                />
-                                <p className="text-[10.5px] text-muted-foreground">
-                                    Caso o cliente envie um texto livre em vez de escolher uma opção, o sistema envia este aviso e o mantém no menu atual.
-                                </p>
-                            </div>
-
-                            {/* SEÇÃO RESPOSTAS / ITENS DO MENU */}
-                            <div className="space-y-3 pt-2">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1 w-12" />
-                                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            Botões / Opções do Menu
-                                        </span>
-                                        <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1 w-12" />
-                                    </div>
-                                    <Badge variant="outline" className="text-[11px]">
-                                        {normalizeMenuOptions(formData.menuOptions).length} opção(ões)
-                                    </Badge>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {normalizeMenuOptions(formData.menuOptions).map((opt, idx) => {
-                                        const isDragging = draggedOptionIndex === idx;
-                                        const isDragOver = dragOverIndex === idx && draggedOptionIndex !== idx;
-                                        const isUrlOption = opt.type === 'url';
-
-                                        return (
-                                            <div
-                                                key={opt.id || `opt_${idx}`}
-                                                draggable
-                                                onDragStart={(e) => handleDragStart(e, idx)}
-                                                onDragOver={(e) => handleDragOver(e, idx)}
-                                                onDragLeave={() => handleDragLeave(idx)}
-                                                onDrop={(e) => handleDrop(e, idx)}
-                                                onDragEnd={handleDragEnd}
-                                                className={`p-3.5 rounded-xl border transition-all duration-150 relative group overflow-hidden ${
-                                                    isDragging
-                                                        ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20 scale-[0.98]'
-                                                        : isDragOver
-                                                        ? 'border-2 border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 shadow-md scale-[1.01]'
-                                                        : isUrlOption
-                                                        ? 'bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/60 hover:border-emerald-300'
-                                                        : 'bg-slate-50/50 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-700'
-                                                }`}
-                                            >
-                                                <div className="flex items-start gap-2.5">
-                                                    {/* Ícone de arrastar para mudar a ordem */}
-                                                    <div
-                                                        className="cursor-grab active:cursor-grabbing p-1 mt-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors shrink-0"
-                                                        title="Clique e arraste para mudar a ordem"
-                                                    >
-                                                        <GripVertical className="h-4 w-4" />
-                                                    </div>
-
-                                                    <div className="flex-1 min-w-0 space-y-2.5">
-                                                        {/* CABEÇALHO DA OPÇÃO (TIPO DE BOTÃO) */}
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                                <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] h-5 px-1.5 shrink-0 select-none font-mono">
-                                                                    #{idx + 1}
-                                                                </Badge>
-                                                                <div className="flex items-center bg-slate-200/70 dark:bg-slate-800 p-0.5 rounded-lg text-[10.5px]">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleUpdateMenuOption(idx, 'type', 'reply')}
-                                                                        className={`px-2 py-0.5 rounded-md font-medium transition-all ${
-                                                                            !isUrlOption
-                                                                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                                                                                : 'text-muted-foreground hover:text-foreground'
-                                                                        }`}
-                                                                    >
-                                                                        Avançar no Fluxo
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            handleUpdateMenuOption(idx, 'type', 'url');
-                                                                            if (!opt.url) {
-                                                                                handleUpdateMenuOption(idx, 'url', '{link_renovacao}');
-                                                                            }
-                                                                        }}
-                                                                        className={`px-2 py-0.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                                                                            isUrlOption
-                                                                                ? 'bg-emerald-600 text-white shadow-2xs'
-                                                                                : 'text-muted-foreground hover:text-emerald-600'
-                                                                        }`}
-                                                                    >
-                                                                        <ExternalLink className="h-3 w-3" />
-                                                                        Abrir Link / URL (CTA)
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-
+                                <Accordion type="single" collapsible className="border rounded-xl bg-card px-3.5">
+                                    <AccordionItem value="vars" className="border-0">
+                                        <AccordionTrigger className="hover:no-underline py-2.5 text-xs font-semibold">
+                                            <span className="flex items-center gap-1.5">
+                                                <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                                                Inserir Variáveis Dinâmicas do Cliente
+                                            </span>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pt-2 pb-3 space-y-2 border-t max-h-44 overflow-y-auto">
+                                            {FLOW_VARIABLE_GROUPS.map((grp) => (
+                                                <div key={grp.id} className="space-y-1">
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                                                        {grp.title}:
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {grp.variables.map((v) => (
                                                             <Button
+                                                                key={v.key}
                                                                 type="button"
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() => handleRemoveMenuOption(idx)}
-                                                                className="text-destructive h-7 w-7 hover:bg-destructive/10 shrink-0"
-                                                                title="Excluir opção"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="text-[10.5px] h-6 px-2 font-mono"
+                                                                onClick={() => handleInsertVariable('text', v.key)}
+                                                                title={v.desc}
                                                             >
-                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                +{v.label}
                                                             </Button>
-                                                        </div>
-
-                                                        {/* TÍTULO DO BOTÃO / OPÇÃO */}
-                                                        <div>
-                                                            <Input
-                                                                placeholder={isUrlOption ? "Texto do botão (Ex: SIM, RENOVAR AGORA, PAGAR VIA PIX...)" : "Título da opção (Ex: Suporte, Ver Assinaturas...)"}
-                                                                value={opt.label}
-                                                                draggable={false}
-                                                                onDragStart={(e) => e.stopPropagation()}
-                                                                onChange={(e) =>
-                                                                    handleUpdateMenuOption(idx, 'label', e.target.value)
-                                                                }
-                                                                className="bg-white dark:bg-slate-950 font-medium text-xs h-8 w-full shadow-2xs"
-                                                            />
-                                                        </div>
-
-                                                        {/* CAMPO DE LINK / URL QUANDO FOR CTA */}
-                                                        {isUrlOption ? (
-                                                            <div className="space-y-1.5 p-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800">
-                                                                <div className="flex items-center justify-between">
-                                                                    <Label className="text-[11px] font-semibold text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
-                                                                        <ExternalLink className="h-3 w-3" />
-                                                                        Link de Destino / URL do Botão:
-                                                                    </Label>
-                                                                </div>
-                                                                <Input
-                                                                    placeholder="Ex: {link_renovacao} ou https://seusite.com"
-                                                                    value={opt.url || ''}
-                                                                    draggable={false}
-                                                                    onDragStart={(e) => e.stopPropagation()}
-                                                                    onChange={(e) =>
-                                                                        handleUpdateMenuOption(idx, 'url', e.target.value)
-                                                                    }
-                                                                    className="bg-white dark:bg-slate-950 font-mono text-xs h-7 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                                                                />
-                                                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                                                                    <span className="text-[9.5px] text-muted-foreground select-none">Variáveis de Link:</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleUpdateMenuOption(idx, 'url', '{link_renovacao}')}
-                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 font-mono font-medium transition-colors"
-                                                                        title="Link automático para o cliente escolher e renovar assinaturas"
-                                                                    >
-                                                                        +{'{link_renovacao}'}
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleUpdateMenuOption(idx, 'url', '{link_de_acesso}')}
-                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 font-mono transition-colors"
-                                                                        title="Link de acesso à plataforma"
-                                                                    >
-                                                                        +{'{link_de_acesso}'}
-                                                                    </button>
-                                                                </div>
-                                                                <p className="text-[10px] text-emerald-800/80 dark:text-emerald-400 leading-tight">
-                                                                    ⚡ Ao clicar no WhatsApp, este botão abre o link diretamente no navegador (igual ao botão de cobrança)!
-                                                                </p>
-                                                            </div>
-                                                        ) : (
-                                                            /* CAMPO DE DESCRIÇÃO QUANDO FOR RESPOSTA DO FLUXO */
-                                                            <div className="space-y-1.5">
-                                                                <Input
-                                                                    placeholder="Descrição (opcional, aparece embaixo no menu lista)"
-                                                                    value={opt.description || ''}
-                                                                    draggable={false}
-                                                                    onDragStart={(e) => e.stopPropagation()}
-                                                                    onChange={(e) =>
-                                                                        handleUpdateMenuOption(idx, 'description', e.target.value)
-                                                                    }
-                                                                    className="bg-white dark:bg-slate-950 text-xs h-7 text-muted-foreground w-full shadow-2xs"
-                                                                />
-
-                                                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                                                                    <span className="text-[9.5px] text-muted-foreground select-none">Variáveis:</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        draggable={false}
-                                                                        onDragStart={(e) => e.stopPropagation()}
-                                                                        onClick={() =>
-                                                                            handleUpdateMenuOption(
-                                                                                idx,
-                                                                                'description',
-                                                                                (opt.description ? opt.description + ' ' : '') + '{assinaturas_ativas_qtd}'
-                                                                            )
-                                                                        }
-                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 font-mono transition-colors"
-                                                                        title="Inserir quantidade de assinaturas ativas"
-                                                                    >
-                                                                        +{'{assinaturas_ativas_qtd}'}
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        draggable={false}
-                                                                        onDragStart={(e) => e.stopPropagation()}
-                                                                        onClick={() =>
-                                                                            handleUpdateMenuOption(
-                                                                                idx,
-                                                                                'description',
-                                                                                (opt.description ? opt.description + ' ' : '') + '{assinaturas_vencidas_qtd}'
-                                                                            )
-                                                                        }
-                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 font-mono transition-colors"
-                                                                        title="Inserir quantidade de assinaturas vencidas"
-                                                                    >
-                                                                        +{'{assinaturas_vencidas_qtd}'}
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        draggable={false}
-                                                                        onDragStart={(e) => e.stopPropagation()}
-                                                                        onClick={() =>
-                                                                            handleUpdateMenuOption(
-                                                                                idx,
-                                                                                'description',
-                                                                                (opt.description ? opt.description + ' ' : '') + '{total_assinaturas}'
-                                                                            )
-                                                                        }
-                                                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-mono transition-colors"
-                                                                        title="Inserir total de assinaturas"
-                                                                    >
-                                                                        +{'{total_assinaturas}'}
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        )}
+                                                        ))}
                                                     </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2 pt-1">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => handleAddMenuOption('reply')}
-                                        className="border-dashed border-2 border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 gap-1.5 py-4 text-xs font-medium"
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                        + Resposta (Fluxo)
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => handleAddMenuOption('url')}
-                                        className="border-dashed border-2 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30 gap-1.5 py-4 text-xs font-medium"
-                                    >
-                                        <ExternalLink className="h-4 w-4 text-emerald-600" />
-                                        + Botão com Link (CTA)
-                                    </Button>
-                                </div>
+                                            ))}
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* ---------------- 2. CONFIGURAÇÃO DE CONTEÚDO ---------------- */}
-                    {formData.nodeType === 'content' && (
-                        <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Tipo de Conteúdo</Label>
-                                <Select
-                                    value={formData.contentType || 'text'}
-                                    onValueChange={(val: any) => setFormData({ ...formData, contentType: val })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="text">Texto</SelectItem>
-                                        <SelectItem value="image">Imagem</SelectItem>
-                                        <SelectItem value="audio">Áudio</SelectItem>
-                                        <SelectItem value="video">Vídeo</SelectItem>
-                                        <SelectItem value="document">Documento / PDF</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {formData.contentType && formData.contentType !== 'text' && (
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold">URL da Mídia</Label>
-                                    <Input
-                                        placeholder="https://exemplo.com/imagem.png"
-                                        value={formData.mediaUrl || ''}
-                                        onChange={(e) => setFormData({ ...formData, mediaUrl: e.target.value })}
-                                    />
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <Label className="text-xs font-semibold">
-                                    {formData.contentType && formData.contentType !== 'text'
-                                        ? 'Legenda da Mídia (Opcional)'
-                                        : 'Mensagem de Texto'}
-                                </Label>
-                                <Textarea
-                                    placeholder="Escreva a mensagem que será enviada pelo WhatsApp..."
-                                    rows={5}
-                                    value={formData.text || ''}
-                                    onChange={(e) => setFormData({ ...formData, text: e.target.value })}
-                                />
-                                <div className="space-y-1.5 pt-1">
-                                    <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
-                                        <Sparkles className="h-3 w-3 text-indigo-500" />
-                                        Variáveis disponíveis (substituídas automaticamente com os dados do cliente):
-                                    </span>
-                                    <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                                        {FLOW_VARIABLE_GROUPS.map((grp) => (
-                                            <div key={grp.id} className="space-y-1">
-                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                                                    {grp.title}:
-                                                </span>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {grp.variables.map((v) => (
-                                                        <Button
-                                                            key={v.key}
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="text-[11px] h-6 px-2 bg-background hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 border-slate-200 dark:border-slate-800 transition-colors shadow-2xs font-mono"
-                                                            onClick={() => handleInsertVariable('text', v.key)}
-                                                            title={v.desc}
-                                                        >
-                                                            + {v.label}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ---------------- 3. CONFIGURAÇÃO DE ATRASO INTELIGENTE ---------------- */}
-                    {formData.nodeType === 'delay' && (
-                        <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Tempo de Atraso</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <Input
-                                            type="number"
-                                            min={1}
-                                            max={
-                                                (formData.delayUnit || 'seconds') === 'hours'
-                                                    ? 720
-                                                    : (formData.delayUnit || 'seconds') === 'minutes'
-                                                    ? 1440
-                                                    : 3600
-                                            }
-                                            value={(() => {
-                                                if (formData.delayValue !== undefined && formData.delayValue !== null) {
-                                                    return formData.delayValue;
+                        {/* ---------------- 3. CONFIGURAÇÃO DE ATRASO INTELIGENTE ---------------- */}
+                        {formData.nodeType === 'delay' && (
+                            <div className="p-3.5 rounded-xl border bg-card space-y-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold">Tempo de Atraso</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                max={
+                                                    (formData.delayUnit || 'seconds') === 'hours'
+                                                        ? 720
+                                                        : (formData.delayUnit || 'seconds') === 'minutes'
+                                                        ? 1440
+                                                        : 3600
                                                 }
-                                                const unit =
+                                                value={(() => {
+                                                    if (formData.delayValue !== undefined && formData.delayValue !== null) {
+                                                        return formData.delayValue;
+                                                    }
+                                                    const unit =
+                                                        formData.delayUnit ||
+                                                        (formData.delaySeconds && formData.delaySeconds >= 3600 && formData.delaySeconds % 3600 === 0
+                                                            ? 'hours'
+                                                            : formData.delaySeconds && formData.delaySeconds >= 60 && formData.delaySeconds % 60 === 0
+                                                            ? 'minutes'
+                                                            : 'seconds');
+                                                    if (unit === 'hours' && formData.delaySeconds) {
+                                                        return Math.max(1, Math.round(formData.delaySeconds / 3600));
+                                                    }
+                                                    if (unit === 'minutes' && formData.delaySeconds) {
+                                                        return Math.max(1, Math.round(formData.delaySeconds / 60));
+                                                    }
+                                                    return formData.delaySeconds || 3;
+                                                })()}
+                                                onChange={(e) => {
+                                                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                    const unit = formData.delayUnit || 'seconds';
+                                                    let secs = val;
+                                                    if (unit === 'hours') secs = val * 3600;
+                                                    else if (unit === 'minutes') secs = val * 60;
+                                                    setFormData({
+                                                        ...formData,
+                                                        delayValue: val,
+                                                        delayUnit: unit,
+                                                        delaySeconds: secs,
+                                                    });
+                                                }}
+                                                className="h-8 text-xs"
+                                            />
+                                            <Select
+                                                value={
                                                     formData.delayUnit ||
                                                     (formData.delaySeconds && formData.delaySeconds >= 3600 && formData.delaySeconds % 3600 === 0
                                                         ? 'hours'
                                                         : formData.delaySeconds && formData.delaySeconds >= 60 && formData.delaySeconds % 60 === 0
                                                         ? 'minutes'
-                                                        : 'seconds');
-                                                if (unit === 'hours' && formData.delaySeconds) {
-                                                    return Math.max(1, Math.round(formData.delaySeconds / 3600));
+                                                        : 'seconds')
                                                 }
-                                                if (unit === 'minutes' && formData.delaySeconds) {
-                                                    return Math.max(1, Math.round(formData.delaySeconds / 60));
-                                                }
-                                                return formData.delaySeconds || 3;
-                                            })()}
-                                            onChange={(e) => {
-                                                const val = Math.max(1, parseInt(e.target.value) || 1);
-                                                const unit = formData.delayUnit || 'seconds';
-                                                let secs = val;
-                                                if (unit === 'hours') secs = val * 3600;
-                                                else if (unit === 'minutes') secs = val * 60;
-                                                setFormData({
-                                                    ...formData,
-                                                    delayValue: val,
-                                                    delayUnit: unit,
-                                                    delaySeconds: secs,
-                                                });
-                                            }}
-                                            placeholder="Tempo..."
-                                        />
+                                                onValueChange={(unit: 'seconds' | 'hours' | 'minutes') => {
+                                                    const currentVal =
+                                                        formData.delayValue !== undefined && formData.delayValue !== null
+                                                            ? formData.delayValue
+                                                            : formData.delaySeconds
+                                                            ? formData.delayUnit === 'hours'
+                                                                ? Math.round(formData.delaySeconds / 3600)
+                                                                : formData.delayUnit === 'minutes'
+                                                                ? Math.round(formData.delaySeconds / 60)
+                                                                : formData.delaySeconds
+                                                            : 3;
+                                                    let secs = currentVal;
+                                                    if (unit === 'hours') secs = currentVal * 3600;
+                                                    else if (unit === 'minutes') secs = currentVal * 60;
+                                                    setFormData({
+                                                        ...formData,
+                                                        delayUnit: unit,
+                                                        delayValue: currentVal,
+                                                        delaySeconds: secs,
+                                                    });
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-8 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="seconds">Segundos</SelectItem>
+                                                    <SelectItem value="minutes">Minutos</SelectItem>
+                                                    <SelectItem value="hours">Horas</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
                                     </div>
-                                    <div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold">Simulação no WhatsApp</Label>
                                         <Select
-                                            value={
-                                                formData.delayUnit ||
-                                                (formData.delaySeconds && formData.delaySeconds >= 3600 && formData.delaySeconds % 3600 === 0
-                                                    ? 'hours'
-                                                    : formData.delaySeconds && formData.delaySeconds >= 60 && formData.delaySeconds % 60 === 0
-                                                    ? 'minutes'
-                                                    : 'seconds')
-                                            }
-                                            onValueChange={(unit: 'seconds' | 'hours' | 'minutes') => {
-                                                const currentVal =
-                                                    formData.delayValue !== undefined && formData.delayValue !== null
-                                                        ? formData.delayValue
-                                                        : formData.delaySeconds
-                                                        ? (formData.delayUnit === 'hours'
-                                                              ? Math.round(formData.delaySeconds / 3600)
-                                                              : formData.delayUnit === 'minutes'
-                                                              ? Math.round(formData.delaySeconds / 60)
-                                                              : formData.delaySeconds)
-                                                        : 3;
-                                                let secs = currentVal;
-                                                if (unit === 'hours') secs = currentVal * 3600;
-                                                else if (unit === 'minutes') secs = currentVal * 60;
-                                                setFormData({
-                                                    ...formData,
-                                                    delayUnit: unit,
-                                                    delayValue: currentVal,
-                                                    delaySeconds: secs,
-                                                });
-                                            }}
+                                            value={formData.delayPresence || 'composing'}
+                                            onValueChange={(val: any) => setFormData({ ...formData, delayPresence: val })}
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="h-8 text-xs">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="seconds">⏱️ Segundos</SelectItem>
-                                                <SelectItem value="hours">🕒 Horas</SelectItem>
-                                                <SelectItem value="minutes">⏳ Minutos</SelectItem>
+                                                <SelectItem value="composing">Digitando...</SelectItem>
+                                                <SelectItem value="recording">Gravando áudio...</SelectItem>
+                                                <SelectItem value="none">Nenhuma presença</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    {(formData.delayUnit || 'seconds') === 'hours'
-                                        ? `O bot vai aguardar ${formData.delayValue || (formData.delaySeconds ? Math.round(formData.delaySeconds / 3600) : 1)} hora(s) antes de enviar o próximo bloco.`
-                                        : (formData.delayUnit || 'seconds') === 'minutes'
-                                        ? `O bot vai aguardar ${formData.delayValue || (formData.delaySeconds ? Math.round(formData.delaySeconds / 60) : 1)} minuto(s) antes de enviar o próximo bloco.`
-                                        : `Tempo que o bot vai esperar antes de enviar o próximo bloco (${formData.delayValue || formData.delaySeconds || 3} segundo(s)).`}
-                                </p>
                             </div>
+                        )}
 
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Simulação de Presença no WhatsApp</Label>
-                                <Select
-                                    value={formData.delayPresence || 'composing'}
-                                    onValueChange={(val: any) =>
-                                        setFormData({ ...formData, delayPresence: val })
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="composing">Digitando...</SelectItem>
-                                        <SelectItem value="recording">Gravando áudio...</SelectItem>
-                                        <SelectItem value="none">Nenhuma presença</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Exibe a mensagem &quot;digitando...&quot; no topo da conversa durante a espera.
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                        {/* ---------------- 4. CONFIGURAÇÃO DE AÇÃO ---------------- */}
+                        {formData.nodeType === 'action' && (
+                            <div className="p-3.5 rounded-xl border bg-card space-y-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Tipo de Ação</Label>
+                                    <Select
+                                        value={formData.actionType || 'send_contact'}
+                                        onValueChange={(val: any) => setFormData({ ...formData, actionType: val })}
+                                    >
+                                        <SelectTrigger className="h-8 text-xs">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="send_contact">
+                                                👤 Enviar Card de Contato (WhatsApp vCard)
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                    {/* ---------------- 4. CONFIGURAÇÃO DE AÇÃO ---------------- */}
-                    {formData.nodeType === 'action' && (
-                        <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Tipo de Ação</Label>
-                                <Select
-                                    value={formData.actionType || 'send_contact'}
-                                    onValueChange={(val: any) => setFormData({ ...formData, actionType: val })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="send_contact">
-                                            👤 Enviar Card de Contato (WhatsApp vCard)
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Se for Enviar Card de Contato */}
-                            {formData.actionType === 'send_contact' ? (
-                                <div className="space-y-3.5 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
-                                    <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                                        <UserCheck className="h-4 w-4" />
-                                        <span>Dados do Card de Contato (WhatsApp)</span>
+                                {formData.actionType === 'send_contact' ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Nome do Contato</Label>
+                                            <Input
+                                                placeholder="Ex: Suporte Oficial"
+                                                value={formData.contactCardName || ''}
+                                                onChange={(e) => setFormData({ ...formData, contactCardName: e.target.value })}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">WhatsApp (com DDD)</Label>
+                                            <Input
+                                                placeholder="Ex: 5511999999999"
+                                                value={formData.contactCardPhone || ''}
+                                                onChange={(e) => setFormData({ ...formData, contactCardPhone: e.target.value })}
+                                                className="h-8 text-xs font-mono"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Empresa (Opcional)</Label>
+                                            <Input
+                                                placeholder="Ex: Minha Empresa"
+                                                value={formData.contactCardOrganization || ''}
+                                                onChange={(e) => setFormData({ ...formData, contactCardOrganization: e.target.value })}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Mensagem Junto (Opcional)</Label>
+                                            <Input
+                                                placeholder="Ex: Fale com nosso suporte:"
+                                                value={formData.text || ''}
+                                                onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
                                     </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium">Nome da Pessoa / Contato</Label>
+                                ) : (
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold">Mensagem / Valor</Label>
                                         <Input
-                                            placeholder="Ex: Pedro Suporte / Atendimento VIP"
-                                            value={formData.contactCardName || ''}
-                                            onChange={(e) => setFormData({ ...formData, contactCardName: e.target.value })}
-                                        />
-                                        <p className="text-[11px] text-muted-foreground">
-                                            Nome que aparecerá no cartão de contato no WhatsApp. Aceita variáveis como {'{nome}'}.
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium">Número do WhatsApp</Label>
-                                        <Input
-                                            placeholder="Ex: 5511999999999"
-                                            value={formData.contactCardPhone || ''}
-                                            onChange={(e) => setFormData({ ...formData, contactCardPhone: e.target.value })}
-                                        />
-                                        <p className="text-[11px] text-muted-foreground">
-                                            Número com código do país e DDD (somente dígitos). Aceita variáveis como {'{telefone}'}.
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium">Empresa / Organização (Opcional)</Label>
-                                        <Input
-                                            placeholder="Ex: PJ CRM Suporte"
-                                            value={formData.contactCardOrganization || ''}
-                                            onChange={(e) => setFormData({ ...formData, contactCardOrganization: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium">Mensagem Adicional (Opcional)</Label>
-                                        <Input
-                                            placeholder="Ex: Segue o contato do nosso suporte oficial:"
+                                            placeholder="Ex: Cliente solicitou suporte"
                                             value={formData.text || ''}
                                             onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                            className="h-8 text-xs"
                                         />
-                                        <p className="text-[11px] text-muted-foreground">
-                                            Se preenchido, esta mensagem é enviada junto com o cartão de contato.
-                                        </p>
                                     </div>
+                                )}
+                            </div>
+                        )}
 
-                                    <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                                        💡 <strong>API UazAPI Nativa:</strong> Envia um cartão de contato nativo (vCard) do WhatsApp. O cliente recebe um botão direto para <em>Conversar</em> ou <em>Salvar Contato</em> na agenda do telefone com apenas 1 clique.
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold">Mensagem de Notificação / Valor</Label>
-                                    <Input
-                                        placeholder="Ex: Cliente solicitou suporte no WhatsApp"
-                                        value={formData.text || ''}
-                                        onChange={(e) => setFormData({ ...formData, text: e.target.value })}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ---------------- 5. CONFIGURAÇÃO DE CONEXÃO DE FLUXO ---------------- */}
-                    {formData.nodeType === 'flow_connect' && (
-                        <div className="space-y-4">
-                            <div className="space-y-1.5">
+                        {/* ---------------- 5. CONFIGURAÇÃO DE CONEXÃO DE FLUXO ---------------- */}
+                        {formData.nodeType === 'flow_connect' && (
+                            <div className="p-3.5 rounded-xl border bg-card space-y-2">
                                 <Label className="text-xs font-semibold">Conectar a Outro Fluxo</Label>
                                 <Select
                                     value={formData.targetFlowId || undefined}
                                     onValueChange={(val) => setFormData({ ...formData, targetFlowId: val })}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className="h-9 text-xs">
                                         <SelectValue placeholder="Selecione o fluxo de destino..." />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1181,524 +1126,494 @@ export function NodeConfigDialog({
                                                 ))}
                                     </SelectContent>
                                 </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Quando o cliente alcançar esse nó, a conversa continuará a partir do início do outro fluxo.
+                                <p className="text-[11px] text-muted-foreground">
+                                    Ao chegar neste bloco, o atendimento continua automaticamente no fluxo selecionado.
                                 </p>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* ---------------- 6. CONFIGURAÇÃO DE CONDIÇÃO: CLIENTE CRM ---------------- */}
-                    {formData.nodeType === 'condition' && (
-                        <div className="space-y-4">
-                            <div className="p-3.5 rounded-xl border border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20 space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 rounded-md bg-sky-100 dark:bg-sky-900 text-sky-600 dark:text-sky-300">
-                                        <UserCheck className="h-4 w-4" />
+                        {/* ---------------- 6. CONFIGURAÇÃO DE CONDIÇÃO: CLIENTE CRM ---------------- */}
+                        {formData.nodeType === 'condition' && (
+                            <div className="space-y-2.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-1">
+                                        <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                            <span>Saída 1: Cadastrado</span>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground leading-snug">
+                                            Número encontrado no CRM. Libera as variáveis do cliente.
+                                        </p>
                                     </div>
-                                    <h4 className="text-xs font-bold text-sky-900 dark:text-sky-200">
-                                        Verificação Inteligente de Cliente no CRM
-                                    </h4>
-                                </div>
-                                <p className="text-[11.5px] text-sky-800/90 dark:text-sky-300/90 leading-relaxed">
-                                    Quando a pessoa manda mensagem pelo WhatsApp, este bloco consulta instantaneamente o número no seu CRM. O fluxo se divide em 2 saídas automáticas:
-                                </p>
-                            </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {/* Saída 1 */}
-                                <div className="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-1.5">
-                                    <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 dark:text-emerald-300">
-                                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                                        <span>Saída: Cliente Cadastrado</span>
-                                    </div>
-                                    <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80 leading-relaxed">
-                                        Acionada quando o número já existe no seu CRM. Libera todas as variáveis de cliente para uso em mensagens e menus.
-                                    </p>
-                                </div>
-
-                                {/* Saída 2 */}
-                                <div className="p-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50/40 dark:bg-rose-950/20 space-y-1.5">
-                                    <div className="flex items-center gap-1.5 font-bold text-xs text-rose-700 dark:text-rose-300">
-                                        <UserX className="h-4 w-4 text-rose-600 shrink-0" />
-                                        <span>Saída: Não Cadastrado</span>
-                                    </div>
-                                    <p className="text-[11px] text-rose-900/80 dark:text-rose-200/80 leading-relaxed">
-                                        Acionada quando o contato não é encontrado no CRM. Conecte no funil de apresentação, tabela de planos ou vendas.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Guia de Variáveis disponíveis separadas por grupos */}
-                            <div className="p-3.5 rounded-xl border bg-muted/20 space-y-3.5">
-                                <div className="space-y-1">
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                        <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                                        Variáveis disponíveis na saída &quot;Cliente Cadastrado&quot; (Separadas por Grupos):
-                                    </span>
-                                    <p className="text-[11px] text-muted-foreground">
-                                        Nos blocos de mensagem ou menu conectados a esta saída, você pode utilizar qualquer uma das variáveis abaixo. Elas serão substituídas automaticamente pelos dados cadastrados do cliente no CRM:
-                                    </p>
-                                </div>
-
-                                <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
-                                    {FLOW_VARIABLE_GROUPS.map((group) => {
-                                        const GroupIcon = group.icon;
-                                        return (
-                                            <div key={group.id} className="space-y-1.5 p-2.5 rounded-lg bg-background/60 border border-slate-200/60 dark:border-slate-800">
-                                                <div className="flex items-center justify-between pb-1 border-b border-border/50">
-                                                    <span className={`text-[11px] font-bold flex items-center gap-1.5 ${group.colorClass}`}>
-                                                        <GroupIcon className="h-3.5 w-3.5" />
-                                                        {group.title}
-                                                    </span>
-                                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${group.badgeClass}`}>
-                                                        {group.variables.length} variáveis
-                                                    </span>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px]">
-                                                    {group.variables.map((v) => (
-                                                        <div
-                                                            key={v.key}
-                                                            className="p-1.5 px-2.5 rounded-lg bg-background border flex items-center justify-between font-mono shadow-2xs hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
-                                                        >
-                                                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                                                                {v.label}
-                                                            </span>
-                                                            <span
-                                                                className="text-[10px] text-muted-foreground font-sans truncate ml-2 text-right"
-                                                                title={v.desc}
-                                                            >
-                                                                {v.desc}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ---------------- 7. CONFIGURAÇÃO DE PAUSAR AUTOMAÇÃO (COOLDOWN / BLOCO FINAL) ---------------- */}
-                    {formData.nodeType === 'pause_automation' && (
-                        <div className="space-y-4">
-                            <div className="rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-2">
-                                <div className="flex items-start gap-3">
-                                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 shrink-0">
-                                        <PauseCircle className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-semibold text-purple-950 dark:text-purple-200">
-                                            Finalizar e Pausar Automação para este Contato
-                                        </h4>
-                                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                                            Ao chegar neste bloco final, o fluxo encerra o atendimento para este cliente e silencia a automação pelo tempo configurado abaixo.
+                                    <div className="p-3 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50/40 dark:bg-rose-950/20 space-y-1">
+                                        <div className="flex items-center gap-1.5 font-bold text-xs text-rose-700 dark:text-rose-300">
+                                            <UserX className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                                            <span>Saída 2: Não Cadastrado</span>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground leading-snug">
+                                            Contato novo. Ideal para conectar ao menu de vendas.
                                         </p>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* DEFINIR TEMPO DA PAUSA */}
-                            <div className="p-3.5 rounded-xl border bg-card space-y-3">
-                                <Label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                                    Tempo de Silêncio / Pausa da Automação
-                                </Label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[11px] text-muted-foreground">Quantidade</Label>
-                                        <Input
-                                            type="number"
-                                            min={1}
-                                            value={formData.pauseDurationValue !== undefined ? formData.pauseDurationValue : 1}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    pauseDurationValue: Math.max(1, parseInt(e.target.value) || 1),
-                                                })
-                                            }
-                                            placeholder="1"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[11px] text-muted-foreground">Unidade de Tempo</Label>
-                                        <Select
-                                            value={formData.pauseDurationUnit || 'hours'}
-                                            onValueChange={(val: any) =>
-                                                setFormData({ ...formData, pauseDurationUnit: val })
-                                            }
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="minutes">Minutos</SelectItem>
-                                                <SelectItem value="hours">Horas</SelectItem>
-                                                <SelectItem value="days">Dias</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
+                                <Accordion type="single" collapsible className="border rounded-xl bg-card px-3.5">
+                                    <AccordionItem value="crm-vars" className="border-0">
+                                        <AccordionTrigger className="hover:no-underline py-2.5 text-xs font-semibold">
+                                            <span className="flex items-center gap-1.5">
+                                                <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                                                Ver Variáveis Disponíveis na Saída &quot;Cliente Cadastrado&quot;
+                                            </span>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pt-2 pb-3 space-y-2.5 border-t max-h-56 overflow-y-auto">
+                                            {FLOW_VARIABLE_GROUPS.map((group) => {
+                                                const GroupIcon = group.icon;
+                                                return (
+                                                    <div key={group.id} className="space-y-1 p-2 rounded-lg bg-muted/30 border">
+                                                        <span className={`text-[11px] font-bold flex items-center gap-1.5 ${group.colorClass}`}>
+                                                            <GroupIcon className="h-3 w-3" />
+                                                            {group.title}
+                                                        </span>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pt-1 text-[10.5px]">
+                                                            {group.variables.map((v) => (
+                                                                <div
+                                                                    key={v.key}
+                                                                    className="px-2 py-1 rounded bg-background border flex items-center justify-between font-mono"
+                                                                >
+                                                                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                                                                        {v.label}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-muted-foreground font-sans truncate ml-2">
+                                                                        {v.desc}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </div>
+                        )}
 
-                            {/* MENSAGEM FINAL (OPCIONAL) */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-xs font-semibold">
-                                        Mensagem Final ao Cliente (Opcional)
-                                    </Label>
-                                    <div className="flex items-center gap-1">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs font-bold"
-                                            onClick={() => {
-                                                const cur = formData.text || '';
-                                                setFormData({ ...formData, text: cur + ' *texto em negrito* ' });
-                                            }}
-                                            title="Negrito"
-                                        >
-                                            <Bold className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs italic"
-                                            onClick={() => {
-                                                const cur = formData.text || '';
-                                                setFormData({ ...formData, text: cur + ' _texto em itálico_ ' });
-                                            }}
-                                            title="Itálico"
-                                        >
-                                            <Italic className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                </div>
-                                <Textarea
-                                    placeholder="Ex: Obrigado pelo contato! Qualquer dúvida adicional, estamos à disposição."
-                                    rows={4}
-                                    value={formData.text || ''}
-                                    onChange={(e) => setFormData({ ...formData, text: e.target.value })}
-                                />
-                            </div>
-
-                            {/* INSERIR VARIÁVEIS NA MENSAGEM */}
-                            <div className="space-y-2 pt-1">
-                                <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                                    <Sparkles className="h-3 w-3 text-indigo-500" />
-                                    Inserir Variáveis Dinâmicas no Texto:
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {AVAILABLE_FLOW_VARIABLES.slice(0, 8).map((v) => (
-                                        <Badge
-                                            key={v.key}
-                                            variant="outline"
-                                            className="cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:border-indigo-300 text-[10.5px] py-0.5 px-2 font-mono transition-colors"
-                                            onClick={() => handleInsertVariable('text', v.key)}
-                                        >
-                                            +{v.label}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* EXPLICAÇÃO DO COMPORTAMENTO */}
-                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
-                                <p className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                                    ℹ️ O que acontece após este bloco:
-                                </p>
-                                <p>• O cliente recebe a mensagem final (se preenchida).</p>
-                                <p>• Novas mensagens enviadas por este número <strong>serão ignoradas</strong> pelo fluxo até o tempo de pausa terminar.</p>
-                                <p>• Quando o período passar, se o cliente voltar a mandar mensagem, o fluxo atenderá normalmente do início.</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ---------------- 8. CONFIGURAÇÃO DE COBRANÇA PIX + ENTREGA AUTOMÁTICA DE PRODUTO ---------------- */}
-                    {formData.nodeType === 'pix_payment' && (
-                        <div className="space-y-4">
-                            <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                        <div className="p-1.5 rounded-md bg-emerald-600 text-white">
-                                            <QrCode className="h-4 w-4" />
+                        {/* ---------------- 7. CONFIGURAÇÃO DE PAUSAR AUTOMAÇÃO (COOLDOWN) ---------------- */}
+                        {formData.nodeType === 'pause_automation' && (
+                            <Accordion type="multiple" defaultValue={['pause-time']} className="space-y-2.5">
+                                <AccordionItem value="pause-time" className="border rounded-xl bg-card px-3.5 overflow-hidden">
+                                    <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                        <div className="flex items-center gap-2">
+                                            <PauseCircle className="h-4 w-4 text-purple-600" />
+                                            <span>Tempo de Pausa e Mensagem Final</span>
                                         </div>
-                                        <div>
-                                            <h4 className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
-                                                Gerar PIX e Entregar Login Automaticamente
-                                            </h4>
-                                            <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80">
-                                                Quando o cliente chegar neste bloco, o bot gera o PIX e, assim que pago, envia 1 login (e-mail e senha) do estoque!
-                                            </p>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-2 pb-3.5 space-y-3 border-t">
+                                        <div className="grid grid-cols-2 gap-2.5">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Tempo de Silêncio</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    value={formData.pauseDurationValue !== undefined ? formData.pauseDurationValue : 1}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            pauseDurationValue: Math.max(1, parseInt(e.target.value) || 1),
+                                                        })
+                                                    }
+                                                    className="h-8 text-xs"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Unidade</Label>
+                                                <Select
+                                                    value={formData.pauseDurationUnit || 'hours'}
+                                                    onValueChange={(val: any) => setFormData({ ...formData, pauseDurationUnit: val })}
+                                                >
+                                                    <SelectTrigger className="h-8 text-xs">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="minutes">Minutos</SelectItem>
+                                                        <SelectItem value="hours">Horas</SelectItem>
+                                                        <SelectItem value="days">Dias</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
                                         </div>
+
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs font-semibold">Mensagem Final ao Cliente (Opcional)</Label>
+                                            <Textarea
+                                                placeholder="Ex: Obrigado pelo contato! Em breve um atendente responderá."
+                                                rows={3}
+                                                value={formData.text || ''}
+                                                onChange={(e) => setFormData({ ...formData, text: e.target.value })}
+                                                className="text-xs"
+                                            />
+                                            <div className="flex flex-wrap gap-1 pt-0.5">
+                                                {AVAILABLE_FLOW_VARIABLES.slice(0, 6).map((v) => (
+                                                    <Badge
+                                                        key={v.key}
+                                                        variant="outline"
+                                                        className="cursor-pointer hover:bg-indigo-50 text-[10px] py-0 px-1.5 font-mono"
+                                                        onClick={() => handleInsertVariable('text', v.key)}
+                                                    >
+                                                        +{v.label}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        )}
+
+                        {/* ---------------- 8. CONFIGURAÇÃO DE COBRANÇA PIX + ENTREGA AUTOMÁTICA DE PRODUTO ---------------- */}
+                        {formData.nodeType === 'pix_payment' && (
+                            <div className="space-y-2.5">
+                                {/* BARRA RESUMO COMPACTA NO TOPO */}
+                                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800/70 bg-emerald-50/40 dark:bg-emerald-950/20">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="p-1.5 rounded-lg bg-emerald-600 text-white shrink-0">
+                                            <QrCode className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span className="text-xs font-medium text-emerald-950 dark:text-emerald-200 truncate">
+                                            Gera PIX e entrega 1 login do estoque após pago
+                                        </span>
                                     </div>
-                                    <Button asChild variant="outline" size="sm" className="h-7 text-[11px] shrink-0 border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300">
+                                    <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-[11px] shrink-0 border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300"
+                                    >
                                         <Link href="/flows/product-delivery" target="_blank">
                                             <Package className="h-3 w-3 mr-1" />
-                                            Gerenciar Estoque
+                                            Estoque
                                         </Link>
                                     </Button>
                                 </div>
-                            </div>
 
-                            {/* SELEÇÃO DO PRODUTO QUE SERÁ ENTREGUE */}
-                            <div className="space-y-2 p-3.5 rounded-xl border bg-card">
-                                <Label className="text-xs font-bold flex items-center gap-1.5">
-                                    <Package className="h-3.5 w-3.5 text-emerald-600" />
-                                    Qual Produto será entregue após o pagamento?
-                                </Label>
-
-                                {availableProductsSummary.length > 0 && (
-                                    <Select
-                                        value={
-                                            availableProductsSummary.some(
-                                                (p) => p.name.toLowerCase() === (formData.pixProductName || '').trim().toLowerCase()
-                                            )
-                                                ? availableProductsSummary.find(
-                                                      (p) => p.name.toLowerCase() === (formData.pixProductName || '').trim().toLowerCase()
-                                                  )?.name
-                                                : undefined
-                                        }
-                                        onValueChange={(val) => {
-                                            const found = availableProductsSummary.find((p) => p.name === val);
-                                            const nextAmount =
-                                                found?.defaultPrice && (!formData.pixAmount || formData.pixAmount === '19,90')
-                                                    ? found.defaultPrice.toFixed(2).replace('.', ',')
-                                                    : formData.pixAmount || '19,90';
-                                            setFormData({
-                                                ...formData,
-                                                pixProductName: val,
-                                                pixAmount: nextAmount,
-                                                label: `PIX: ${val}`,
-                                            });
-                                        }}
+                                {/* DROPDOWNS AGRUPADOS (ACCORDION) */}
+                                <Accordion type="multiple" defaultValue={['pix-product']} className="space-y-2">
+                                    {/* 1. PRODUTO E VALOR DA COBRANÇA */}
+                                    <AccordionItem
+                                        value="pix-product"
+                                        className="border rounded-xl bg-card px-3.5 overflow-hidden"
                                     >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecionar produto cadastrado no estoque..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availableProductsSummary.map((prod) => (
-                                                <SelectItem key={prod.name} value={prod.name}>
-                                                    📦 {prod.name} ({prod.availableCount} login{prod.availableCount === 1 ? '' : 's'} disponível)
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
+                                        <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                            <div className="flex items-center justify-between w-full pr-2 gap-2">
+                                                <span className="flex items-center gap-2">
+                                                    <Package className="h-4 w-4 text-emerald-600 shrink-0" />
+                                                    <span>1. Produto e Valor do PIX</span>
+                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                    {formData.pixProductName && (
+                                                        <Badge variant="secondary" className="text-[10px] font-normal max-w-28 truncate">
+                                                            {formData.pixProductName}
+                                                        </Badge>
+                                                    )}
+                                                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-mono">
+                                                        R$ {formData.pixAmount || '19,90'}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pt-2.5 pb-3.5 space-y-3 border-t">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-semibold">
+                                                    Produto a entregar após o pagamento
+                                                </Label>
 
-                                <div className="space-y-1 pt-1">
-                                    <Label className="text-[11px] text-muted-foreground">
-                                        Nome do Produto (você pode escolher acima ou digitar exatamente o nome do produto do estoque):
-                                    </Label>
-                                    <Input
-                                        placeholder="Ex: Netflix, Disney+, HBO Max, Canva Pro..."
-                                        value={formData.pixProductName || ''}
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                pixProductName: e.target.value,
-                                                label: e.target.value ? `PIX: ${e.target.value}` : 'PIX + Entrega Produto',
-                                            })
-                                        }
-                                    />
-                                </div>
-                            </div>
+                                                {availableProductsSummary.length > 0 && (
+                                                    <Select
+                                                        value={
+                                                            availableProductsSummary.some(
+                                                                (p) =>
+                                                                    p.name.toLowerCase() ===
+                                                                    (formData.pixProductName || '').trim().toLowerCase()
+                                                            )
+                                                                ? availableProductsSummary.find(
+                                                                      (p) =>
+                                                                          p.name.toLowerCase() ===
+                                                                          (formData.pixProductName || '').trim().toLowerCase()
+                                                                  )?.name
+                                                                : undefined
+                                                        }
+                                                        onValueChange={(val) => {
+                                                            const found = availableProductsSummary.find((p) => p.name === val);
+                                                            const nextAmount =
+                                                                found?.defaultPrice &&
+                                                                (!formData.pixAmount || formData.pixAmount === '19,90')
+                                                                    ? found.defaultPrice.toFixed(2).replace('.', ',')
+                                                                    : formData.pixAmount || '19,90';
+                                                            setFormData({
+                                                                ...formData,
+                                                                pixProductName: val,
+                                                                pixAmount: nextAmount,
+                                                                label: `PIX: ${val}`,
+                                                            });
+                                                        }}
+                                                    >
+                                                        <SelectTrigger className="h-8 text-xs">
+                                                            <SelectValue placeholder="Escolher produto cadastrado no estoque..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {availableProductsSummary.map((prod) => (
+                                                                <SelectItem key={prod.name} value={prod.name}>
+                                                                    📦 {prod.name} ({prod.availableCount} disp.)
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                )}
 
-                            {/* VALOR DO PIX */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-bold flex items-center gap-1">
-                                        <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                                        Valor da Cobrança PIX (R$)
-                                    </Label>
-                                    <Input
-                                        placeholder="Ex: 19,90"
-                                        value={formData.pixAmount !== undefined ? String(formData.pixAmount) : '19,90'}
-                                        onChange={(e) => setFormData({ ...formData, pixAmount: e.target.value })}
-                                    />
-                                    <p className="text-[10.5px] text-muted-foreground">
-                                        Valor que será gerado no PIX para o cliente pagar.
-                                    </p>
-                                </div>
+                                                <Input
+                                                    placeholder="Ou digite o nome do produto (Ex: Netflix, Disney+, Canva...)"
+                                                    value={formData.pixProductName || ''}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            pixProductName: e.target.value,
+                                                            label: e.target.value
+                                                                ? `PIX: ${e.target.value}`
+                                                                : 'PIX + Entrega Produto',
+                                                        })
+                                                    }
+                                                    className="h-8 text-xs"
+                                                />
+                                            </div>
 
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold">Descrição no PIX (Opcional)</Label>
-                                    <Input
-                                        placeholder="Ex: Acesso Mensal"
-                                        value={formData.pixDescription || ''}
-                                        onChange={(e) => setFormData({ ...formData, pixDescription: e.target.value })}
-                                    />
-                                    <p className="text-[10.5px] text-muted-foreground">
-                                        Identificação da cobrança no gateway.
-                                    </p>
-                                </div>
-                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs font-semibold flex items-center gap-1">
+                                                        <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                                                        Valor do PIX (R$)
+                                                    </Label>
+                                                    <Input
+                                                        placeholder="Ex: 19,90"
+                                                        value={
+                                                            formData.pixAmount !== undefined
+                                                                ? String(formData.pixAmount)
+                                                                : '19,90'
+                                                        }
+                                                        onChange={(e) =>
+                                                            setFormData({ ...formData, pixAmount: e.target.value })
+                                                        }
+                                                        className="h-8 text-xs font-mono"
+                                                    />
+                                                </div>
 
-                            {/* MENSAGEM DO MENU DE ESCOLHA DE PAGAMENTO */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-xs font-bold">
-                                        Mensagem do Menu: &quot;Qual forma de pagamento você gostaria?&quot;
-                                    </Label>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 px-2 text-[11px] text-emerald-700"
-                                        onClick={() =>
-                                            setFormData({
-                                                ...formData,
-                                                pixMessageText: DEFAULT_FLOW_PIX_BILLING_MESSAGE,
-                                            })
-                                        }
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs font-semibold">
+                                                        Descrição no PIX (Opcional)
+                                                    </Label>
+                                                    <Input
+                                                        placeholder="Ex: Acesso Mensal"
+                                                        value={formData.pixDescription || ''}
+                                                        onChange={(e) =>
+                                                            setFormData({ ...formData, pixDescription: e.target.value })
+                                                        }
+                                                        className="h-8 text-xs"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+
+                                    {/* 2. MENSAGEM ENVIADA JUNTO COM O PIX (DROPDOWN MINIMIZADO) */}
+                                    <AccordionItem
+                                        value="pix-message"
+                                        className="border rounded-xl bg-card px-3.5 overflow-hidden"
                                     >
-                                        Restaurar Modelo Padrão
-                                    </Button>
-                                </div>
-                                <Textarea
-                                    rows={6}
-                                    placeholder={DEFAULT_FLOW_PIX_BILLING_MESSAGE}
-                                    value={
-                                        formData.pixMessageText &&
-                                        !formData.pixMessageText.includes('realize o pagamento utilizando o código')
-                                            ? formData.pixMessageText
-                                            : DEFAULT_FLOW_PIX_BILLING_MESSAGE
-                                    }
-                                    onChange={(e) => setFormData({ ...formData, pixMessageText: e.target.value })}
-                                />
-                                <div className="flex flex-wrap gap-1.5 pt-0.5">
-                                    {[
-                                        { key: '{primeiro_nome}', label: '+{primeiro_nome}' },
-                                        { key: '{cliente}', label: '+{cliente}' },
-                                        { key: '{produto}', label: '+{produto}' },
-                                        { key: '{valor}', label: '+{valor}' },
-                                    ].map((v) => (
-                                        <Badge
-                                            key={v.key}
-                                            variant="outline"
-                                            className="cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-[10.5px] font-mono"
-                                            onClick={() =>
-                                                setFormData({
-                                                    ...formData,
-                                                    pixMessageText:
-                                                        (formData.pixMessageText &&
-                                                        !formData.pixMessageText.includes('realize o pagamento utilizando o código')
-                                                            ? formData.pixMessageText
-                                                            : DEFAULT_FLOW_PIX_BILLING_MESSAGE) + ` ${v.key}`,
-                                                })
-                                            }
-                                        >
-                                            {v.label}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
+                                        <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                            <div className="flex items-center justify-between w-full pr-2 gap-2">
+                                                <span className="flex items-center gap-2">
+                                                    <MessageSquareText className="h-4 w-4 text-indigo-600 shrink-0" />
+                                                    <span>2. Mensagem Enviada ao Gerar PIX</span>
+                                                </span>
+                                                <Badge variant="outline" className="text-[10px] font-normal">
+                                                    Personalizar
+                                                </Badge>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pt-2.5 pb-3.5 space-y-2.5 border-t">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    Texto enviado junto com a cobrança:
+                                                </span>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 px-2 text-[11px] text-emerald-700"
+                                                    onClick={() =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            pixMessageText: DEFAULT_FLOW_PIX_BILLING_MESSAGE,
+                                                        })
+                                                    }
+                                                >
+                                                    Restaurar Padrão
+                                                </Button>
+                                            </div>
+                                            <Textarea
+                                                rows={4}
+                                                placeholder={DEFAULT_FLOW_PIX_BILLING_MESSAGE}
+                                                value={formData.pixMessageText ?? DEFAULT_FLOW_PIX_BILLING_MESSAGE}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, pixMessageText: e.target.value })
+                                                }
+                                                className="text-xs"
+                                            />
+                                            <div className="flex flex-wrap gap-1">
+                                                {[
+                                                    { key: '{primeiro_nome}', label: '+{primeiro_nome}' },
+                                                    { key: '{cliente}', label: '+{cliente}' },
+                                                    { key: '{produto}', label: '+{produto}' },
+                                                    { key: '{valor}', label: '+{valor}' },
+                                                    { key: '{pix_copia_e_cola}', label: '+{pix_copia_e_cola}' },
+                                                ].map((v) => (
+                                                    <Badge
+                                                        key={v.key}
+                                                        variant="outline"
+                                                        className="cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-[10px] font-mono py-0 px-1.5"
+                                                        onClick={() =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                pixMessageText:
+                                                                    (formData.pixMessageText ??
+                                                                        DEFAULT_FLOW_PIX_BILLING_MESSAGE) + ` ${v.key}`,
+                                                            })
+                                                        }
+                                                    >
+                                                        {v.label}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
 
-                            {/* PREVIEW E TEMPO DO FLUXO INTERATIVO PADRÃO */}
-                            <div className="space-y-3 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20">
-                                <div className="space-y-1">
-                                    <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                                        ✨ Fluxo Interativo Padrão (Automático)
-                                    </p>
-                                    <ul className="text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1 list-disc pl-4">
-                                        <li>
-                                            <strong>1º Passo:</strong> Envia a pergunta com 2 botões: <code>📋 Pix Copia e Cola</code> ou <code>📷 QR Code</code>.
-                                        </li>
-                                        <li>
-                                            <strong>2º Passo:</strong> Se o cliente clicar em <strong>QR Code</strong>, envia <em>apenas o QR Code</em>. Se clicar em <strong>Pix Copia e Cola</strong>, envia <em>apenas a chave Copia e Cola</em>.
-                                        </li>
-                                        <li>
-                                            <strong>3º Passo (Acompanhamento):</strong> Após alguns segundos sem pagamento confirmado, envia os botões <code>✅ Já Paguei</code> e a opção de receber o outro formato (<code>📋 Enviar Copia e Cola</code> ou <code>📷 Enviar QR Code</code>).
-                                        </li>
-                                    </ul>
-                                </div>
+                                    {/* 3. OPÇÕES DE ENVIO E ENTREGA (DROPDOWN MINIMIZADO) */}
+                                    <AccordionItem
+                                        value="pix-options"
+                                        className="border rounded-xl bg-card px-3.5 overflow-hidden"
+                                    >
+                                        <AccordionTrigger className="hover:no-underline py-3 text-xs sm:text-sm font-semibold">
+                                            <div className="flex items-center justify-between w-full pr-2 gap-2">
+                                                <span className="flex items-center gap-2">
+                                                    <SlidersHorizontal className="h-4 w-4 text-slate-600 shrink-0" />
+                                                    <span>3. Opções de Envio (Copia e Cola / QR Code)</span>
+                                                </span>
+                                                <Badge variant="outline" className="text-[10px] font-normal">
+                                                    {formData.pixSendQrImage ? 'Copia e Cola + QR' : 'Copia e Cola'}
+                                                </Badge>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pt-2.5 pb-3.5 space-y-2.5 border-t">
+                                            <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30 border">
+                                                <div className="space-y-0.5">
+                                                    <Label className="text-xs font-semibold">
+                                                        Enviar PIX Copia e Cola separado
+                                                    </Label>
+                                                    <p className="text-[10.5px] text-muted-foreground">
+                                                        Envia o código sozinho em outra mensagem para facilitar a cópia.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={formData.pixSendCopyPasteSeparate !== false}
+                                                    onCheckedChange={(val) =>
+                                                        setFormData({ ...formData, pixSendCopyPasteSeparate: val })
+                                                    }
+                                                />
+                                            </div>
 
-                                <div className="flex items-center justify-between pt-2 border-t border-emerald-200/70 dark:border-emerald-800/70 gap-3">
-                                    <div className="space-y-0.5">
-                                        <Label className="text-xs font-semibold">
-                                            Tempo para perguntar se quer a outra opção (Segundos)
-                                        </Label>
-                                        <p className="text-[10.5px] text-muted-foreground">
-                                            Se não pagar nesse tempo após receber o QR Code ou Copia e Cola, envia o botão oferecendo o outro formato (Padrão: 8s).
-                                        </p>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        min={3}
-                                        max={60}
-                                        className="w-20 h-8 text-center font-bold"
-                                        value={formData.pixFollowUpSeconds ?? 8}
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                pixFollowUpSeconds: Math.max(3, Math.min(60, Number(e.target.value) || 8)),
-                                            })
-                                        }
-                                    />
-                                </div>
-                            </div>
+                                            <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-muted/30 border">
+                                                <div className="space-y-0.5">
+                                                    <Label className="text-xs font-semibold">
+                                                        Enviar também Imagem do QR Code
+                                                    </Label>
+                                                    <p className="text-[10.5px] text-muted-foreground">
+                                                        Útil caso o cliente esteja conversando pelo computador.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={Boolean(formData.pixSendQrImage)}
+                                                    onCheckedChange={(val) =>
+                                                        setFormData({ ...formData, pixSendQrImage: val })
+                                                    }
+                                                />
+                                            </div>
 
-                            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 space-y-1">
-                                <p className="font-bold">💡 Onde personalizar a mensagem de entrega do login (E-mail e Senha)?</p>
-                                <p>
-                                    No menu lateral <strong>Fluxo &rarr; Entrega de Produtos (Automática)</strong> você adiciona os logins no estoque e personaliza a mensagem de entrega <strong>Geral</strong> ou <strong>Individual por Produto</strong>!
-                                </p>
+                                            <div className="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-start gap-2">
+                                                <Info className="h-3.5 w-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                                                <span>
+                                                    A mensagem de entrega com E-mail e Senha pode ser personalizada em{' '}
+                                                    <strong>Fluxo &rarr; Entrega de Produtos</strong>.
+                                                </span>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="border-t pt-3 flex flex-row items-center justify-between sm:justify-between gap-2 w-full">
+                        <div className="flex items-center gap-1.5">
+                            {formData.nodeType === 'menu' && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsPreviewOpen(true)}
+                                    className="gap-1.5 text-xs h-8 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
+                                >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">Pré-visualizar</span>
+                                </Button>
+                            )}
+                            {onDelete && node && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        onDelete(node.id);
+                                        onOpenChange(false);
+                                    }}
+                                    className="gap-1 text-xs h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <span>Excluir</span>
+                                </Button>
+                            )}
                         </div>
-                    )}
-                </div>
 
-                <DialogFooter className="border-t pt-3 flex flex-row items-center justify-between sm:justify-between w-full">
-                    <div className="flex items-center gap-2">
-                        {formData.nodeType === 'menu' && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setIsPreviewOpen(true)}
-                                className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                            >
-                                <Eye className="h-3.5 w-3.5" />
-                                Pré-visualizar
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
+                                Cancelar
                             </Button>
-                        )}
-                        {onDelete && node && (
                             <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                    onDelete(node.id);
-                                    onOpenChange(false);
-                                }}
-                                className="gap-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                size="sm"
+                                onClick={handleSave}
+                                className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
                             >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                Excluir Bloco
+                                Salvar Bloco
                             </Button>
-                        )}
-                    </div>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={() => onOpenChange(false)}>
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                            Salvar Bloco
-                        </Button>
-                    </div>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
-        {/* MODAL DE PRÉ-VISUALIZAÇÃO NO WHATSAPP (FORA DO DIALOG PRINCIPAL) */}
-        <WhatsAppMenuPreviewDialog
-            open={isPreviewOpen}
-            onOpenChange={setIsPreviewOpen}
-            data={formData}
-        />
-    </>
+            {/* MODAL DE PRÉ-VISUALIZAÇÃO NO WHATSAPP */}
+            <WhatsAppMenuPreviewDialog
+                open={isPreviewOpen}
+                onOpenChange={setIsPreviewOpen}
+                data={formData}
+            />
+        </>
     );
 }

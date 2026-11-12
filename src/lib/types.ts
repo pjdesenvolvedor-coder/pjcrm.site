@@ -537,6 +537,16 @@ export type FlowVariablesConfig = {
   allSubsEmptyMessage?: string;
 };
 
+export type FlowProduct = {
+  id: string;
+  userId: string;
+  name: string;
+  defaultPrice?: number | null;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
 export type FlowProductStockItem = {
   id: string;
   userId: string;

@@ -6,7 +6,6 @@ import { doc, collection, setDoc } from 'firebase/firestore';
 import type { FlowDefinition, FlowTriggerSettings, FlowKeywordTrigger } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,20 +13,28 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { 
-    MessageSquare, 
-    KeyRound, 
-    Plus, 
-    Trash2, 
-    Save, 
-    Loader2, 
-    Sparkles, 
-    CheckCircle2, 
-    HelpCircle,
-    Info,
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
+    MessageSquare,
+    KeyRound,
+    Plus,
+    Trash2,
+    Save,
+    Loader2,
+    Sparkles,
     RotateCcw,
     UserCheck,
-    PhoneCall
+    PhoneCall,
+    SlidersHorizontal,
+    ShieldAlert,
+    Building2,
+    User,
+    ChevronDown,
 } from 'lucide-react';
 
 export default function FlowSettingsPage() {
@@ -39,14 +46,14 @@ export default function FlowSettingsPage() {
         if (!effectiveUserId) return null;
         return collection(firestore, 'users', effectiveUserId, 'flows');
     }, [firestore, effectiveUserId]);
-    const { data: flows, isLoading: isLoadingFlows } = useCollection<FlowDefinition>(flowsQuery);
+    const { data: flows } = useCollection<FlowDefinition>(flowsQuery);
 
     // Documento de configurações de gatilho
     const configDocRef = useMemoFirebase(() => {
         if (!effectiveUserId) return null;
         return doc(firestore, 'users', effectiveUserId, 'settings', 'flow_config');
     }, [firestore, effectiveUserId]);
-    const { data: savedConfig, isLoading: isLoadingConfig } = useDoc<FlowTriggerSettings>(configDocRef);
+    const { data: savedConfig } = useDoc<FlowTriggerSettings>(configDocRef);
 
     // Estados do formulário
     const [triggerMode, setTriggerMode] = useState<'all_messages' | 'keywords'>('all_messages');
@@ -56,7 +63,9 @@ export default function FlowSettingsPage() {
     const [restartKeywordsInput, setRestartKeywordsInput] = useState<string>('menu, reiniciar, voltar');
     const [resetKeyword, setResetKeyword] = useState<string>('reset');
     const [invalidOptionMessage, setInvalidOptionMessage] = useState<string>('Selecione a opção acima');
-    const [humanSupportKeywordsInput, setHumanSupportKeywordsInput] = useState<string>('falar com atendente, atendimento humanizado, atendimento humano, humano');
+    const [humanSupportKeywordsInput, setHumanSupportKeywordsInput] = useState<string>(
+        'falar com atendente, atendimento humanizado, atendimento humano, humano'
+    );
     const [humanSupportPhone, setHumanSupportPhone] = useState<string>('');
     const [humanSupportName, setHumanSupportName] = useState<string>('Suporte Oficial');
     const [humanSupportOrg, setHumanSupportOrg] = useState<string>('');
@@ -66,6 +75,7 @@ export default function FlowSettingsPage() {
     const [newKeyword, setNewKeyword] = useState('');
     const [newMatchType, setNewMatchType] = useState<'exact' | 'contains'>('contains');
     const [newFlowId, setNewFlowId] = useState('');
+    const [showAddKeywordForm, setShowAddKeywordForm] = useState(false);
 
     useEffect(() => {
         if (savedConfig) {
@@ -99,7 +109,7 @@ export default function FlowSettingsPage() {
 
     useEffect(() => {
         if (flows && flows.length > 0 && !defaultFlowId) {
-            const firstActive = flows.find(f => f.isActive !== false) || flows[0];
+            const firstActive = flows.find((f) => f.isActive !== false) || flows[0];
             if (firstActive) setDefaultFlowId(firstActive.id);
         }
     }, [flows, defaultFlowId]);
@@ -112,7 +122,11 @@ export default function FlowSettingsPage() {
             return;
         }
         if (!newFlowId) {
-            toast({ variant: 'destructive', title: 'Selecione um fluxo', description: 'Escolha qual fluxo será disparado por essa palavra-chave.' });
+            toast({
+                variant: 'destructive',
+                title: 'Selecione um fluxo',
+                description: 'Escolha qual fluxo será disparado por essa palavra-chave.',
+            });
             return;
         }
 
@@ -127,6 +141,7 @@ export default function FlowSettingsPage() {
         setKeywords(updatedKeywords);
         setNewKeyword('');
         setNewFlowId('');
+        setShowAddKeywordForm(false);
 
         if (effectiveUserId && configDocRef) {
             setDoc(
@@ -219,28 +234,64 @@ export default function FlowSettingsPage() {
         }
     };
 
-    const activeFlowsList = (flows || []).filter((f) => f.isActive !== false);
+    const selectedDefaultFlowName = flows?.find((f) => f.id === defaultFlowId)?.name || 'Padrão';
 
     return (
-        <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
-            <PageHeader
-                title="Configurações de Gatilho de Fluxo"
-                description="Escolha quando e como seus fluxos automáticos serão iniciados quando os clientes enviarem mensagens."
-            />
+        <div className="flex-1 space-y-5 p-4 sm:p-6 md:p-8 max-w-4xl mx-auto">
+            {/* CABEÇALHO RESPONSIVO COM BOTÃO DE SALVAR UNIFICADO */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b">
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                        Configurações de Gatilho de Fluxo
+                    </h1>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                        Clique nas seções abaixo para expandir e configurar os gatilhos, sessão e suporte.
+                    </p>
+                </div>
+                <Button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shrink-0 w-full sm:w-auto shadow-xs"
+                >
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Salvar Alterações
+                </Button>
+            </div>
 
-            <div className="max-w-4xl space-y-6">
-                {/* CARD GATILHO PRINCIPAL */}
-                <Card className="border shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-indigo-600" />
-                            Quando iniciar o fluxo?
-                        </CardTitle>
-                        <CardDescription>
-                            Defina se o fluxo deve responder a qualquer mensagem recebida ou apenas a palavras-chaves específicas.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
+            {/* SEÇÕES AGRUPADAS EM ACCORDION (DROPDOWN) */}
+            <Accordion type="multiple" defaultValue={['trigger']} className="space-y-3">
+                {/* 1. QUANDO INICIAR O FLUXO */}
+                <AccordionItem
+                    value="trigger"
+                    className="border rounded-2xl bg-card shadow-2xs overflow-hidden px-4 sm:px-5"
+                >
+                    <AccordionTrigger className="hover:no-underline py-4 gap-3">
+                        <div className="flex items-center gap-3 text-left min-w-0 flex-1">
+                            <div className="h-9 w-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                <Sparkles className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm sm:text-base text-foreground">
+                                        Quando iniciar o fluxo?
+                                    </span>
+                                    <Badge
+                                        variant="secondary"
+                                        className="text-[11px] font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200/60"
+                                    >
+                                        {triggerMode === 'all_messages'
+                                            ? `Qualquer mensagem (${selectedDefaultFlowName})`
+                                            : `Palavras-chaves (${keywords.length})`}
+                                    </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                    Escolha se o robô responde a qualquer mensagem ou apenas palavras-chaves.
+                                </p>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+
+                    <AccordionContent className="pt-2 pb-5 space-y-4 border-t">
                         <RadioGroup
                             value={triggerMode}
                             onValueChange={(val: 'all_messages' | 'keywords') => {
@@ -253,59 +304,57 @@ export default function FlowSettingsPage() {
                                     ).catch(() => {});
                                 }
                             }}
-                            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                            className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2"
                         >
                             {/* OPÇÃO 1: QUALQUER MENSAGEM */}
                             <label
                                 htmlFor="trigger-all"
-                                className={`cursor-pointer flex flex-col p-4 rounded-xl border-2 transition-all ${
+                                className={`cursor-pointer flex items-start gap-3 p-3.5 rounded-xl border transition-all ${
                                     triggerMode === 'all_messages'
-                                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 shadow-sm'
-                                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                                        ? 'border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/25 ring-1 ring-indigo-600/20'
+                                        : 'border-border hover:border-slate-300 dark:hover:border-slate-700'
                                 }`}
                             >
-                                <div className="flex items-center gap-3">
-                                    <RadioGroupItem value="all_messages" id="trigger-all" />
-                                    <div className="flex items-center gap-2 font-semibold text-sm">
-                                        <MessageSquare className="h-4 w-4 text-indigo-600" />
-                                        Mandar qualquer mensagem
+                                <RadioGroupItem value="all_messages" id="trigger-all" className="mt-0.5" />
+                                <div className="space-y-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm">
+                                        <MessageSquare className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                                        <span>Qualquer mensagem</span>
                                     </div>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                        Inicia o fluxo padrão sempre que o cliente mandar a primeira mensagem.
+                                    </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-3 pl-7">
-                                    Inicia automaticamente o fluxo padrão selecionado sempre que um cliente enviar qualquer mensagem inicial no WhatsApp.
-                                </p>
                             </label>
 
                             {/* OPÇÃO 2: PALAVRAS-CHAVES */}
                             <label
                                 htmlFor="trigger-keywords"
-                                className={`cursor-pointer flex flex-col p-4 rounded-xl border-2 transition-all ${
+                                className={`cursor-pointer flex items-start gap-3 p-3.5 rounded-xl border transition-all ${
                                     triggerMode === 'keywords'
-                                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 shadow-sm'
-                                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                                        ? 'border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/25 ring-1 ring-indigo-600/20'
+                                        : 'border-border hover:border-slate-300 dark:hover:border-slate-700'
                                 }`}
                             >
-                                <div className="flex items-center gap-3">
-                                    <RadioGroupItem value="keywords" id="trigger-keywords" />
-                                    <div className="flex items-center gap-2 font-semibold text-sm">
-                                        <KeyRound className="h-4 w-4 text-indigo-600" />
-                                        Mandar mensagem específica (Palavras-chaves)
+                                <RadioGroupItem value="keywords" id="trigger-keywords" className="mt-0.5" />
+                                <div className="space-y-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm">
+                                        <KeyRound className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                                        <span>Palavras-chaves específicas</span>
                                     </div>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                        Só dispara quando a mensagem contiver ou for igual a uma palavra cadastrada.
+                                    </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-3 pl-7">
-                                    O fluxo só é disparado quando a mensagem do cliente contiver ou for idêntica a uma palavra-chave configurada.
-                                </p>
                             </label>
                         </RadioGroup>
 
                         {/* SEÇÃO QUALQUER MENSAGEM: FLUXO PADRÃO */}
                         {triggerMode === 'all_messages' && (
-                            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 animate-in fade-in-50">
-                                <Label className="text-sm font-semibold flex items-center gap-2">
-                                    Fluxo Padrão a Disparar
-                                </Label>
+                            <div className="p-3.5 rounded-xl bg-muted/40 border space-y-2">
+                                <Label className="text-xs font-semibold">Fluxo Padrão a Disparar</Label>
                                 <Select value={defaultFlowId} onValueChange={setDefaultFlowId}>
-                                    <SelectTrigger className="w-full bg-white dark:bg-slate-950">
+                                    <SelectTrigger className="w-full bg-background h-9 text-xs sm:text-sm">
                                         <SelectValue placeholder="Selecione o fluxo padrão..." />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -322,121 +371,131 @@ export default function FlowSettingsPage() {
                                         )}
                                     </SelectContent>
                                 </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Ao receber qualquer mensagem de um contato que não esteja em um atendimento ativo, esse fluxo responderá.
-                                </p>
                             </div>
                         )}
 
                         {/* SEÇÃO PALAVRAS-CHAVES */}
                         {triggerMode === 'keywords' && (
-                            <div className="space-y-4 animate-in fade-in-50">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-sm font-bold flex items-center gap-2">
-                                        <KeyRound className="h-4 w-4 text-indigo-600" />
-                                        Palavras-chaves cadastradas ({keywords.length})
+                            <div className="space-y-3 pt-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <Label className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
+                                        <KeyRound className="h-3.5 w-3.5 text-indigo-600" />
+                                        Palavras-chaves ativas ({keywords.length})
                                     </Label>
+                                    <Button
+                                        type="button"
+                                        variant={showAddKeywordForm ? 'secondary' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setShowAddKeywordForm((v) => !v)}
+                                        className="h-8 text-xs gap-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" />
+                                        {showAddKeywordForm ? 'Fechar formulário' : 'Nova Palavra-chave'}
+                                    </Button>
                                 </div>
 
-                                {/* FORMULÁRIO DE ADIÇÃO RÁPIDA */}
-                                <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/40 dark:bg-indigo-950/20 dark:border-indigo-900/50 space-y-3">
-                                    <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300">
-                                        + Cadastrar nova palavra-chave e fluxo correspondente:
-                                    </p>
-                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                                        <div className="md:col-span-5 space-y-1">
-                                            <Label className="text-xs">Palavra ou Frase</Label>
-                                            <Input
-                                                placeholder="Ex: oi, menu, comprar, plano..."
-                                                value={newKeyword}
-                                                onChange={(e) => setNewKeyword(e.target.value)}
-                                                className="bg-white dark:bg-slate-950"
-                                            />
-                                        </div>
+                                {/* DROPDOWN DE ADIÇÃO DE PALAVRA-CHAVE */}
+                                {(showAddKeywordForm || keywords.length === 0) && (
+                                    <div className="p-3.5 rounded-xl border border-indigo-200/70 bg-indigo-50/30 dark:bg-indigo-950/20 dark:border-indigo-900/50 space-y-3 animate-in fade-in-50">
+                                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                                            <div className="sm:col-span-4 space-y-1">
+                                                <Label className="text-[11px]">Palavra ou Frase</Label>
+                                                <Input
+                                                    placeholder="Ex: oi, menu, plano..."
+                                                    value={newKeyword}
+                                                    onChange={(e) => setNewKeyword(e.target.value)}
+                                                    className="bg-background h-8 text-xs"
+                                                />
+                                            </div>
 
-                                        <div className="md:col-span-3 space-y-1">
-                                            <Label className="text-xs">Correspondência</Label>
-                                            <Select
-                                                value={newMatchType}
-                                                onValueChange={(val: any) => setNewMatchType(val)}
-                                            >
-                                                <SelectTrigger className="bg-white dark:bg-slate-950">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="contains">Contém o texto</SelectItem>
-                                                    <SelectItem value="exact">Mensagem Exata</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                            <div className="sm:col-span-3 space-y-1">
+                                                <Label className="text-[11px]">Correspondência</Label>
+                                                <Select
+                                                    value={newMatchType}
+                                                    onValueChange={(val: any) => setNewMatchType(val)}
+                                                >
+                                                    <SelectTrigger className="bg-background h-8 text-xs">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="contains">Contém o texto</SelectItem>
+                                                        <SelectItem value="exact">Mensagem Exata</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
 
-                                        <div className="md:col-span-3 space-y-1">
-                                            <Label className="text-xs">Disparar Fluxo</Label>
-                                            <Select value={newFlowId} onValueChange={setNewFlowId}>
-                                                <SelectTrigger className="bg-white dark:bg-slate-950">
-                                                    <SelectValue placeholder="Escolha o fluxo..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {flows && flows.length > 0 ? (
-                                                        flows.map((f) => (
-                                                            <SelectItem key={f.id} value={f.id}>
-                                                                {f.name}
+                                            <div className="sm:col-span-4 space-y-1">
+                                                <Label className="text-[11px]">Disparar Fluxo</Label>
+                                                <Select value={newFlowId} onValueChange={setNewFlowId}>
+                                                    <SelectTrigger className="bg-background h-8 text-xs">
+                                                        <SelectValue placeholder="Escolha o fluxo..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {flows && flows.length > 0 ? (
+                                                            flows.map((f) => (
+                                                                <SelectItem key={f.id} value={f.id}>
+                                                                    {f.name}
+                                                                </SelectItem>
+                                                            ))
+                                                        ) : (
+                                                            <SelectItem value="none" disabled>
+                                                                Nenhum fluxo disponível
                                                             </SelectItem>
-                                                        ))
-                                                    ) : (
-                                                        <SelectItem value="none" disabled>
-                                                            Nenhum fluxo disponível
-                                                        </SelectItem>
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
 
-                                        <div className="md:col-span-1">
-                                            <Button
-                                                onClick={handleAddKeyword}
-                                                size="sm"
-                                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-                                                title="Adicionar palavra-chave"
-                                            >
-                                                <Plus className="h-4 w-4" />
-                                            </Button>
+                                            <div className="sm:col-span-1">
+                                                <Button
+                                                    onClick={handleAddKeyword}
+                                                    size="sm"
+                                                    className="w-full h-8 bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                    title="Adicionar palavra-chave"
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                    <span className="sm:hidden ml-1.5 text-xs">Adicionar</span>
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
 
-                                {/* LISTA DE PALAVRAS CADASTRADAS */}
+                                {/* LISTA COMPACTA DE PALAVRAS CADASTRADAS */}
                                 {keywords.length === 0 ? (
-                                    <div className="text-center p-6 border border-dashed rounded-xl text-muted-foreground text-sm">
-                                        Nenhuma palavra-chave cadastrada ainda. Adicione acima as palavras que ativarão seus fluxos (Ex: &quot;oi&quot;, &quot;menu&quot;, etc).
+                                    <div className="text-center py-4 px-3 border border-dashed rounded-xl text-muted-foreground text-xs">
+                                        Nenhuma palavra-chave cadastrada. Use o formulário acima para adicionar.
                                     </div>
                                 ) : (
-                                    <div className="divide-y border rounded-xl overflow-hidden bg-card">
+                                    <div className="divide-y border rounded-xl overflow-hidden bg-background">
                                         {keywords.map((item) => {
                                             const matchedFlow = flows?.find((f) => f.id === item.flowId);
                                             return (
                                                 <div
                                                     key={item.id}
-                                                    className="flex items-center justify-between p-3 px-4 hover:bg-muted/40 transition-colors"
+                                                    className="flex items-center justify-between gap-2 py-2 px-3 hover:bg-muted/40 transition-colors"
                                                 >
-                                                    <div className="flex items-center gap-3">
-                                                        <Badge variant="outline" className="font-mono text-xs px-2 py-0.5 bg-background">
+                                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="font-mono text-xs px-2 py-0.5 bg-muted/40"
+                                                        >
                                                             {item.keyword}
                                                         </Badge>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {item.matchType === 'exact' ? '(Exata)' : '(Contém)'}
+                                                        <span className="text-[11px] text-muted-foreground">
+                                                            {item.matchType === 'exact' ? 'Exata' : 'Contém'}
                                                         </span>
-                                                        <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                                                            ➔ Dispara: <strong>{matchedFlow?.name || 'Fluxo não encontrado'}</strong>
+                                                        <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 truncate">
+                                                            → {matchedFlow?.name || 'Fluxo não encontrado'}
                                                         </span>
                                                     </div>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
                                                         onClick={() => handleRemoveKeyword(item.id)}
-                                                        className="text-destructive hover:bg-destructive/10 h-8 w-8"
+                                                        className="text-destructive hover:bg-destructive/10 h-7 w-7 shrink-0"
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
+                                                        <Trash2 className="h-3.5 w-3.5" />
                                                     </Button>
                                                 </div>
                                             );
@@ -445,177 +504,199 @@ export default function FlowSettingsPage() {
                                 )}
                             </div>
                         )}
-                    </CardContent>
-                    <CardFooter className="border-t pt-4 flex justify-end">
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaving}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-                        >
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                            Salvar Gatilhos
-                        </Button>
-                    </CardFooter>
-                </Card>
+                    </AccordionContent>
+                </AccordionItem>
 
-                {/* CARD REGRAS ADICIONAIS */}
-                <Card className="border shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-base flex items-center gap-2">
-                            <Info className="h-4 w-4 text-indigo-600" />
-                            Regras de Comportamento e Sessão
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-0.5 pr-4">
-                                <Label className="text-sm font-semibold">
-                                    Não reiniciar fluxo se o cliente já estiver em um fluxo ativo
-                                </Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Impede que mensagens enviadas pelo cliente enquanto ele está respondendo a um menu reiniciem a conversa do zero.
+                {/* 2. REGRAS DE COMPORTAMENTO E SESSÃO */}
+                <AccordionItem
+                    value="session"
+                    className="border rounded-2xl bg-card shadow-2xs overflow-hidden px-4 sm:px-5"
+                >
+                    <AccordionTrigger className="hover:no-underline py-4 gap-3">
+                        <div className="flex items-center gap-3 text-left min-w-0 flex-1">
+                            <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                                <SlidersHorizontal className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm sm:text-base text-foreground">
+                                        Regras de Comportamento e Sessão
+                                    </span>
+                                    <Badge variant="outline" className="text-[11px] font-normal">
+                                        Reset: &quot;{resetKeyword || 'reset'}&quot;
+                                    </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                    Proteção de sessão ativa, palavras para voltar ao menu, reset de testes e aviso de opção inválida.
                                 </p>
                             </div>
-                            <Switch
-                                checked={ignoreIfActiveFlow}
-                                onCheckedChange={setIgnoreIfActiveFlow}
-                            />
                         </div>
+                    </AccordionTrigger>
 
-                        <div className="space-y-2 pt-2 border-t">
-                            <Label className="text-sm font-semibold">
-                                Palavras para Forçar Reinício do Menu
-                            </Label>
-                            <Input
-                                value={restartKeywordsInput}
-                                onChange={(e) => setRestartKeywordsInput(e.target.value)}
-                                placeholder="menu, reiniciar, voltar, sair"
-                                className="font-mono text-xs"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Separadas por vírgula. Se o cliente digitar qualquer uma dessas palavras, o fluxo atual é cancelado e ele volta ao menu principal.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2 pt-2 border-t">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-sm font-semibold flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400">
-                                    <RotateCcw className="h-4 w-4" />
-                                    Palavra de Reset do Chat (Para Testes)
+                    <AccordionContent className="pt-3 pb-5 space-y-4 border-t">
+                        {/* SWITCH SESSÃO ATIVA */}
+                        <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-muted/30 border">
+                            <div className="space-y-0.5">
+                                <Label className="text-xs sm:text-sm font-semibold">
+                                    Não reiniciar fluxo se o cliente já estiver em atendimento
                                 </Label>
-                                <Badge variant="secondary" className="font-mono text-[10px]">Reinicia sessão na hora</Badge>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Evita que novas mensagens reiniciem a conversa enquanto o cliente responde a um menu.
+                                </p>
                             </div>
-                            <Input
-                                value={resetKeyword}
-                                onChange={(e) => setResetKeyword(e.target.value)}
-                                placeholder="reset"
-                                className="font-mono text-sm max-w-sm"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Quando você (ou o cliente) mandar essa palavra no WhatsApp (padrão: <code>reset</code>), o chat é completamente resetado e o fluxo recomeça imediatamente do início para novos testes.
-                            </p>
+                            <Switch checked={ignoreIfActiveFlow} onCheckedChange={setIgnoreIfActiveFlow} />
                         </div>
 
-                        <div className="space-y-2 pt-2 border-t">
-                            <Label className="text-sm font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
-                                <MessageSquare className="h-4 w-4 text-indigo-600" />
+                        {/* GRID 2 COLUNAS PARA PALAVRAS DE REINÍCIO E RESET */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center justify-between">
+                                    <span>Palavras para Voltar ao Menu</span>
+                                    <span className="text-[10px] font-normal text-muted-foreground">Separe por vírgula</span>
+                                </Label>
+                                <Input
+                                    value={restartKeywordsInput}
+                                    onChange={(e) => setRestartKeywordsInput(e.target.value)}
+                                    placeholder="menu, reiniciar, voltar"
+                                    className="font-mono text-xs h-8"
+                                />
+                                <p className="text-[11px] text-muted-foreground leading-snug">
+                                    Cancela a etapa atual e volta ao menu principal.
+                                </p>
+                            </div>
+
+                            <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-semibold flex items-center gap-1 text-indigo-700 dark:text-indigo-400">
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                        Palavra de Reset (Testes)
+                                    </Label>
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        Imediato
+                                    </Badge>
+                                </div>
+                                <Input
+                                    value={resetKeyword}
+                                    onChange={(e) => setResetKeyword(e.target.value)}
+                                    placeholder="reset"
+                                    className="font-mono text-xs h-8"
+                                />
+                                <p className="text-[11px] text-muted-foreground leading-snug">
+                                    Zera a sessão no WhatsApp na hora para você testar do início.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* MENSAGEM FORA DO MENU */}
+                        <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                            <Label className="text-xs font-semibold flex items-center gap-1.5">
+                                <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
                                 Mensagem Padrão para Resposta Fora do Menu
                             </Label>
                             <Input
                                 value={invalidOptionMessage}
                                 onChange={(e) => setInvalidOptionMessage(e.target.value)}
-                                placeholder="Selecione a opção acima"
-                                className="text-sm"
+                                placeholder="👆 *Selecione uma das Opções Acima para Continuar.*"
+                                className="text-xs h-8"
                             />
-                            <p className="text-xs text-muted-foreground">
-                                Se o cliente digitar um texto qualquer em vez de clicar ou digitar uma das opções do menu, o bot envia esse aviso e mantém a espera pela opção do menu.
+                            <p className="text-[11px] text-muted-foreground">
+                                Enviada quando o cliente digita algo que não corresponde a nenhuma opção do menu.
                             </p>
                         </div>
-                    </CardContent>
-                </Card>
+                    </AccordionContent>
+                </AccordionItem>
 
-                {/* CARD ATENDIMENTO HUMANIZADO & CARD DE SUPORTE */}
-                <Card className="border shadow-sm border-emerald-500/20 bg-emerald-500/[0.01]">
-                    <CardHeader>
-                        <CardTitle className="text-base flex items-center justify-between">
-                            <span className="flex items-center gap-2">
-                                <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                Atendimento Humanizado / Card de Suporte
-                            </span>
-                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs">
-                                Automático
-                            </Badge>
-                        </CardTitle>
-                        <CardDescription className="text-xs">
-                            Se o cliente digitar que quer falar com atendente ou suporte durante qualquer etapa da automação, o robô envia o contato oficial configurado.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label className="text-sm font-semibold">
-                                Palavras-Chave de Atendimento Humano
+                {/* 3. ATENDIMENTO HUMANIZADO / CARD DE SUPORTE */}
+                <AccordionItem
+                    value="support"
+                    className="border border-emerald-500/25 rounded-2xl bg-card shadow-2xs overflow-hidden px-4 sm:px-5"
+                >
+                    <AccordionTrigger className="hover:no-underline py-4 gap-3">
+                        <div className="flex items-center gap-3 text-left min-w-0 flex-1">
+                            <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                <UserCheck className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm sm:text-base text-foreground">
+                                        Atendimento Humanizado / Card de Suporte
+                                    </span>
+                                    <Badge
+                                        variant="outline"
+                                        className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[11px]"
+                                    >
+                                        Automático
+                                    </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                    Envia o cartão de contato do suporte quando o cliente pede para falar com um atendente.
+                                </p>
+                            </div>
+                        </div>
+                    </AccordionTrigger>
+
+                    <AccordionContent className="pt-3 pb-5 space-y-3 border-t">
+                        <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                            <Label className="text-xs font-semibold">
+                                Palavras-Chave para Solicitar Atendente Humano
                             </Label>
                             <Input
                                 value={humanSupportKeywordsInput}
                                 onChange={(e) => setHumanSupportKeywordsInput(e.target.value)}
-                                placeholder="falar com atendente, atendimento humanizado, humano, atendente, suporte"
-                                className="font-mono text-xs"
+                                placeholder="falar com atendente, atendimento humanizado, humano, suporte"
+                                className="font-mono text-xs h-8"
                             />
-                            <p className="text-xs text-muted-foreground">
-                                Separadas por vírgula. Se o cliente mandar qualquer uma dessas frases (Ex: <code>falar com atendente</code>, <code>humano</code>), o robô envia o card de suporte e finaliza a automação.
+                            <p className="text-[11px] text-muted-foreground">
+                                Separadas por vírgula. Se o cliente enviar alguma dessas frases, o robô envia o contato abaixo e pausa a automação.
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold flex items-center gap-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center gap-1.5">
                                     <PhoneCall className="h-3.5 w-3.5 text-emerald-600" />
-                                    WhatsApp do Suporte (Opcional)
+                                    WhatsApp (Opcional)
                                 </Label>
                                 <Input
                                     value={humanSupportPhone}
                                     onChange={(e) => setHumanSupportPhone(e.target.value)}
                                     placeholder="Ex: 5511999999999"
-                                    className="text-sm font-mono"
+                                    className="text-xs font-mono h-8"
                                 />
-                                <p className="text-[11px] text-muted-foreground">
-                                    Se vazio, o sistema busca automaticamente o bloco do seu <strong>Fluxo Teste</strong>.
+                                <p className="text-[10.5px] text-muted-foreground">
+                                    Vazio = usa o contato do Fluxo Principal.
                                 </p>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Nome do Contato</Label>
+                            <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                                    <User className="h-3.5 w-3.5 text-emerald-600" />
+                                    Nome do Contato
+                                </Label>
                                 <Input
                                     value={humanSupportName}
                                     onChange={(e) => setHumanSupportName(e.target.value)}
                                     placeholder="Suporte Oficial"
-                                    className="text-sm"
+                                    className="text-xs h-8"
                                 />
                             </div>
 
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Empresa / Organização (Opcional)</Label>
+                            <div className="p-3 rounded-xl border bg-background space-y-1.5">
+                                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                                    <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+                                    Empresa (Opcional)
+                                </Label>
                                 <Input
                                     value={humanSupportOrg}
                                     onChange={(e) => setHumanSupportOrg(e.target.value)}
                                     placeholder="Minha Empresa"
-                                    className="text-sm"
+                                    className="text-xs h-8"
                                 />
                             </div>
                         </div>
-                    </CardContent>
-                    <CardFooter className="border-t pt-4 flex justify-end">
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaving}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                        >
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                            Salvar Configurações
-                        </Button>
-                    </CardFooter>
-                </Card>
-            </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
         </div>
     );
 }

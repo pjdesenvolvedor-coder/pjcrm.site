@@ -71,10 +71,10 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type {
+  FlowProduct,
   FlowProductStockItem,
   FlowProductDeliveryConfig,
   FlowOrder,
-  Subscription,
 } from '@/lib/types';
 import {
   DEFAULT_GENERAL_PRODUCT_DELIVERY_MESSAGE,
@@ -116,12 +116,13 @@ export default function FlowProductDeliveryPage() {
   const { data: stockItems, isLoading: isLoadingStock } =
     useCollection<FlowProductStockItem>(stockQuery);
 
-  // 3. Assinaturas / Produtos já existentes no CRM (para sugestão rápida)
-  const subscriptionsQuery = useMemoFirebase(() => {
+  // 3. Produtos exclusivos deste Fluxo (sem nenhum vínculo com o restante do sistema)
+  const flowProductsQuery = useMemoFirebase(() => {
     if (!effectiveUserId) return null;
-    return collection(firestore, 'users', effectiveUserId, 'subscriptions');
+    return collection(firestore, 'users', effectiveUserId, 'flow_products');
   }, [firestore, effectiveUserId]);
-  const { data: subscriptions } = useCollection<Subscription>(subscriptionsQuery);
+  const { data: flowProducts, isLoading: isLoadingFlowProducts } =
+    useCollection<FlowProduct>(flowProductsQuery);
 
   // 4. Histórico de Pedidos PIX do Fluxo
   const ordersQuery = useMemoFirebase(() => {
@@ -129,6 +130,17 @@ export default function FlowProductDeliveryPage() {
     return query(collection(firestore, 'flow_orders'), where('userId', '==', effectiveUserId));
   }, [firestore, effectiveUserId]);
   const { data: flowOrders } = useCollection<FlowOrder>(ordersQuery);
+
+  // Estados de Gerenciamento de Produtos Exclusivos do Fluxo
+  const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductPrice, setNewProductPrice] = useState('');
+  const [newProductDescription, setNewProductDescription] = useState('');
+  const [isSavingNewProduct, setIsSavingNewProduct] = useState(false);
+
+  const [editingFlowProduct, setEditingFlowProduct] = useState<FlowProduct | null>(null);
+  const [isSavingEditProduct, setIsSavingEditProduct] = useState(false);
+  const [deletingFlowProductId, setDeletingFlowProductId] = useState<string | null>(null);
 
   // Estados do formulário de Novo Login (Individual)
   const [productName, setProductName] = useState('');
@@ -226,14 +238,50 @@ export default function FlowProductDeliveryPage() {
     return () => clearInterval(timer);
   }, [effectiveUserId, flowOrders]);
 
-  // Lista consolidada de nomes de produtos (estoque + assinaturas + mensagens personalizadas)
+  // Auto-registro de produtos a partir do estoque existente para preservar o que já foi cadastrado neste fluxo
+  useEffect(() => {
+    if (!effectiveUserId || !stockItems || !flowProducts) return;
+    const existingNames = new Set(
+      (flowProducts || []).map((p) => (p.name || '').trim().toLowerCase())
+    );
+    const missingNames = new Map<string, number | null | undefined>();
+
+    stockItems.forEach((item) => {
+      const name = (item.productName || '').trim();
+      if (name && !existingNames.has(name.toLowerCase())) {
+        if (!missingNames.has(name.toLowerCase())) {
+          missingNames.set(name.toLowerCase(), item.defaultPrice);
+        }
+      }
+    });
+
+    if (missingNames.size === 0) return;
+
+    missingNames.forEach(async (price, lowerName) => {
+      const originalItem = stockItems.find(
+        (i) => (i.productName || '').trim().toLowerCase() === lowerName
+      );
+      const originalName = originalItem?.productName?.trim() || lowerName;
+      try {
+        await addDoc(collection(firestore, 'users', effectiveUserId, 'flow_products'), {
+          userId: effectiveUserId,
+          name: originalName,
+          defaultPrice: price || null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      } catch {}
+    });
+  }, [effectiveUserId, stockItems, flowProducts, firestore]);
+
+  // Lista consolidada de nomes de produtos exclusivos deste Fluxo (zero vínculo com outros produtos do sistema)
   const allProductNames = useMemo(() => {
     const set = new Set<string>();
+    (flowProducts || []).forEach((p) => {
+      if (p.name?.trim()) set.add(p.name.trim());
+    });
     (stockItems || []).forEach((i) => {
       if (i.productName?.trim()) set.add(i.productName.trim());
-    });
-    (subscriptions || []).forEach((s) => {
-      if (s.name?.trim()) set.add(s.name.trim());
     });
     if (deliveryConfig?.productMessages) {
       Object.keys(deliveryConfig.productMessages).forEach((k) => {
@@ -241,25 +289,57 @@ export default function FlowProductDeliveryPage() {
       });
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [stockItems, subscriptions, deliveryConfig?.productMessages]);
+  }, [flowProducts, stockItems, deliveryConfig?.productMessages]);
 
-  // Resumo de estoque por produto
+  // Resumo de produtos exclusivos do fluxo e seus estoques
   const productSummaryList = useMemo(() => {
     const map = new Map<
       string,
-      { name: string; available: number; delivered: number; total: number }
+      {
+        id?: string;
+        name: string;
+        defaultPrice?: number | null;
+        description?: string;
+        available: number;
+        delivered: number;
+        total: number;
+      }
     >();
+
+    // Inicializa com todos os produtos criados no fluxo
+    (flowProducts || []).forEach((p) => {
+      const name = (p.name || '').trim();
+      if (!name) return;
+      map.set(name.toLowerCase(), {
+        id: p.id,
+        name,
+        defaultPrice: p.defaultPrice,
+        description: p.description,
+        available: 0,
+        delivered: 0,
+        total: 0,
+      });
+    });
+
+    // Contabiliza estoque do fluxo
     (stockItems || []).forEach((item) => {
       const name = (item.productName || 'Sem Nome').trim();
       const key = name.toLowerCase();
-      const cur = map.get(key) || { name, available: 0, delivered: 0, total: 0 };
+      const cur = map.get(key) || {
+        name,
+        defaultPrice: item.defaultPrice,
+        available: 0,
+        delivered: 0,
+        total: 0,
+      };
       if (item.status === 'available') cur.available += 1;
       else cur.delivered += 1;
       cur.total += 1;
       map.set(key, cur);
     });
+
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [stockItems]);
+  }, [flowProducts, stockItems]);
 
   // Lista filtrada e ordenada do estoque
   const filteredStock = useMemo(() => {
@@ -305,6 +385,154 @@ export default function FlowProductDeliveryPage() {
     [stockItems]
   );
 
+  // Criar novo produto exclusivo do fluxo
+  const handleCreateFlowProduct = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!effectiveUserId) return;
+    const name = newProductName.trim();
+    if (!name) {
+      toast({
+        variant: 'destructive',
+        title: 'Nome obrigatório',
+        description: 'Informe o nome do produto exclusivo do fluxo.',
+      });
+      return;
+    }
+
+    const alreadyExists = (flowProducts || []).some(
+      (p) => p.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (alreadyExists) {
+      toast({
+        variant: 'destructive',
+        title: 'Produto já existe',
+        description: `Já existe um produto com o nome "${name}" neste fluxo.`,
+      });
+      return;
+    }
+
+    setIsSavingNewProduct(true);
+    try {
+      const parsedPrice = newProductPrice
+        ? parseFloat(newProductPrice.replace(',', '.'))
+        : null;
+
+      await addDoc(collection(firestore, 'users', effectiveUserId, 'flow_products'), {
+        userId: effectiveUserId,
+        name,
+        defaultPrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
+        description: newProductDescription.trim() || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Seleciona automaticamente para o formulário de estoque
+      setProductName(name);
+      if (parsedPrice && !isNaN(parsedPrice)) {
+        setDefaultPrice(String(parsedPrice).replace('.', ','));
+      }
+
+      toast({
+        title: 'Produto do fluxo criado com sucesso!',
+        description: `"${name}" já está pronto para receber estoque e ser entregue no fluxo.`,
+      });
+
+      setIsCreateProductOpen(false);
+      setNewProductName('');
+      setNewProductPrice('');
+      setNewProductDescription('');
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao criar produto',
+        description: err.message,
+      });
+    } finally {
+      setIsSavingNewProduct(false);
+    }
+  };
+
+  // Salvar alterações de um produto do fluxo
+  const handleSaveEditProduct = async () => {
+    if (!effectiveUserId || !editingFlowProduct) return;
+    const name = editingFlowProduct.name.trim();
+    if (!name) {
+      toast({
+        variant: 'destructive',
+        title: 'Nome obrigatório',
+        description: 'O nome do produto não pode ficar em branco.',
+      });
+      return;
+    }
+
+    setIsSavingEditProduct(true);
+    try {
+      const prev = (flowProducts || []).find((p) => p.id === editingFlowProduct.id);
+      const prevName = prev?.name?.trim();
+
+      const parsedPrice =
+        typeof editingFlowProduct.defaultPrice === 'string'
+          ? parseFloat(String(editingFlowProduct.defaultPrice).replace(',', '.'))
+          : editingFlowProduct.defaultPrice;
+
+      await updateDoc(
+        doc(firestore, 'users', effectiveUserId, 'flow_products', editingFlowProduct.id),
+        {
+          name,
+          defaultPrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
+          description: editingFlowProduct.description?.trim() || '',
+          updatedAt: new Date().toISOString(),
+        }
+      );
+
+      // Se o nome mudou, sincroniza os itens de estoque correspondentes
+      if (prevName && prevName.toLowerCase() !== name.toLowerCase()) {
+        const itemsToUpdate = (stockItems || []).filter(
+          (i) => (i.productName || '').trim().toLowerCase() === prevName.toLowerCase()
+        );
+        for (const it of itemsToUpdate) {
+          await updateDoc(
+            doc(firestore, 'users', effectiveUserId, 'flow_product_stock', it.id),
+            {
+              productName: name,
+              updatedAt: new Date().toISOString(),
+            }
+          );
+        }
+        if (productName.toLowerCase() === prevName.toLowerCase()) {
+          setProductName(name);
+        }
+      }
+
+      toast({ title: 'Produto do fluxo atualizado!' });
+      setEditingFlowProduct(null);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar produto',
+        description: err.message,
+      });
+    } finally {
+      setIsSavingEditProduct(false);
+    }
+  };
+
+  // Excluir produto exclusivo do fluxo
+  const handleDeleteFlowProduct = async (id: string) => {
+    if (!effectiveUserId) return;
+    try {
+      await deleteDoc(doc(firestore, 'users', effectiveUserId, 'flow_products', id));
+      toast({ title: 'Produto removido do fluxo.' });
+      setDeletingFlowProductId(null);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao excluir produto',
+        description: err.message,
+      });
+    }
+  };
+
   // Adicionar 1 login ao estoque
   const handleAddSingleStock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,21 +541,36 @@ export default function FlowProductDeliveryPage() {
       toast({
         variant: 'destructive',
         title: 'Campos obrigatórios',
-        description: 'Preencha o Nome do Produto, E-mail e Senha.',
+        description: 'Selecione/informe o Produto do Fluxo, E-mail e Senha.',
       });
       return;
     }
 
     setIsAddingStock(true);
     try {
+      const cleanProdName = productName.trim();
       const parsedPrice = defaultPrice
         ? parseFloat(defaultPrice.replace(',', '.'))
         : undefined;
       const parsedSlots = Math.max(1, parseInt(maxSlots, 10) || 1);
 
+      // Garante que o produto existe na coleção flow_products exclusiva deste fluxo
+      const existsInFlow = (flowProducts || []).some(
+        (p) => p.name.trim().toLowerCase() === cleanProdName.toLowerCase()
+      );
+      if (!existsInFlow) {
+        await addDoc(collection(firestore, 'users', effectiveUserId, 'flow_products'), {
+          userId: effectiveUserId,
+          name: cleanProdName,
+          defaultPrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       await addDoc(collection(firestore, 'users', effectiveUserId, 'flow_product_stock'), {
         userId: effectiveUserId,
-        productName: productName.trim(),
+        productName: cleanProdName,
         email: email.trim(),
         password: password.trim(),
         screen: screen.trim() || '',
@@ -345,8 +588,8 @@ export default function FlowProductDeliveryPage() {
       setPinScreen('');
 
       toast({
-        title: 'Login adicionado ao estoque!',
-        description: `Conta de "${productName.trim()}" pronta para entrega automática.`,
+        title: 'Login adicionado ao estoque do fluxo!',
+        description: `Conta de "${cleanProdName}" pronta para entrega automática.`,
       });
     } catch (err: any) {
       toast({
@@ -365,8 +608,8 @@ export default function FlowProductDeliveryPage() {
     if (!bulkProductName.trim()) {
       toast({
         variant: 'destructive',
-        title: 'Informe o nome do produto',
-        description: 'Digite ou selecione o produto para os logins em lote.',
+        title: 'Informe o produto do fluxo',
+        description: 'Selecione ou informe o produto do fluxo para os logins em lote.',
       });
       return;
     }
@@ -388,10 +631,26 @@ export default function FlowProductDeliveryPage() {
     setIsSavingBulk(true);
     let addedCount = 0;
     try {
+      const cleanBulkName = bulkProductName.trim();
       const parsedPrice = bulkDefaultPrice
         ? parseFloat(bulkDefaultPrice.replace(',', '.'))
         : undefined;
       const parsedSlots = Math.max(1, parseInt(bulkMaxSlots, 10) || 1);
+
+      // Garante que o produto existe na coleção flow_products exclusiva deste fluxo
+      const existsInFlow = (flowProducts || []).some(
+        (p) => p.name.trim().toLowerCase() === cleanBulkName.toLowerCase()
+      );
+      if (!existsInFlow) {
+        await addDoc(collection(firestore, 'users', effectiveUserId, 'flow_products'), {
+          userId: effectiveUserId,
+          name: cleanBulkName,
+          defaultPrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       const colRef = collection(firestore, 'users', effectiveUserId, 'flow_product_stock');
 
       for (const line of lines) {
@@ -403,7 +662,7 @@ export default function FlowProductDeliveryPage() {
 
         await addDoc(colRef, {
           userId: effectiveUserId,
-          productName: bulkProductName.trim(),
+          productName: cleanBulkName,
           email: itemEmail,
           password: itemPass,
           screen: '',
@@ -419,7 +678,7 @@ export default function FlowProductDeliveryPage() {
 
       toast({
         title: `${addedCount} login(s) adicionados!`,
-        description: `Estoque de "${bulkProductName.trim()}" abastecido com sucesso.`,
+        description: `Estoque de "${cleanBulkName}" abastecido com sucesso.`,
       });
       setBulkLines('');
       setIsBulkOpen(false);
@@ -809,8 +1068,157 @@ export default function FlowProductDeliveryPage() {
 
           {/* ================= ABA 1: ESTOQUE DE PRODUTOS (LOGINS) ================= */}
           <TabsContent value="stock" className="space-y-6">
-            {/* CARD DE CADASTRO DE NOVO LOGIN */}
-            <Card className="border-indigo-200/70 dark:border-indigo-900/50 shadow-xs">
+            {/* 1. SEÇÃO DE PRODUTOS EXCLUSIVOS DO FLUXO */}
+            <Card className="border-indigo-200/80 dark:border-indigo-900/60 shadow-xs">
+              <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="h-5 w-5 text-indigo-600" />
+                    Produtos Exclusivos do Fluxo ({productSummaryList.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Estes produtos existem apenas neste fluxo de entrega automática, sem qualquer vínculo com os outros produtos do sistema.
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setNewProductName('');
+                    setNewProductPrice('');
+                    setNewProductDescription('');
+                    setIsCreateProductOpen(true);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shrink-0"
+                >
+                  <Plus className="h-4 w-4" />
+                  Novo Produto do Fluxo
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {productSummaryList.length === 0 ? (
+                  <div className="py-6 text-center border-2 border-dashed rounded-xl bg-muted/20 space-y-2">
+                    <Package className="h-8 w-8 mx-auto text-muted-foreground/60" />
+                    <p className="text-sm font-semibold">Nenhum produto criado no fluxo ainda</p>
+                    <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                      Crie seus produtos exclusivos do fluxo aqui para abastecer o estoque e realizar entregas automáticas via PIX.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setNewProductName('');
+                        setNewProductPrice('');
+                        setNewProductDescription('');
+                        setIsCreateProductOpen(true);
+                      }}
+                      className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Criar Primeiro Produto
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {productSummaryList.map((prod) => (
+                      <div
+                        key={prod.name}
+                        className="p-3.5 rounded-xl border bg-card/60 hover:bg-card hover:border-indigo-300 dark:hover:border-indigo-800 transition-all flex flex-col justify-between gap-3 shadow-2xs"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                                <Package className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-foreground leading-tight">
+                                  {prod.name}
+                                </h4>
+                                <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  {prod.defaultPrice
+                                    ? `R$ ${Number(prod.defaultPrice).toFixed(2).replace('.', ',')}`
+                                    : 'Preço livre / Bloco'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {prod.id && (
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                    title="Editar produto"
+                                    onClick={() => {
+                                      const original = (flowProducts || []).find((p) => p.id === prod.id);
+                                      if (original) {
+                                        setEditingFlowProduct(original);
+                                      }
+                                    }}
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                    title="Excluir produto"
+                                    onClick={() => setDeletingFlowProductId(prod.id!)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t text-xs">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                prod.available > 0
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                              }`}
+                            >
+                              {prod.available > 0 ? `${prod.available} disp.` : 'Sem estoque'}
+                            </span>
+                            {prod.delivered > 0 && (
+                              <span className="text-[11px] text-muted-foreground">
+                                {prod.delivered} entregue(s)
+                              </span>
+                            )}
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] gap-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300"
+                            onClick={() => {
+                              setProductName(prod.name);
+                              if (prod.defaultPrice) {
+                                setDefaultPrice(String(prod.defaultPrice).replace('.', ','));
+                              }
+                              document.getElementById('stock-form-card')?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                            Add Estoque
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 2. CARD DE CADASTRO DE NOVO LOGIN */}
+            <Card id="stock-form-card" className="border-indigo-200/70 dark:border-indigo-900/50 shadow-xs">
               <CardHeader className="pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -818,7 +1226,7 @@ export default function FlowProductDeliveryPage() {
                     Adicionar Login ao Estoque
                   </CardTitle>
                   <CardDescription>
-                    Cadastre o nome do produto, e-mail e senha que serão entregues automaticamente assim que o PIX for pago no Fluxo.
+                    Cadastre o produto do fluxo, e-mail e senha que serão entregues automaticamente assim que o PIX for pago no Fluxo.
                   </CardDescription>
                 </div>
                 <Button
@@ -838,35 +1246,71 @@ export default function FlowProductDeliveryPage() {
               <CardContent>
                 <form onSubmit={handleAddSingleStock} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Nome do Produto */}
+                    {/* Produto do Fluxo */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold">
-                        Nome do Produto *
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold">
+                          Produto do Fluxo *
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewProductName('');
+                            setNewProductPrice(defaultPrice);
+                            setNewProductDescription('');
+                            setIsCreateProductOpen(true);
+                          }}
+                          className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Novo Produto
+                        </button>
+                      </div>
                       <div className="flex gap-2">
-                        <Input
-                          placeholder="Ex: Netflix, HBO Max, Canva Pro..."
+                        <Select
                           value={productName}
-                          onChange={(e) => setProductName(e.target.value)}
-                          className="flex-1"
-                        />
-                        {allProductNames.length > 0 && (
-                          <Select
-                            value=""
-                            onValueChange={(val) => setProductName(val)}
-                          >
-                            <SelectTrigger className="w-[130px] shrink-0 text-xs">
-                              <SelectValue placeholder="Existentes" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {allProductNames.map((p) => (
-                                <SelectItem key={p} value={p}>
-                                  {p}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                          onValueChange={(val) => {
+                            setProductName(val);
+                            const found = (flowProducts || []).find((p) => p.name === val);
+                            if (found?.defaultPrice && !defaultPrice) {
+                              setDefaultPrice(String(found.defaultPrice).replace('.', ','));
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue
+                              placeholder={
+                                (flowProducts || []).length > 0
+                                  ? 'Selecione o produto do fluxo...'
+                                  : 'Crie um produto do fluxo...'
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(flowProducts || []).map((p) => (
+                              <SelectItem key={p.id} value={p.name}>
+                                📦 {p.name}{' '}
+                                {p.defaultPrice
+                                  ? `(R$ ${Number(p.defaultPrice).toFixed(2).replace('.', ',')})`
+                                  : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setNewProductName('');
+                            setNewProductPrice(defaultPrice);
+                            setNewProductDescription('');
+                            setIsCreateProductOpen(true);
+                          }}
+                          className="shrink-0 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Criar
+                        </Button>
                       </div>
                     </div>
 
@@ -1271,7 +1715,7 @@ export default function FlowProductDeliveryPage() {
                 <div className="p-4 rounded-xl border bg-muted/20 space-y-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold">
-                      1. Escolha ou Digite o Produto
+                      1. Escolha o Produto Exclusivo do Fluxo
                     </Label>
                     <div className="flex flex-col sm:flex-row gap-2">
                       {allProductNames.length > 0 && (
@@ -1290,8 +1734,8 @@ export default function FlowProductDeliveryPage() {
                             );
                           }}
                         >
-                          <SelectTrigger className="sm:w-[260px]">
-                            <SelectValue placeholder="Selecionar produto..." />
+                          <SelectTrigger className="sm:w-[280px]">
+                            <SelectValue placeholder="Selecionar produto do fluxo..." />
                           </SelectTrigger>
                           <SelectContent>
                             {allProductNames.map((p) => (
@@ -1303,7 +1747,7 @@ export default function FlowProductDeliveryPage() {
                         </Select>
                       )}
                       <Input
-                        placeholder="Ou digite o nome exato do produto (ex: Netflix)..."
+                        placeholder="Ou digite o nome do produto do fluxo..."
                         value={selectedProductForMsg}
                         onChange={(e) => setSelectedProductForMsg(e.target.value)}
                         className="flex-1"
@@ -1864,12 +2308,52 @@ export default function FlowProductDeliveryPage() {
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Nome do Produto *</Label>
-                <Input
-                  placeholder="Ex: Netflix"
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold">Produto do Fluxo *</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewProductName('');
+                      setNewProductPrice(bulkDefaultPrice);
+                      setNewProductDescription('');
+                      setIsCreateProductOpen(true);
+                    }}
+                    className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Novo Produto
+                  </button>
+                </div>
+                <Select
                   value={bulkProductName}
-                  onChange={(e) => setBulkProductName(e.target.value)}
-                />
+                  onValueChange={(val) => {
+                    setBulkProductName(val);
+                    const found = (flowProducts || []).find((p) => p.name === val);
+                    if (found?.defaultPrice && !bulkDefaultPrice) {
+                      setBulkDefaultPrice(String(found.defaultPrice).replace('.', ','));
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        (flowProducts || []).length > 0
+                          ? 'Selecione o produto do fluxo...'
+                          : 'Crie um produto do fluxo...'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(flowProducts || []).map((p) => (
+                      <SelectItem key={p.id} value={p.name}>
+                        📦 {p.name}{' '}
+                        {p.defaultPrice
+                          ? `(R$ ${Number(p.defaultPrice).toFixed(2).replace('.', ',')})`
+                          : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold">
@@ -2006,6 +2490,207 @@ export default function FlowProductDeliveryPage() {
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE CRIAÇÃO DE PRODUTO EXCLUSIVO DO FLUXO */}
+      <Dialog open={isCreateProductOpen} onOpenChange={setIsCreateProductOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-emerald-600" />
+              Novo Produto Exclusivo do Fluxo
+            </DialogTitle>
+            <DialogDescription>
+              Este produto existirá unicamente dentro deste menu de entrega automática, sem qualquer vínculo com os outros produtos ou assinaturas do CRM.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateFlowProduct} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">
+                Nome do Produto do Fluxo *
+              </Label>
+              <Input
+                placeholder="Ex: Netflix 4K, Disney+, Canva Pro, IPTV Mensal..."
+                value={newProductName}
+                onChange={(e) => setNewProductName(e.target.value)}
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Nome exibido no fluxo e entregue após a confirmação do pagamento.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">
+                Valor Padrão da Cobrança PIX R$ (Opcional)
+              </Label>
+              <Input
+                placeholder="Ex: 19,90"
+                value={newProductPrice}
+                onChange={(e) => setNewProductPrice(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Preço sugerido automaticamente ao adicionar este produto em um bloco do Fluxo.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">
+                Descrição / Notas (Opcional)
+              </Label>
+              <Input
+                placeholder="Ex: Entrega de tela única compartilhada..."
+                value={newProductDescription}
+                onChange={(e) => setNewProductDescription(e.target.value)}
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateProductOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSavingNewProduct}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              >
+                {isSavingNewProduct && <Loader2 className="h-4 w-4 animate-spin" />}
+                Criar Produto do Fluxo
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE EDIÇÃO DE PRODUTO DO FLUXO */}
+      <Dialog
+        open={!!editingFlowProduct}
+        onOpenChange={(open) => !open && setEditingFlowProduct(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-indigo-600" />
+              Editar Produto do Fluxo
+            </DialogTitle>
+            <DialogDescription>
+              Altere os dados deste produto exclusivo do fluxo.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingFlowProduct && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Nome do Produto *</Label>
+                <Input
+                  value={editingFlowProduct.name}
+                  onChange={(e) =>
+                    setEditingFlowProduct({
+                      ...editingFlowProduct,
+                      name: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">
+                  Valor Padrão R$ (Opcional)
+                </Label>
+                <Input
+                  value={
+                    editingFlowProduct.defaultPrice !== undefined &&
+                    editingFlowProduct.defaultPrice !== null
+                      ? String(editingFlowProduct.defaultPrice)
+                      : ''
+                  }
+                  onChange={(e) =>
+                    setEditingFlowProduct({
+                      ...editingFlowProduct,
+                      defaultPrice: e.target.value as any,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">
+                  Descrição (Opcional)
+                </Label>
+                <Input
+                  value={editingFlowProduct.description || ''}
+                  onChange={(e) =>
+                    setEditingFlowProduct({
+                      ...editingFlowProduct,
+                      description: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingFlowProduct(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSaveEditProduct}
+              disabled={isSavingEditProduct}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              {isSavingEditProduct && (
+                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+              )}
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE PRODUTO DO FLUXO */}
+      <Dialog
+        open={!!deletingFlowProductId}
+        onOpenChange={(open) => !open && setDeletingFlowProductId(null)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="h-5 w-5" />
+              Excluir Produto do Fluxo?
+            </DialogTitle>
+            <DialogDescription>
+              Tem certeza de que deseja remover este produto exclusivo do fluxo? O produto deixará de aparecer na lista de seleção. Os logins de estoque já adicionados permanecerão salvos no histórico.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeletingFlowProductId(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deletingFlowProductId) {
+                  handleDeleteFlowProduct(deletingFlowProductId);
+                }
+              }}
+            >
+              Excluir Produto
             </Button>
           </DialogFooter>
         </DialogContent>
