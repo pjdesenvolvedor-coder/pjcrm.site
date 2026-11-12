@@ -8,6 +8,7 @@ import {
   updateDoc,
   deleteDoc,
   setDoc,
+  getDocs,
   query,
   where,
 } from 'firebase/firestore';
@@ -75,6 +76,7 @@ import type {
   FlowProductStockItem,
   FlowProductDeliveryConfig,
   FlowOrder,
+  FlowDefinition,
 } from '@/lib/types';
 import {
   DEFAULT_GENERAL_PRODUCT_DELIVERY_MESSAGE,
@@ -141,6 +143,7 @@ export default function FlowProductDeliveryPage() {
   const [editingFlowProduct, setEditingFlowProduct] = useState<FlowProduct | null>(null);
   const [isSavingEditProduct, setIsSavingEditProduct] = useState(false);
   const [deletingFlowProductId, setDeletingFlowProductId] = useState<string | null>(null);
+  const [isSyncingFlows, setIsSyncingFlows] = useState(false);
 
   // Estados do formulário de Novo Login (Individual)
   const [productName, setProductName] = useState('');
@@ -456,6 +459,111 @@ export default function FlowProductDeliveryPage() {
     }
   };
 
+  // Sincroniza produtos (nome e preço) em todos os fluxos do usuário
+  const syncProductsWithAllFlows = async (
+    targetProduct?: { name: string; prevName?: string; priceFormatted?: string | null }
+  ): Promise<number> => {
+    if (!effectiveUserId) return 0;
+    try {
+      const flowsSnap = await getDocs(collection(firestore, 'users', effectiveUserId, 'flows'));
+      if (flowsSnap.empty) return 0;
+
+      // Mapa de produtos do fluxo para consulta rápida
+      const productPriceMap = new Map<string, { name: string; priceFormatted?: string }>();
+      (flowProducts || []).forEach((p) => {
+        const pName = (p.name || '').trim();
+        if (!pName) return;
+        const formatted =
+          p.defaultPrice !== undefined && p.defaultPrice !== null
+            ? Number(p.defaultPrice).toFixed(2).replace('.', ',')
+            : undefined;
+        productPriceMap.set(pName.toLowerCase(), { name: pName, priceFormatted: formatted });
+      });
+
+      // Se passou um target específico durante edição do produto, atualiza no mapa
+      if (targetProduct) {
+        const targetClean = targetProduct.name.trim();
+        const priceClean = targetProduct.priceFormatted || undefined;
+        productPriceMap.set(targetClean.toLowerCase(), { name: targetClean, priceFormatted: priceClean });
+        if (targetProduct.prevName && targetProduct.prevName.trim()) {
+          productPriceMap.set(targetProduct.prevName.trim().toLowerCase(), {
+            name: targetClean,
+            priceFormatted: priceClean,
+          });
+        }
+      }
+
+      let updatedFlowsCount = 0;
+      for (const flowDoc of flowsSnap.docs) {
+        const flowData = flowDoc.data() as FlowDefinition;
+        let flowChanged = false;
+
+        const updatedNodes = (flowData.nodes || []).map((node) => {
+          if (node.data?.nodeType === 'pix_payment') {
+            const currentProd = (node.data.pixProductName || '').trim().toLowerCase();
+            const matched = productPriceMap.get(currentProd);
+
+            if (matched) {
+              const needsNameChange = node.data.pixProductName !== matched.name;
+              const needsPriceChange =
+                Boolean(matched.priceFormatted) && node.data.pixAmount !== matched.priceFormatted;
+
+              if (needsNameChange || needsPriceChange) {
+                flowChanged = true;
+                const nextData: any = {
+                  ...node.data,
+                  pixProductName: matched.name,
+                };
+                if (matched.priceFormatted) {
+                  nextData.pixAmount = matched.priceFormatted;
+                }
+                if (!node.data.label || node.data.label.startsWith('PIX:') || (targetProduct?.prevName && node.data.label === `PIX: ${targetProduct.prevName}`)) {
+                  nextData.label = `PIX: ${matched.name}`;
+                }
+                return {
+                  ...node,
+                  data: nextData,
+                };
+              }
+            }
+          }
+          return node;
+        });
+
+        if (flowChanged) {
+          await updateDoc(doc(firestore, 'users', effectiveUserId, 'flows', flowDoc.id), {
+            nodes: updatedNodes,
+            updatedAt: new Date().toISOString(),
+          });
+          updatedFlowsCount++;
+        }
+      }
+
+      return updatedFlowsCount;
+    } catch (err) {
+      console.error('[syncProductsWithAllFlows] Erro:', err);
+      return 0;
+    }
+  };
+
+  const handleManualSyncFlows = async () => {
+    setIsSyncingFlows(true);
+    try {
+      const count = await syncProductsWithAllFlows();
+      toast({
+        title: 'Sincronização de Fluxos Concluída!',
+        description:
+          count > 0
+            ? `${count} fluxo(s) foram atualizados com os valores e nomes mais recentes dos produtos.`
+            : 'Todos os fluxos já estão 100% sincronizados com os valores dos produtos.',
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao sincronizar', description: err.message });
+    } finally {
+      setIsSyncingFlows(false);
+    }
+  };
+
   // Salvar alterações de um produto do fluxo
   const handleSaveEditProduct = async () => {
     if (!effectiveUserId || !editingFlowProduct) return;
@@ -508,7 +616,26 @@ export default function FlowProductDeliveryPage() {
         }
       }
 
-      toast({ title: 'Produto do fluxo atualizado!' });
+      // Sincronizar automaticamente todos os fluxos que usam este produto (atualiza nome e valor do PIX)
+      const formattedPrice =
+        parsedPrice && !isNaN(parsedPrice)
+          ? Number(parsedPrice).toFixed(2).replace('.', ',')
+          : null;
+
+      const syncedFlowsCount = await syncProductsWithAllFlows({
+        name,
+        prevName,
+        priceFormatted: formattedPrice,
+      });
+
+      if (syncedFlowsCount > 0) {
+        toast({
+          title: 'Produto e fluxos sincronizados!',
+          description: `O novo valor de R$ ${formattedPrice || '0,00'} e o nome foram atualizados em ${syncedFlowsCount} fluxo(s) automaticamente.`,
+        });
+      } else {
+        toast({ title: 'Produto do fluxo atualizado!' });
+      }
       setEditingFlowProduct(null);
     } catch (err: any) {
       toast({
@@ -1086,19 +1213,37 @@ export default function FlowProductDeliveryPage() {
                     Estes produtos existem apenas neste fluxo de entrega automática, sem qualquer vínculo com os outros produtos do sistema.
                   </CardDescription>
                 </div>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setNewProductName('');
-                    setNewProductPrice('');
-                    setNewProductDescription('');
-                    setIsCreateProductOpen(true);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  Novo Produto do Fluxo
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleManualSyncFlows}
+                    disabled={isSyncingFlows}
+                    className="gap-1.5 text-xs border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                    title="Atualiza todos os blocos de PIX dos fluxos com os nomes e preços mais recentes dos produtos"
+                  >
+                    {isSyncingFlows ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCcw className="h-3.5 w-3.5" />
+                    )}
+                    Sincronizar nos Fluxos
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setNewProductName('');
+                      setNewProductPrice('');
+                      setNewProductDescription('');
+                      setIsCreateProductOpen(true);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Novo Produto do Fluxo
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {productSummaryList.length === 0 ? (

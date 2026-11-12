@@ -26,6 +26,7 @@ import {
 import { claimOnce } from './firestore-claim';
 import type {
   FlowOrder,
+  FlowProduct,
   FlowProductDeliveryConfig,
   FlowProductStockItem,
   FlowContactSession,
@@ -421,8 +422,19 @@ export async function createAndSendFlowPixOrder(params: {
 
     const { pjToken, lkToken, deliveryCfg } = await resolveTokensForUser(params.userId);
 
-    // Se o preço não foi definido no bloco, tenta buscar do estoque daquele produto
-    if (!params.amountRaw || String(params.amountRaw).trim() === '') {
+    // Consulta se o produto existe em `flow_products` para sincronizar com o preço oficial mais recente do produto
+    try {
+      const prodsSnap = await getDocs(collection(db, 'users', params.userId, 'flow_products'));
+      const matchedProd = prodsSnap.docs
+        .map((d) => d.data() as FlowProduct)
+        .find((p) => (p.name || '').trim().toLowerCase() === productName.toLowerCase());
+      if (matchedProd && matchedProd.defaultPrice !== undefined && matchedProd.defaultPrice !== null) {
+        amountInCents = parsePriceToCents(matchedProd.defaultPrice);
+      }
+    } catch {}
+
+    // Fallback: Se o preço não foi definido no bloco nem no produto, tenta buscar do estoque daquele produto
+    if (amountInCents <= 0) {
       try {
         const stockSnap = await getDocs(
           query(

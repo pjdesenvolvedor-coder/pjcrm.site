@@ -249,13 +249,29 @@ export function NodeConfigDialog({
 
     useEffect(() => {
         if (node?.data) {
+            let initialAmount = node.data.pixAmount;
+            let initialName = node.data.pixProductName;
+            // Se for nó de pagamento PIX com produto selecionado, sincroniza com o preço e nome mais recente do produto
+            if (node.data.nodeType === 'pix_payment' && node.data.pixProductName && availableProductsSummary.length > 0) {
+                const matched = availableProductsSummary.find(
+                    (p) => p.name.toLowerCase() === (node.data.pixProductName || '').trim().toLowerCase()
+                );
+                if (matched) {
+                    initialName = matched.name;
+                    if (matched.defaultPrice !== undefined && matched.defaultPrice !== null) {
+                        initialAmount = Number(matched.defaultPrice).toFixed(2).replace('.', ',');
+                    }
+                }
+            }
             setFormData({
                 ...node.data,
+                pixProductName: initialName || node.data.pixProductName,
+                pixAmount: initialAmount !== undefined ? initialAmount : node.data.pixAmount,
                 menuOptions: normalizeMenuOptions(node.data.menuOptions),
             });
             setShowVariablesPicker(false);
         }
-    }, [node]);
+    }, [node, availableProductsSummary]);
 
     useEffect(() => {
         if (!open) {
@@ -1346,9 +1362,8 @@ export function NodeConfigDialog({
                                                         onValueChange={(val) => {
                                                             const found = availableProductsSummary.find((p) => p.name === val);
                                                             const nextAmount =
-                                                                found?.defaultPrice &&
-                                                                (!formData.pixAmount || formData.pixAmount === '19,90')
-                                                                    ? found.defaultPrice.toFixed(2).replace('.', ',')
+                                                                found?.defaultPrice !== undefined && found?.defaultPrice !== null
+                                                                    ? Number(found.defaultPrice).toFixed(2).replace('.', ',')
                                                                     : formData.pixAmount || '19,90';
                                                             setFormData({
                                                                 ...formData,
@@ -1389,10 +1404,33 @@ export function NodeConfigDialog({
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                                                 <div className="space-y-1">
-                                                    <Label className="text-xs font-semibold flex items-center gap-1">
-                                                        <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                                                        Valor do PIX (R$)
-                                                    </Label>
+                                                    <div className="flex items-center justify-between">
+                                                        <Label className="text-xs font-semibold flex items-center gap-1">
+                                                            <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                                                            Valor do PIX (R$)
+                                                        </Label>
+                                                        {(() => {
+                                                            const matched = availableProductsSummary.find(
+                                                                (p) => p.name.toLowerCase() === (formData.pixProductName || '').trim().toLowerCase()
+                                                            );
+                                                            if (matched?.defaultPrice !== undefined && matched?.defaultPrice !== null) {
+                                                                const pPrice = Number(matched.defaultPrice).toFixed(2).replace('.', ',');
+                                                                if (formData.pixAmount !== pPrice) {
+                                                                    return (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setFormData({ ...formData, pixAmount: pPrice })}
+                                                                            className="text-[10.5px] text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
+                                                                            title="Clique para atualizar com o valor cadastrado no produto"
+                                                                        >
+                                                                            ⚡ Usar R$ {pPrice} (Produto)
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                            }
+                                                            return null;
+                                                        })()}
+                                                    </div>
                                                     <Input
                                                         placeholder="Ex: 19,90"
                                                         value={

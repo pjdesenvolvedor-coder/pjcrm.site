@@ -26,7 +26,7 @@ import dagre from '@dagrejs/dagre';
 
 import { useFirebase, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, collection, setDoc, updateDoc } from 'firebase/firestore';
-import type { FlowDefinition, FlowNodeData, UazapiConnectionConfig } from '@/lib/types';
+import type { FlowDefinition, FlowNodeData, FlowProduct, UazapiConnectionConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { FlowCustomNode } from '@/components/flows/FlowCustomNode';
 import { NodeConfigDialog } from '@/components/flows/NodeConfigDialog';
@@ -98,6 +98,13 @@ function FlowCanvasEditorContent() {
         return collection(firestore, 'users', effectiveUserId, 'flows');
     }, [firestore, effectiveUserId]);
     const { data: allFlows } = useCollection<FlowDefinition>(flowsQuery);
+
+    // Buscar produtos exclusivos do fluxo (para sincronizar nomes e preços atualizados)
+    const flowProductsQuery = useMemoFirebase(() => {
+        if (!effectiveUserId) return null;
+        return collection(firestore, 'users', effectiveUserId, 'flow_products');
+    }, [firestore, effectiveUserId]);
+    const { data: flowProductsList } = useCollection<FlowProduct>(flowProductsQuery);
 
     // Buscar clientes cadastrados no CRM (para simulação fiel com dados reais)
     const clientsQuery = useMemoFirebase(() => {
@@ -192,6 +199,50 @@ function FlowCanvasEditorContent() {
             setSaveStatus('saved');
         }
     }, [flowData, setNodes, setEdges]);
+
+    // Sincronizar nós de PIX automaticamente com nomes e preços atualizados dos produtos
+    useEffect(() => {
+        if (!flowProductsList || flowProductsList.length === 0 || !isInitialLoadedRef.current) return;
+
+        setNodes((currentNodes) => {
+            let hasChanges = false;
+            const updated = currentNodes.map((node) => {
+                if (node.data?.nodeType === 'pix_payment' && node.data?.pixProductName) {
+                    const nodeProdName = String(node.data.pixProductName).trim().toLowerCase();
+                    const matched = flowProductsList.find(
+                        (p) => (p.name || '').trim().toLowerCase() === nodeProdName
+                    );
+
+                    if (matched) {
+                        const freshName = matched.name.trim();
+                        const freshPrice =
+                            matched.defaultPrice !== undefined && matched.defaultPrice !== null
+                                ? Number(matched.defaultPrice).toFixed(2).replace('.', ',')
+                                : null;
+
+                        const nameChanged = node.data.pixProductName !== freshName;
+                        const priceChanged = Boolean(freshPrice && node.data.pixAmount !== freshPrice);
+
+                        if (nameChanged || priceChanged) {
+                            hasChanges = true;
+                            return {
+                                ...node,
+                                data: {
+                                    ...node.data,
+                                    pixProductName: freshName,
+                                    pixAmount: freshPrice || node.data.pixAmount,
+                                    label: node.data.label?.startsWith('PIX:') ? `PIX: ${freshName}` : node.data.label,
+                                },
+                            };
+                        }
+                    }
+                }
+                return node;
+            });
+
+            return hasChanges ? updated : currentNodes;
+        });
+    }, [flowProductsList, setNodes]);
 
     // Execução assíncrona do salvamento em segundo plano sem congelar a UI
     const executeAutoSave = useCallback(async () => {
